@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>笔记详情</title>
+    <!-- 引入 Bootstrap 5 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- 引入 Swiper.js 用于图片轮播 -->
+    <link rel="stylesheet" href="https://unpkg.com/swiper/swiper-bundle.min.css"/>
+    <script src="https://unpkg.com/swiper/swiper-bundle.min.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #FF69B4; /* 粉色主色调 */
+            --bg-color: #fff;
+            --gray-text: #999;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            padding-bottom: 70px; /* 为底部互动栏留空 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* 1. 顶部栏 (透明/悬浮) */
+        .navbar-top {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .nav-icon {
+            font-size: 22px;
+            color: #333;
+            cursor: pointer;
+        }
+
+        /* 2. 笔记内容模块 */
+        .swiper-container {
+            width: 100%;
+            height: 300px; /* 移动端适配高度 */
+            background: #000;
+        }
+        
+        .swiper-slide img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* 保持比例 */
+        }
+        
+        .img-counter {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            z-index: 10;
+        }
+
+        .content-section {
+            padding: 15px;
+        }
+        
+        .author-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .author-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 1px solid #eee;
+        }
+        
+        .author-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .post-time {
+            font-size: 12px;
+            color: var(--gray-text);
+        }
+
+        .post-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        
+        .post-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #333;
+            white-space: pre-wrap; /* 保留换行 */
+            margin-bottom: 15px;
+        }
+
+        .post-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .tag-pill {
+            color: var(--primary-color);
+            background: #fff0f6;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
+        .location-card {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            color: #555;
+            font-size: 13px;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        /* 3. 互动模块 (底部栏) */
+        .interaction-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border-top: 1px solid #eee;
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1000;
+        }
+
+        .comment-input-fake {
+            flex: 1;
+            background: #f5f5f5;
+            border-radius: 20px;
+            padding: 8px 15px;
+            color: #999;
+            font-size: 14px;
+            margin-right: 15px;
+            cursor: text;
+        }
+
+        .action-group {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .action-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+        }
+        
+        .action-icon {
+            font-size: 22px;
+            margin-bottom: -2px;
+            transition: transform 0.2s;
+        }
+        
+        .action-btn.active .action-icon {
+            color: var(--primary-color);
+            transform: scale(1.2);
+        }
+        
+        .star-active { color: #FFD700 !important; } /* 收藏黄色 */
+
+        /* 4. 评论区 */
+        .comment-section {
+            padding: 15px;
+            border-top: 8px solid #f8f9fa;
+        }
+        
+        .comment-header {
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .comment-item {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .comment-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .comment-body {
+            flex: 1;
+        }
+        
+        .comment-user {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 2px;
+        }
+        
+        .comment-content {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .comment-meta {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .load-more-btn {
+            text-align: center;
+            color: #999;
+            font-size: 13px;
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        /* 图片放大预览遮罩 */
+        .img-preview-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 3000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .img-preview-overlay img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        /* 评论输入弹层 */
+        .comment-popup {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 15px;
+            border-radius: 12px 12px 0 0;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 2000;
+            display: none;
+            transform: translateY(100%);
+            transition: transform 0.3s;
+        }
+        
+        .comment-popup.show {
+            transform: translateY(0);
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .popup-input {
+            width: 100%;
+            height: 100px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 10px;
+            resize: none;
+            font-size: 14px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部栏 (padding-top 由 swiper 撑开，这里只放按钮) -->
+    <div class="navbar-top">
+        <i class="bi bi-chevron-left nav-icon" onclick="history.back()"></i>
+        <div class="d-flex align-items-center">
+            <img src="https://via.placeholder.com/30" class="rounded-circle me-2" style="width:30px;height:30px;display:none;" id="navAvatar">
+            <i class="bi bi-three-dots nav-icon" onclick="showMenu()"></i>
+        </div>
+    </div>
+
+    <!-- 2. 笔记内容模块 -->
+    <div style="margin-top: 55px;"> <!-- 避开顶部栏 -->
+        <!-- 图片轮播 -->
+        <div class="swiper-container">
+            <div class="swiper-wrapper" id="imgWrapper">
+                <!-- 动态插入 -->
+            </div>
+            <div class="img-counter" id="imgCounter">1/1</div>
+        </div>
+
+        <div class="content-section">
+            <div class="post-title" id="postTitle">加载中...</div>
+            
+            <div class="author-info" onclick="alert('跳转作者主页')">
+                <img src="" class="author-avatar" id="authorAvatar">
+                <div>
+                    <div class="author-name" id="authorName">--</div>
+                    <div class="post-time" id="postTime">--</div>
+                </div>
+            </div>
+
+            <div class="post-text" id="postContent"></div>
+            
+            <div class="post-tags" id="postTags"></div>
+
+            <div class="location-card" onclick="alert('跳转食堂详情')">
+                <i class="bi bi-geo-alt-fill me-2 text-primary"></i>
+                <span id="locationText">关联位置加载中...</span>
+                <i class="bi bi-chevron-right ms-auto"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. 评论区 -->
+    <div class="comment-section">
+        <div class="comment-header">共 <span id="commentCountHeader">0</span> 条评论</div>
+        <div id="commentList">
+            <!-- 动态插入 -->
+        </div>
+        <div class="load-more-btn" id="loadMoreBtn" onclick="loadComments()">加载更多评论</div>
+    </div>
+
+    <!-- 3. 互动模块 (底部固定) -->
+    <div class="interaction-bar">
+        <div class="comment-input-fake" onclick="openCommentPopup()">
+            <i class="bi bi-pencil-square me-1"></i> 说点什么...
+        </div>
+        <div class="action-group">
+            <div class="action-btn" id="likeBtn" onclick="toggleLike()">
+                <i class="bi bi-heart action-icon" id="likeIcon"></i>
+                <span id="likeCount">0</span>
+            </div>
+            <div class="action-btn" id="starBtn" onclick="toggleStar()">
+                <i class="bi bi-star action-icon" id="starIcon"></i>
+                <span id="starCount">0</span>
+            </div>
+            <div class="action-btn" onclick="scrollToComments()">
+                <i class="bi bi-chat-dots action-icon"></i>
+                <span id="commentCountBar">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 评论输入弹层 -->
+    <div class="comment-popup" id="commentPopup">
+        <div class="popup-header">
+            <span class="fw-bold">发表评论</span>
+            <i class="bi bi-x-lg" onclick="closeCommentPopup()"></i>
+        </div>
+        <textarea class="popup-input" id="realCommentInput" placeholder="友善评论是交流的起点..."></textarea>
+        <div class="text-end mt-2">
+            <button class="btn btn-sm btn-primary" style="background:var(--primary-color);border:none;" onclick="submitComment()">发送</button>
+        </div>
+    </div>
+
+    <!-- 全屏图片预览 -->
+    <div class="img-preview-overlay" id="imgPreview" onclick="this.style.display='none'">
+        <img src="" id="previewBigImg">
+    </div>
+
+    <script>
+        // ==========================================
+        // 模拟数据 (Mock Data)
+        // ==========================================
+        const mockPost = {
+            id: 1,
+            title: "北区食堂二楼的麻辣香锅简直封神！",
+            content: "一定要点微辣！里面的宽粉和鱼豆腐巨好吃，分量也很足，两个人吃大概40块钱。\n避雷提示：饭点的排队人超多，建议错峰去。",
+            images: [
+                "https://via.placeholder.com/600x400/FFE4B5/333?text=Image+1",
+                "https://via.placeholder.com/600x400/E6E6FA/333?text=Image+2",
+                "https://via.placeholder.com/600x400/FFC0CB/333?text=Image+3"
+            ],
+            tags: ["推荐", "麻辣香锅", "北区食堂"],
+            canteen: "北区食堂",
+            window: "2号窗口",
+            dish: "自选香锅",
+            author: { name: "吃货小王", avatar: "https://via.placeholder.com/40" },
+            time: "2024-03-03 12:30",
+            like_count: 128,
+            star_count: 45,
+            comment_count: 12,
+            is_liked: false,
+            is_starred: false
+        };
+
+        const mockComments = [
+            { id: 1, user: "李四", avatar: "https://via.placeholder.com/32", content: "真的吗？下次去试试", time: "10分钟前" },
+            { id: 2, user: "张三", avatar: "https://via.placeholder.com/32", content: "排队确实久，但是值得！", time: "1小时前" }
+        ];
+
+        // 全局变量
+        let currentPage = 1;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPostDetail();
+            loadComments();
+            initSwiper();
+        });
+
+        // 1. 加载详情
+        function loadPostDetail() {
+            // 模拟 API 请求 (真实场景需解析 URL 参数 ?id=1)
+            const post = mockPost;
+
+            // 渲染文本
+            document.getElementById('postTitle').innerText = post.title;
+            document.getElementById('postContent').innerText = post.content;
+            document.getElementById('authorName').innerText = post.author.name;
+            document.getElementById('postTime').innerText = post.time;
+            document.getElementById('authorAvatar').src = post.author.avatar;
+            document.getElementById('locationText').innerText = `${post.canteen} - ${post.window} - ${post.dish}`;
+            
+            // 渲染图片
+            const wrapper = document.getElementById('imgWrapper');
+            post.images.forEach(img => {
+                const slide = document.createElement('div');
+                slide.className = 'swiper-slide';
+                slide.innerHTML = `<img src="${img}" onclick="showBigImg('${img}')">`;
+                wrapper.appendChild(slide);
+            });
+
+            // 渲染标签
+            const tagsDiv = document.getElementById('postTags');
+            post.tags.forEach(tag => {
+                tagsDiv.innerHTML += `<span class="tag-pill"># ${tag}</span>`;
+            });
+
+            // 渲染互动数
+            updateInteractionUI();
+        }
+
+        // 2. 初始化轮播
+        function initSwiper() {
+            new Swiper('.swiper-container', {
+                on: {
+                    slideChange: function () {
+                        document.getElementById('imgCounter').innerText = 
+                            `${this.activeIndex + 1}/${this.slides.length}`;
+                    },
+                },
+            });
+        }
+
+        // 3. 加载评论
+        function loadComments() {
+            const list = document.getElementById('commentList');
+            // 模拟分页
+            if (currentPage > 1) {
+                document.getElementById('loadMoreBtn').innerText = "没有更多了";
+                return; 
+            }
+
+            mockComments.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'comment-item';
+                item.innerHTML = `
+                    <img src="${c.avatar}" class="comment-avatar">
+                    <div class="comment-body">
+                        <div class="comment-user">${c.user}</div>
+                        <div class="comment-content">${c.content}</div>
+                        <div class="comment-meta">${c.time} · 回复</div>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+            
+            currentPage++;
+        }
+
+        // 4. 互动逻辑
+        function updateInteractionUI() {
+            const likeBtn = document.getElementById('likeBtn');
+            const likeIcon = document.getElementById('likeIcon');
+            const starBtn = document.getElementById('starBtn');
+            const starIcon = document.getElementById('starIcon');
+
+            document.getElementById('likeCount').innerText = mockPost.like_count;
+            document.getElementById('starCount').innerText = mockPost.star_count;
+            document.getElementById('commentCountBar').innerText = mockPost.comment_count;
+            document.getElementById('commentCountHeader').innerText = mockPost.comment_count;
+
+            // 点赞状态
+            if (mockPost.is_liked) {
+                likeBtn.classList.add('active');
+                likeIcon.classList.replace('bi-heart', 'bi-heart-fill');
+            } else {
+                likeBtn.classList.remove('active');
+                likeIcon.classList.replace('bi-heart-fill', 'bi-heart');
+            }
+
+            // 收藏状态
+            if (mockPost.is_starred) {
+                starBtn.classList.add('active');
+                starIcon.classList.replace('bi-star', 'bi-star-fill');
+                starIcon.classList.add('star-active');
+            } else {
+                starBtn.classList.remove('active');
+                starIcon.classList.replace('bi-star-fill', 'bi-star');
+                starIcon.classList.remove('star-active');
+            }
+        }
+
+        function toggleLike() {
+            mockPost.is_liked = !mockPost.is_liked;
+            mockPost.like_count += mockPost.is_liked ? 1 : -1;
+            updateInteractionUI();
+            // 模拟 API: POST /api/interaction
+        }
+
+        function toggleStar() {
+            mockPost.is_starred = !mockPost.is_starred;
+            mockPost.star_count += mockPost.is_starred ? 1 : -1;
+            updateInteractionUI();
+        }
+
+        // 5. 评论输入
+        function openCommentPopup() {
+            const popup = document.getElementById('commentPopup');
+            popup.style.display = 'block';
+            setTimeout(() => popup.classList.add('show'), 10);
+            document.getElementById('realCommentInput').focus();
+        }
+
+        function closeCommentPopup() {
+            const popup = document.getElementById('commentPopup');
+            popup.classList.remove('show');
+            setTimeout(() => popup.style.display = 'none', 300);
+        }
+
+        function submitComment() {
+            const val = document.getElementById('realCommentInput').value.trim();
+            if (!val) return alert("请输入内容");
+            
+            // 模拟提交
+            const newComment = {
+                id: Date.now(),
+                user: "我",
+                avatar: "https://via.placeholder.com/32",
+                content: val,
+                time: "刚刚"
+            };
+            
+            // 插入到列表顶部
+            const list = document.getElementById('commentList');
+            const item = document.createElement('div');
+            item.className = 'comment-item';
+            item.innerHTML = `
+                <img src="${newComment.avatar}" class="comment-avatar">
+                <div class="comment-body">
+                    <div class="comment-user">${newComment.user}</div>
+                    <div class="comment-content">${newComment.content}</div>
+                    <div class="comment-meta">${newComment.time} · 删除</div>
+                </div>
+            `;
+            list.insertBefore(item, list.firstChild);
+            
+            // 更新计数
+            mockPost.comment_count++;
+            updateInteractionUI();
+            
+            closeCommentPopup();
+            document.getElementById('realCommentInput').value = '';
+            scrollToComments();
+        }
+
+        function scrollToComments() {
+            document.querySelector('.comment-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 图片预览
+        function showBigImg(src) {
+            document.getElementById('previewBigImg').src = src;
+            document.getElementById('imgPreview').style.display = 'flex';
+        }
+
+        function showMenu() {
+            alert("弹出菜单：举报 / 分享");
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录/注册 - 校园食堂点评系统</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF7F24;
+            --primary-hover: #ff9248;
+            --bg-gradient: linear-gradient(135deg, #FF7F24 0%, #FFB07C 100%);
+        }
+
+        body {
+            background: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* 响应式容器 */
+        .auth-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+        }
+
+        .card-custom {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: none;
+            overflow: hidden;
+        }
+
+        .card-header-custom {
+            background: var(--bg-gradient);
+            padding: 30px 20px;
+            text-align: center;
+            color: #fff;
+        }
+
+        .logo-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .system-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        /* 选项卡样式 */
+        .nav-tabs {
+            border-bottom: 1px solid #eee;
+            margin-bottom: 20px;
+        }
+
+        .nav-link {
+            color: #666;
+            font-weight: 500;
+            border: none;
+            padding: 15px 0;
+            width: 50%;
+            text-align: center;
+            position: relative;
+            background: transparent !important;
+        }
+
+        .nav-link.active {
+            color: var(--primary-color) !important;
+            font-weight: 600;
+        }
+
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 3px;
+            background-color: var(--primary-color);
+            border-radius: 3px;
+        }
+
+        .card-body-custom {
+            padding: 0 30px 30px;
+        }
+
+        /* 表单控件 */
+        .form-control {
+            border-radius: 8px;
+            padding: 10px 15px;
+            font-size: 14px;
+            border-color: #eee;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.25rem rgba(255, 127, 36, 0.15);
+        }
+
+        .input-group-text {
+            background: #fff;
+            border-color: #eee;
+            border-radius: 8px 0 0 8px;
+            color: #999;
+        }
+        
+        /* 验证码相关 */
+        .captcha-img {
+            height: 42px;
+            cursor: pointer;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        .btn-send-code {
+            border-radius: 8px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        /* 提交按钮 */
+        .btn-primary-custom {
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .btn-primary-custom:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary-custom:active {
+            transform: translateY(0);
+        }
+
+        .form-check-input:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        /* 底部链接 */
+        .auth-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .link-primary {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .link-primary:hover {
+            text-decoration: underline;
+        }
+
+        /* 密码显示切换图标 */
+        .password-toggle {
+            cursor: pointer;
+            color: #999;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <div class="card card-custom">
+            <!-- 1. 顶部Logo区 -->
+            <div class="card-header-custom">
+                <i class="bi bi-shop logo-icon"></i>
+                <h1 class="system-title">校园食堂点评系统</h1>
+            </div>
+
+            <div class="card-body-custom">
+                <!-- 选项卡切换 -->
+                <ul class="nav nav-tabs" id="authTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="login-tab" data-bs-toggle="tab" data-bs-target="#login-panel" type="button" role="tab">登录</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="register-tab" data-bs-toggle="tab" data-bs-target="#register-panel" type="button" role="tab">注册</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- 2. 登录表单 -->
+                    <div class="tab-pane fade show active" id="login-panel" role="tabpanel">
+                        <form id="loginForm" onsubmit="handleLogin(event)">
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" class="form-control" id="loginAccount" placeholder="用户名/手机号" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="input-group position-relative">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" class="form-control" id="loginPassword" placeholder="请输入密码" required>
+                                    <span class="position-absolute top-50 end-0 translate-middle-y me-3 password-toggle" onclick="togglePassword('loginPassword', this)">
+                                        <i class="bi bi-eye-slash"></i>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mb-3 row g-2">
+                                <div class="col-7">
+                                    <input type="text" class="form-control" id="loginCaptcha" placeholder="图片验证码" required>
+                                </div>
+                                <div class="col-5">
+                                    <img src="https://via.placeholder.com/100x42/eee/999?text=8888" class="captcha-img w-100" onclick="refreshCaptcha(this)" title="点击刷新">
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="rememberMe">
+                                    <label class="form-check-label small text-secondary" for="rememberMe">记住我</label>
+                                </div>
+                                <a href="#" class="small link-secondary text-decoration-none" onclick="alert('请联系管理员重置密码')">忘记密码？</a>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-primary-custom">登 录</button>
+                        </form>
+                        <div class="auth-footer">
+                            <span class="text-secondary">还没有账号？</span>
+                            <a href="#" class="link-primary" onclick="switchTab('register-tab')">立即注册</a>
+                        </div>
+                    </div>
+
+                    <!-- 3. 注册表单 -->
+                    <div class="tab-pane fade" id="register-panel" role="tabpanel">
+                        <form id="registerForm" onsubmit="handleRegister(event)">
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                    <input type="text" class="form-control" id="regUsername" placeholder="设置用户名 (2-10位)" required minlength="2" maxlength="10">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                    <input type="tel" class="form-control" id="regPhone" placeholder="手机号码" required pattern="1[3-9]\d{9}">
+                                </div>
+                            </div>
+                            <div class="mb-3 row g-2">
+                                <div class="col-7">
+                                    <input type="text" class="form-control" id="regSmsCode" placeholder="短信验证码" required maxlength="6">
+                                </div>
+                                <div class="col-5">
+                                    <button type="button" class="btn btn-outline-secondary w-100 btn-send-code" id="btnSendCode" onclick="sendSmsCode()">获取验证码</button>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="input-group position-relative">
+                                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                    <input type="password" class="form-control" id="regPassword" placeholder="设置密码 (6-16位)" required minlength="6" maxlength="16">
+                                    <span class="position-absolute top-50 end-0 translate-middle-y me-3 password-toggle" onclick="togglePassword('regPassword', this)">
+                                        <i class="bi bi-eye-slash"></i>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <div class="input-group position-relative">
+                                    <span class="input-group-text"><i class="bi bi-check-lg"></i></span>
+                                    <input type="password" class="form-control" id="regConfirmPassword" placeholder="确认密码" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-primary-custom">注 册</button>
+                        </form>
+                        <div class="auth-footer">
+                            <span class="text-secondary">已有账号？</span>
+                            <a href="#" class="link-primary" onclick="switchTab('login-tab')">立即登录</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4 text-muted small">
+            &copy; 2024 校园食堂点评系统 · By Admin
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 密码显示/隐藏切换
+        function togglePassword(inputId, iconEl) {
+            const input = document.getElementById(inputId);
+            const icon = iconEl.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('bi-eye-slash', 'bi-eye');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('bi-eye', 'bi-eye-slash');
+            }
+        }
+
+        // 刷新图片验证码
+        function refreshCaptcha(imgEl) {
+            // 模拟刷新：添加随机数防止缓存
+            // 实际项目应请求后端API: /api/captcha?t=...
+            const randomCode = Math.floor(1000 + Math.random() * 9000);
+            imgEl.src = `https://via.placeholder.com/100x42/eee/999?text=${randomCode}`;
+            // 可以在dataset中存储正确验证码用于前端模拟校验
+            imgEl.dataset.code = randomCode;
+        }
+
+        // 发送短信验证码
+        let countdown = 0;
+        let timer = null;
+
+        function sendSmsCode() {
+            const phoneInput = document.getElementById('regPhone');
+            const phone = phoneInput.value;
+            
+            // 校验手机号
+            if (!/^1[3-9]\d{9}$/.test(phone)) {
+                alert('请输入正确的手机号码！');
+                phoneInput.focus();
+                return;
+            }
+
+            if (countdown > 0) return;
+
+            // 模拟API请求
+            const btn = document.getElementById('btnSendCode');
+            btn.disabled = true;
+            btn.textContent = '发送中...';
+
+            setTimeout(() => {
+                alert(`验证码已发送至 ${phone}，请注意查收（测试码：6666）`);
+                
+                // 开始倒计时
+                countdown = 60;
+                btn.textContent = `${countdown}s后重发`;
+                
+                timer = setInterval(() => {
+                    countdown--;
+                    if (countdown <= 0) {
+                        clearInterval(timer);
+                        btn.disabled = false;
+                        btn.textContent = '获取验证码';
+                    } else {
+                        btn.textContent = `${countdown}s后重发`;
+                    }
+                }, 1000);
+            }, 1000);
+        }
+
+        // 处理登录
+        function handleLogin(e) {
+            e.preventDefault();
+            const account = document.getElementById('loginAccount').value;
+            const password = document.getElementById('loginPassword').value;
+            const captcha = document.getElementById('loginCaptcha').value;
+            const btn = e.target.querySelector('button[type="submit"]');
+
+            // 模拟校验
+            if (captcha !== '8888') { // 假设8888为万能验证码
+                alert('验证码错误！(测试请使用 8888)');
+                return;
+            }
+
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 登录中...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                // 模拟登录成功
+                localStorage.setItem('isLogin', 'true');
+                localStorage.setItem('username', account);
+                
+                // 根据账号判断角色跳转（模拟）
+                if (account === 'admin') {
+                    location.href = 'admin_index.html'; // 跳转管理后台
+                } else {
+                    location.href = 'index.html'; // 跳转C端首页
+                }
+            }, 1000);
+        }
+
+        // 处理注册
+        function handleRegister(e) {
+            e.preventDefault();
+            const password = document.getElementById('regPassword').value;
+            const confirmPwd = document.getElementById('regConfirmPassword').value;
+            const smsCode = document.getElementById('regSmsCode').value;
+
+            if (password !== confirmPwd) {
+                alert('两次输入的密码不一致！');
+                return;
+            }
+
+            if (smsCode !== '6666') { // 假设6666为测试验证码
+                alert('短信验证码错误！(测试请使用 6666)');
+                return;
+            }
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 注册中...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                alert('注册成功！请登录。');
+                // 自动切换到登录Tab并填充账号
+                const phone = document.getElementById('regPhone').value;
+                document.getElementById('loginAccount').value = phone;
+                switchTab('login-tab');
+                
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                document.getElementById('registerForm').reset();
+            }, 1500);
+        }
+
+        // 切换Tab辅助函数
+        function switchTab(tabId) {
+            const tabEl = document.getElementById(tabId);
+            const tab = new bootstrap.Tab(tabEl);
+            tab.show();
+        }
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化图片验证码
+            const img = document.querySelector('.captcha-img');
+            refreshCaptcha(img);
+        });
+    </script>
+</body>
+</html>

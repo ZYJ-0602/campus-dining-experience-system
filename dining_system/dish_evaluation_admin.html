@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>菜品评价管理 - 食堂端</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- 引入 ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #1E90FF;
+            --primary-light: #e6f2ff;
+            --text-dark: #333;
+            --bg-color: #f8f9fa;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-bottom: 20px;
+        }
+
+        /* 顶部导航栏 */
+        .navbar-custom {
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .navbar-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 筛选模块 */
+        .filter-section {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            margin-bottom: 20px;
+        }
+
+        .filter-label {
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-dark);
+        }
+
+        /* 菜品列表 */
+        .table-section {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--primary-light);
+        }
+
+        .table thead th {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #dee2e6;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .score-badge {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .score-high { color: #28a745; background-color: #e6f7e9; }
+        .score-mid { color: #ffc107; background-color: #fff3cd; }
+        .score-low { color: #dc3545; background-color: #f8d7da; }
+
+        /* 详情弹窗 */
+        .modal-xl {
+            max-width: 1140px;
+        }
+
+        .detail-layout {
+            display: flex;
+            gap: 20px;
+        }
+
+        .detail-list {
+            flex: 2;
+        }
+
+        .detail-chart {
+            flex: 1;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            height: 400px;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 350px;
+        }
+
+        .eval-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .eval-item:last-child {
+            border-bottom: none;
+        }
+
+        .eval-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .eval-tags span {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background-color: #e9ecef;
+            color: #495057;
+            margin-right: 5px;
+        }
+
+        .eval-content {
+            color: #333;
+            margin-bottom: 5px;
+            line-height: 1.5;
+        }
+
+        .eval-footer {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部导航栏 -->
+    <div class="navbar-custom">
+        <div class="navbar-title">
+            <a href="index.html" class="btn btn-outline-secondary btn-sm me-2"><i class="bi bi-chevron-left"></i> 返回看板</a>
+            <span>菜品评价管理</span>
+        </div>
+        <button class="btn btn-success" onclick="exportData()">
+            <i class="bi bi-file-earmark-excel me-1"></i> 导出数据
+        </button>
+    </div>
+
+    <div class="container-fluid px-4">
+        <!-- 2. 筛选模块 -->
+        <div class="filter-section">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="filter-label">菜品名称</label>
+                    <input type="text" class="form-control" id="filterName" placeholder="请输入菜品关键词">
+                </div>
+                <div class="col-md-3">
+                    <label class="filter-label">评分范围 (1-10分)</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="number" class="form-control" id="filterScoreMin" placeholder="1" min="1" max="10">
+                        <span>-</span>
+                        <input type="number" class="form-control" id="filterScoreMax" placeholder="10" min="1" max="10">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="filter-label">时间范围</label>
+                    <input type="date" class="form-control" id="filterDate">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary me-2" onclick="applyFilter()">
+                        <i class="bi bi-funnel"></i> 筛选
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="resetFilter()">
+                        <i class="bi bi-arrow-counterclockwise"></i> 重置
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 菜品列表模块 -->
+        <div class="table-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">菜品列表</h5>
+                <span class="text-muted small">共找到 <span id="totalCount">0</span> 个菜品</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>菜品名称</th>
+                            <th>所属窗口</th>
+                            <th>平均评分</th>
+                            <th>评价总数</th>
+                            <th>笔记提及数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dishTableBody">
+                        <!-- 数据动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+            <!-- 分页 -->
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center" id="mainPagination">
+                    <!-- 分页动态生成 -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+
+    <!-- 4. 评价详情弹窗 -->
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailModalTitle">菜品评价详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="detail-layout">
+                        <!-- 左侧：评价列表 -->
+                        <div class="detail-list">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="evalType" id="evalAll" autocomplete="off" checked onchange="filterEvals('all')">
+                                    <label class="btn btn-outline-primary" for="evalAll">全部</label>
+
+                                    <input type="radio" class="btn-check" name="evalType" id="evalFood" autocomplete="off" onchange="filterEvals('food')">
+                                    <label class="btn btn-outline-primary" for="evalFood">食品</label>
+
+                                    <input type="radio" class="btn-check" name="evalType" id="evalEnv" autocomplete="off" onchange="filterEvals('env')">
+                                    <label class="btn btn-outline-primary" for="evalEnv">环境</label>
+                                    
+                                    <input type="radio" class="btn-check" name="evalType" id="evalService" autocomplete="off" onchange="filterEvals('service')">
+                                    <label class="btn btn-outline-primary" for="evalService">服务</label>
+                                </div>
+                                <span class="text-muted small">共 <span id="evalTotal">0</span> 条评价</span>
+                            </div>
+                            <div id="evalListContainer" style="height: 400px; overflow-y: auto;">
+                                <!-- 评价列表动态生成 -->
+                            </div>
+                            <!-- 弹窗分页 -->
+                            <nav aria-label="Eval pagination" class="mt-3">
+                                <ul class="pagination pagination-sm justify-content-center" id="evalPagination">
+                                    <!-- 分页动态生成 -->
+                                </ul>
+                            </nav>
+                        </div>
+
+                        <!-- 右侧：评分分布图表 -->
+                        <div class="detail-chart">
+                            <h6 class="text-center mb-3">评分分布统计</h6>
+                            <div id="scoreChart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" onclick="exportEvalDetail()">导出详情</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 模拟数据源
+        const mockDishes = [
+            { id: 1, name: "番茄炒蛋", window: "1号窗口", avg_score: 9.2, eval_count: 1280, post_count: 36 },
+            { id: 2, name: "红烧肉", window: "2号窗口", avg_score: 8.8, eval_count: 950, post_count: 24 },
+            { id: 3, name: "麻婆豆腐", window: "1号窗口", avg_score: 7.5, eval_count: 420, post_count: 12 },
+            { id: 4, name: "清蒸鱼", window: "3号窗口", avg_score: 9.5, eval_count: 680, post_count: 18 },
+            { id: 5, name: "宫保鸡丁", window: "2号窗口", avg_score: 8.2, eval_count: 1100, post_count: 45 },
+            { id: 6, name: "土豆牛腩", window: "3号窗口", avg_score: 6.8, eval_count: 350, post_count: 8 },
+            { id: 7, name: "干锅花菜", window: "1号窗口", avg_score: 8.9, eval_count: 720, post_count: 15 },
+            { id: 8, name: "酸菜鱼", window: "2号窗口", avg_score: 9.1, eval_count: 890, post_count: 30 },
+            { id: 9, name: "糖醋排骨", window: "3号窗口", avg_score: 8.5, eval_count: 600, post_count: 22 },
+            { id: 10, name: "青椒肉丝", window: "1号窗口", avg_score: 7.9, eval_count: 550, post_count: 10 }
+        ];
+
+        const mockEvals = [
+            { id: 1, user: "小明", score: 9.0, tags: ["口感绝佳", "分量足"], content: "今天的番茄炒蛋特别好吃，酸甜适中！", time: "2024-05-01 12:30", type: "food" },
+            { id: 2, user: "张三", score: 8.0, tags: ["食材新鲜"], content: "味道不错，就是稍微有点咸。", time: "2024-04-30 18:15", type: "food" },
+            { id: 3, user: "李四", score: 10.0, tags: ["服务热情"], content: "阿姨打菜手不抖，好评！", time: "2024-04-29 12:00", type: "service" },
+            { id: 4, user: "王五", score: 7.0, tags: ["环境一般"], content: "桌子有点油，希望改进。", time: "2024-04-28 12:45", type: "env" },
+            { id: 5, user: "赵六", score: 9.5, tags: ["性价比高"], content: "这个价格能吃到这么多肉，很良心。", time: "2024-04-27 18:00", type: "food" },
+        ];
+
+        // 状态管理
+        let currentDishes = [...mockDishes];
+        let currentEvals = [...mockEvals];
+        let currentChart = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            renderDishTable(currentDishes);
+        });
+
+        // 1. 菜品列表渲染
+        function renderDishTable(data) {
+            const tbody = document.getElementById('dishTableBody');
+            document.getElementById('totalCount').textContent = data.length;
+            
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">暂无数据</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(dish => {
+                let badgeClass = 'score-mid';
+                if (dish.avg_score >= 9.0) badgeClass = 'score-high';
+                if (dish.avg_score < 7.0) badgeClass = 'score-low';
+
+                html += `
+                    <tr>
+                        <td>${dish.id}</td>
+                        <td><strong>${dish.name}</strong></td>
+                        <td>${dish.window}</td>
+                        <td><span class="score-badge ${badgeClass}">${dish.avg_score}</span></td>
+                        <td>${dish.eval_count}</td>
+                        <td>${dish.post_count}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="openDetail(${dish.id}, '${dish.name}')">
+                                <i class="bi bi-eye"></i> 查看评价
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+            
+            // 简单分页模拟
+            renderPagination('mainPagination', Math.ceil(data.length / 5));
+        }
+
+        // 2. 筛选逻辑
+        function applyFilter() {
+            const name = document.getElementById('filterName').value.toLowerCase();
+            const minScore = parseFloat(document.getElementById('filterScoreMin').value) || 0;
+            const maxScore = parseFloat(document.getElementById('filterScoreMax').value) || 10;
+
+            const filtered = mockDishes.filter(dish => {
+                const matchName = dish.name.toLowerCase().includes(name);
+                const matchScore = dish.avg_score >= minScore && dish.avg_score <= maxScore;
+                return matchName && matchScore;
+            });
+
+            renderDishTable(filtered);
+        }
+
+        function resetFilter() {
+            document.getElementById('filterName').value = '';
+            document.getElementById('filterScoreMin').value = '';
+            document.getElementById('filterScoreMax').value = '';
+            document.getElementById('filterDate').value = '';
+            renderDishTable(mockDishes);
+        }
+
+        // 3. 打开详情弹窗
+        function openDetail(id, name) {
+            document.getElementById('detailModalTitle').textContent = `评价详情 - ${name}`;
+            const modal = new bootstrap.Modal(document.getElementById('detailModal'));
+            modal.show();
+
+            // 渲染评价列表
+            renderEvalList(mockEvals);
+
+            // 初始化图表 (延迟一点等待弹窗动画，确保容器有宽高)
+            setTimeout(() => {
+                initChart(name);
+            }, 300);
+        }
+
+        // 4. 渲染评价列表
+        function renderEvalList(data) {
+            const container = document.getElementById('evalListContainer');
+            document.getElementById('evalTotal').textContent = data.length;
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="text-center py-5 text-muted">暂无相关评价</div>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(eval => {
+                const tagsHtml = eval.tags.map(t => `<span>${t}</span>`).join('');
+                html += `
+                    <div class="eval-item">
+                        <div class="eval-header">
+                            <div>
+                                <strong class="text-primary me-2">${eval.score}分</strong>
+                                <span class="fw-bold text-dark">${eval.user}</span>
+                            </div>
+                            <span class="text-muted small">${eval.time}</span>
+                        </div>
+                        <div class="eval-content">${eval.content}</div>
+                        <div class="eval-tags mb-1">${tagsHtml}</div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // 5. 评价筛选
+        function filterEvals(type) {
+            if (type === 'all') {
+                renderEvalList(mockEvals);
+            } else {
+                const filtered = mockEvals.filter(e => e.type === type);
+                renderEvalList(filtered);
+            }
+        }
+
+        // 6. 初始化图表
+        function initChart(name) {
+            const chartDom = document.getElementById('scoreChart');
+            if (currentChart) {
+                currentChart.dispose();
+            }
+            currentChart = echarts.init(chartDom);
+
+            // 模拟分布数据
+            const option = {
+                tooltip: {
+                    trigger: 'item'
+                },
+                legend: {
+                    top: '5%',
+                    left: 'center'
+                },
+                color: ['#dc3545', '#ffc107', '#28a745', '#1E90FF', '#0d6efd'],
+                series: [
+                    {
+                        name: '评分分布',
+                        type: 'pie',
+                        radius: ['40%', '70%'],
+                        avoidLabelOverlap: false,
+                        itemStyle: {
+                            borderRadius: 10,
+                            borderColor: '#fff',
+                            borderWidth: 2
+                        },
+                        label: {
+                            show: false,
+                            position: 'center'
+                        },
+                        emphasis: {
+                            label: {
+                                show: true,
+                                fontSize: 18,
+                                fontWeight: 'bold'
+                            }
+                        },
+                        labelLine: {
+                            show: false
+                        },
+                        data: [
+                            { value: 5, name: '1-2分' },
+                            { value: 12, name: '3-4分' },
+                            { value: 28, name: '5-6分' },
+                            { value: 320, name: '7-8分' },
+                            { value: 915, name: '9-10分' }
+                        ]
+                    }
+                ]
+            };
+
+            currentChart.setOption(option);
+        }
+
+        // 7. 导出数据模拟
+        function exportData() {
+            const btn = event.target.closest('button');
+            const originalHtml = btn.innerHTML;
+            
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 导出中...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                alert("数据导出成功！文件已下载至本地。");
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }, 1000);
+        }
+        
+        function exportEvalDetail() {
+            alert("评价详情导出成功！");
+        }
+
+        // 分页组件渲染
+        function renderPagination(elementId, totalPages) {
+            const container = document.getElementById(elementId);
+            let html = `
+                <li class="page-item disabled"><a class="page-link" href="#">上一页</a></li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+            `;
+            if (totalPages > 1) {
+                html += `<li class="page-item"><a class="page-link" href="#">2</a></li>`;
+            }
+            html += `<li class="page-item ${totalPages <= 1 ? 'disabled' : ''}"><a class="page-link" href="#">下一页</a></li>`;
+            container.innerHTML = html;
+        }
+
+        // 监听窗口大小改变重绘图表
+        window.addEventListener('resize', function() {
+            if (currentChart) {
+                currentChart.resize();
+            }
+        });
+    </script>
+</body>
+</html>

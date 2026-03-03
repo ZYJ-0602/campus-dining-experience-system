@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- 顶部巨幕：左右分栏布局 (Split Layout) -->
+<div class="row align-items-center mb-5 bg-white rounded-3 shadow-sm overflow-hidden g-0">
+    <!-- 左侧：文字区域 -->
+    <div class="col-md-6 p-5">
+        <h1 class="display-4 fw-bold text-dark mb-3">校园食评</h1>
+        <p class="lead text-secondary mb-4">每一餐都值得被认真对待。这里汇聚了最真实的师生点评，带你发现食堂里的隐藏美味。</p>
+        <div class="d-grid d-md-flex gap-3">
+            <a href="#dish-list" class="btn btn-primary btn-lg px-4 rounded-pill fw-bold" style="background-color: #ff6b6b; border: none;">
+                <i class="fas fa-utensils me-2"></i>探索美食
+            </a>
+            {% if not session.get('username') %}
+            <a href="/register" class="btn btn-outline-secondary btn-lg px-4 rounded-pill">加入社区</a>
+            {% endif %}
+        </div>
+    </div>
+    <!-- 右侧：美食大图 -->
+    <div class="col-md-6 h-100">
+        <img src="{{ url_for('static', filename='img/food-hero.jpg') }}" class="img-fluid w-100 h-100" style="object-fit: cover; min-height: 400px;" alt="美味食物">
+    </div>
+</div>
+
+<div class="row" id="dish-list">
+    <div class="col-12 mb-4">
+        <h4 class="border-bottom pb-2">今日菜品</h4>
+    </div>
+    
+    {% for dish in dishes %}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <!-- 使用本地静态图片，或者如果没有图片则显示色块 -->
+            <div style="height: 200px; background-color: #ff9f43; display: flex; align-items: center; justify-content: center; color: white; font-size: 2rem;">
+                {{ dish.name[0] }}
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title mb-0 fw-bold">{{ dish.name }}</h5>
+                    <span class="badge bg-warning text-dark">￥{{ dish.price }}</span>
+                </div>
+                <p class="card-text text-muted small">{{ dish.description }}</p>
+                <div class="d-grid">
+                    <a href="{{ url_for('dish_detail', dish_id=dish.id) }}" class="btn btn-outline-primary rounded-pill">
+                        <i class="far fa-comment-dots me-1"></i> 查看点评
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

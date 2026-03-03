@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内容审核 - 食堂点评管理后台</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #dc3545;
+            --primary-light: #fff5f5;
+            --text-dark: #333;
+            --bg-color: #f8f9fa;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航栏 */
+        .navbar-custom {
+            background-color: #343a40;
+            color: #fff;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .navbar-brand {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .navbar-title {
+            font-size: 16px;
+            color: rgba(255,255,255,0.7);
+            border-left: 1px solid rgba(255,255,255,0.3);
+            padding-left: 15px;
+            margin-left: 15px;
+        }
+
+        /* 主内容布局 */
+        .main-container {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        /* 左侧审核列表 */
+        .audit-section {
+            flex: 3;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .section-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 右侧敏感词管理 */
+        .sensitive-section {
+            flex: 1;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            min-width: 300px;
+        }
+
+        /* 表格样式 */
+        .table-custom th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .table-custom td {
+            vertical-align: middle;
+        }
+
+        .status-badge {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .status-pending {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .status-passed {
+            background-color: #e6f7e9;
+            color: #28a745;
+        }
+
+        .status-rejected {
+            background-color: #f8d7da;
+            color: #dc3545;
+        }
+
+        .row-pending {
+            background-color: var(--primary-light);
+        }
+
+        /* 敏感词标签 */
+        .word-tag {
+            display: inline-block;
+            background-color: #e9ecef;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 13px;
+            margin: 0 5px 8px 0;
+            color: #495057;
+        }
+
+        .word-tag .btn-close {
+            font-size: 10px;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+
+        /* 审核弹窗内容 */
+        .audit-detail-content {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .detail-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        .detail-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .detail-images {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .detail-img {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #eee;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部导航栏 -->
+    <div class="navbar-custom">
+        <div class="d-flex align-items-center">
+            <a href="admin_index.html" class="navbar-brand">
+                <i class="bi bi-shield-check"></i>
+                食堂点评管理后台
+            </a>
+            <span class="navbar-title">内容审核</span>
+        </div>
+        <div>
+            <a href="admin_index.html" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回首页
+            </a>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- 2. 左侧审核列表 -->
+        <div class="audit-section">
+            <div class="section-header">
+                <div class="section-title">
+                    待审核列表
+                    <span class="badge bg-danger rounded-pill" id="pendingCount">0</span>
+                </div>
+                <div class="d-flex gap-2">
+                    <select class="form-select form-select-sm" id="filterStatus" onchange="applyFilter()" style="width: 120px;">
+                        <option value="all">全部状态</option>
+                        <option value="pending" selected>待审核</option>
+                        <option value="passed">已通过</option>
+                        <option value="rejected">已驳回</option>
+                    </select>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="refreshList()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive flex-grow-1">
+                <table class="table table-hover table-custom mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th style="width: 30%;">标题/摘要</th>
+                            <th>作者</th>
+                            <th>发布时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditTableBody">
+                        <!-- 数据动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+            <!-- 分页 -->
+            <div class="p-3 border-top">
+                <nav>
+                    <ul class="pagination pagination-sm justify-content-end mb-0" id="pagination">
+                        <!-- 分页动态生成 -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+
+        <!-- 4. 右侧敏感词管理 -->
+        <div class="sensitive-section">
+            <div class="section-header">
+                <div class="section-title">
+                    <i class="bi bi-exclamation-triangle"></i> 敏感词库
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="saveSensitiveWords()">保存设置</button>
+            </div>
+            <div class="p-3 flex-grow-1 d-flex flex-column">
+                <div class="mb-3">
+                    <label class="form-label small text-muted">处理规则</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="sensitiveRule" id="ruleBlock" value="block" checked>
+                            <label class="form-check-label small" for="ruleBlock">拦截发布</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="sensitiveRule" id="ruleReplace" value="replace">
+                            <label class="form-check-label small" for="ruleReplace">替换为***</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">新增敏感词 (回车分隔)</label>
+                    <div class="input-group">
+                        <textarea class="form-control" id="newWordsInput" rows="2" placeholder="输入敏感词..."></textarea>
+                        <button class="btn btn-outline-primary" type="button" onclick="addWords()">添加</button>
+                    </div>
+                </div>
+                <div class="flex-grow-1 border rounded p-2 bg-light" style="overflow-y: auto; max-height: 400px;">
+                    <div id="wordListContainer">
+                        <!-- 敏感词列表动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 审核弹窗 -->
+    <div class="modal fade" id="auditModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">审核笔记</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="audit-detail-content">
+                        <h5 class="mb-3" id="detailTitle">笔记标题</h5>
+                        <div class="detail-meta">
+                            <span class="me-3"><i class="bi bi-person"></i> <span id="detailAuthor">作者</span></span>
+                            <span class="me-3"><i class="bi bi-clock"></i> <span id="detailTime">时间</span></span>
+                            <span><i class="bi bi-shop"></i> <span id="detailCanteen">关联食堂</span></span>
+                        </div>
+                        <div class="detail-text" id="detailContent">
+                            笔记正文内容...
+                        </div>
+                        <div class="detail-images" id="detailImages">
+                            <!-- 图片动态生成 -->
+                        </div>
+                        <div class="mt-3" id="detailTags">
+                            <!-- 标签动态生成 -->
+                        </div>
+                    </div>
+                    
+                    <div class="audit-actions" id="auditActionArea">
+                        <div class="mb-3" id="rejectReasonGroup" style="display: none;">
+                            <label class="form-label text-danger">驳回原因 <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="rejectReason" rows="2" placeholder="请输入驳回原因..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-danger" onclick="toggleRejectInput()">
+                            <i class="bi bi-x-circle"></i> 驳回
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="submitAudit('pass')">
+                            <i class="bi bi-check-circle"></i> 通过
+                        </button>
+                        <!-- 确认驳回按钮，初始隐藏 -->
+                        <button type="button" class="btn btn-danger" id="confirmRejectBtn" onclick="submitAudit('reject')" style="display: none;">
+                            确认驳回
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 预览弹窗 (只读) -->
+    <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">笔记预览</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="previewContentArea">
+                        <!-- 内容动态填充 -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 模拟数据源
+        const mockPosts = [
+            { id: 1, title: "北区食堂这道菜绝了！", content: "番茄炒蛋真的太好吃了，强烈推荐给大家！阿姨手也不抖，分量很足。", author: "小明", time: "2024-05-01 12:30", canteen: "北区食堂", status: "pending", images: ["https://via.placeholder.com/100", "https://via.placeholder.com/100"], tags: ["推荐", "好吃"] },
+            { id: 2, title: "南区二楼避雷", content: "这个菜有点不新鲜，吃了肚子不舒服，大家注意避雷。", author: "张三", time: "2024-05-01 13:00", canteen: "南区食堂", status: "pending", images: [], tags: ["避雷"] },
+            { id: 3, title: "西区麻辣烫yyds", content: "味道正宗，价格实惠，就是排队的人有点多。", author: "李四", time: "2024-04-30 18:00", canteen: "西区食堂", status: "passed", images: ["https://via.placeholder.com/100"], tags: ["推荐"] },
+            { id: 4, title: "投诉！服务态度太差了", content: "某窗口阿姨态度极其恶劣，必须曝光！", author: "王五", time: "2024-04-29 12:00", canteen: "北区食堂", status: "rejected", reason: "内容过激", images: [], tags: ["吐槽"] },
+            { id: 5, title: "关于食堂卫生的建议", content: "希望能加强餐具消毒，发现有残留油渍。", author: "赵六", time: "2024-04-28 09:00", canteen: "南区食堂", status: "pending", images: [], tags: ["建议"] }
+        ];
+
+        let sensitiveWords = ["违规词1", "违规词2", "垃圾", "脏话"];
+        let currentPosts = [...mockPosts];
+        let currentAuditId = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            renderTable();
+            renderSensitiveWords();
+            updatePendingCount();
+        });
+
+        // 1. 渲染审核列表
+        function renderTable() {
+            const filterStatus = document.getElementById('filterStatus').value;
+            const tbody = document.getElementById('auditTableBody');
+            
+            let filteredData = currentPosts;
+            if (filterStatus !== 'all') {
+                filteredData = currentPosts.filter(p => p.status === filterStatus);
+            }
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">暂无相关数据</td></tr>';
+                return;
+            }
+
+            let html = '';
+            filteredData.forEach(post => {
+                let statusBadge = '';
+                let rowClass = '';
+                let actionBtns = '';
+
+                if (post.status === 'pending') {
+                    statusBadge = '<span class="status-badge status-pending">待审核</span>';
+                    rowClass = 'row-pending';
+                    actionBtns = `
+                        <button class="btn btn-sm btn-primary me-2" onclick="openAuditModal(${post.id})">
+                            <i class="bi bi-pencil-square"></i> 审核
+                        </button>
+                    `;
+                } else if (post.status === 'passed') {
+                    statusBadge = '<span class="status-badge status-passed">已通过</span>';
+                    actionBtns = `
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openPreview(${post.id})">
+                            <i class="bi bi-eye"></i> 查看
+                        </button>
+                    `;
+                } else {
+                    statusBadge = '<span class="status-badge status-rejected">已驳回</span>';
+                    actionBtns = `
+                        <button class="btn btn-sm btn-outline-secondary" onclick="openPreview(${post.id})">
+                            <i class="bi bi-eye"></i> 查看
+                        </button>
+                    `;
+                }
+
+                html += `
+                    <tr class="${rowClass}">
+                        <td>${post.id}</td>
+                        <td>
+                            <div class="fw-bold text-truncate" style="max-width: 200px;">${post.title}</div>
+                            <small class="text-muted text-truncate d-block" style="max-width: 200px;">${post.content}</small>
+                        </td>
+                        <td>${post.author}</td>
+                        <td>${post.time}</td>
+                        <td>${statusBadge}</td>
+                        <td>${actionBtns}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function applyFilter() {
+            renderTable();
+        }
+
+        function refreshList() {
+            // 模拟刷新
+            const btn = event.target.closest('button');
+            const icon = btn.querySelector('i');
+            icon.classList.add('spin-animation'); // 需自行添加CSS动画
+            setTimeout(() => {
+                renderTable();
+                updatePendingCount();
+                // icon.classList.remove('spin-animation');
+            }, 500);
+        }
+
+        function updatePendingCount() {
+            const count = currentPosts.filter(p => p.status === 'pending').length;
+            document.getElementById('pendingCount').textContent = count;
+        }
+
+        // 2. 审核流程
+        function openAuditModal(id) {
+            currentAuditId = id;
+            const post = currentPosts.find(p => p.id === id);
+            if (!post) return;
+
+            // 填充弹窗内容
+            document.getElementById('detailTitle').textContent = post.title;
+            document.getElementById('detailAuthor').textContent = post.author;
+            document.getElementById('detailTime').textContent = post.time;
+            document.getElementById('detailCanteen').textContent = post.canteen;
+            document.getElementById('detailContent').textContent = post.content;
+            
+            // 图片渲染
+            const imgContainer = document.getElementById('detailImages');
+            imgContainer.innerHTML = post.images.map(src => `<img src="${src}" class="detail-img" onclick="window.open('${src}')">`).join('');
+            
+            // 标签渲染
+            const tagContainer = document.getElementById('detailTags');
+            tagContainer.innerHTML = post.tags.map(t => `<span class="badge bg-secondary bg-opacity-10 text-secondary me-1">${t}</span>`).join('');
+
+            // 重置操作区状态
+            document.getElementById('rejectReasonGroup').style.display = 'none';
+            document.getElementById('rejectReason').value = '';
+            document.getElementById('confirmRejectBtn').style.display = 'none';
+            
+            const modal = new bootstrap.Modal(document.getElementById('auditModal'));
+            modal.show();
+        }
+
+        function toggleRejectInput() {
+            const group = document.getElementById('rejectReasonGroup');
+            const btn = document.getElementById('confirmRejectBtn');
+            if (group.style.display === 'none') {
+                group.style.display = 'block';
+                btn.style.display = 'inline-block';
+            } else {
+                group.style.display = 'none';
+                btn.style.display = 'none';
+            }
+        }
+
+        function submitAudit(action) {
+            const post = currentPosts.find(p => p.id === currentAuditId);
+            if (!post) return;
+
+            if (action === 'pass') {
+                if (confirm("确定通过该条笔记吗？")) {
+                    post.status = 'passed';
+                    finishAudit("审核通过");
+                }
+            } else if (action === 'reject') {
+                const reason = document.getElementById('rejectReason').value.trim();
+                if (!reason) {
+                    alert("请输入驳回原因！");
+                    return;
+                }
+                post.status = 'rejected';
+                post.reason = reason;
+                finishAudit("已驳回笔记");
+            }
+        }
+
+        function finishAudit(msg) {
+            // 关闭弹窗并刷新
+            const modalEl = document.getElementById('auditModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+            
+            renderTable();
+            updatePendingCount();
+            alert(msg);
+        }
+
+        // 3. 预览功能
+        function openPreview(id) {
+            const post = currentPosts.find(p => p.id === id);
+            if (!post) return;
+
+            const container = document.getElementById('previewContentArea');
+            const rejectInfo = post.status === 'rejected' ? `<div class="alert alert-danger mb-3">驳回原因：${post.reason}</div>` : '';
+            
+            container.innerHTML = `
+                ${rejectInfo}
+                <h4>${post.title}</h4>
+                <p class="text-muted small">${post.author} · ${post.time}</p>
+                <div class="mb-3">${post.content}</div>
+                <div class="d-flex gap-2 overflow-auto mb-3">
+                    ${post.images.map(src => `<img src="${src}" style="height:100px; border-radius:4px;">`).join('')}
+                </div>
+            `;
+            
+            const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+            modal.show();
+        }
+
+        // 4. 敏感词管理
+        function renderSensitiveWords() {
+            const container = document.getElementById('wordListContainer');
+            if (sensitiveWords.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3 small">暂无敏感词</div>';
+                return;
+            }
+            
+            let html = '';
+            sensitiveWords.forEach((word, index) => {
+                html += `
+                    <span class="word-tag">
+                        ${word}
+                        <button type="button" class="btn-close" aria-label="Close" onclick="removeWord(${index})"></button>
+                    </span>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function addWords() {
+            const input = document.getElementById('newWordsInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            // 支持换行或空格分隔
+            const newWords = text.split(/[\n\s]+/).filter(w => w.length > 0);
+            
+            // 去重添加
+            let addedCount = 0;
+            newWords.forEach(w => {
+                if (!sensitiveWords.includes(w)) {
+                    sensitiveWords.push(w);
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                renderSensitiveWords();
+                input.value = '';
+                // 滚动到底部
+                const container = input.parentElement.nextElementSibling;
+                container.scrollTop = container.scrollHeight;
+            } else {
+                alert("输入的敏感词已存在！");
+            }
+        }
+
+        function removeWord(index) {
+            sensitiveWords.splice(index, 1);
+            renderSensitiveWords();
+        }
+
+        function saveSensitiveWords() {
+            const rule = document.querySelector('input[name="sensitiveRule"]:checked').value;
+            // 模拟保存API
+            console.log("Saving words:", sensitiveWords, "Rule:", rule);
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = "保存中...";
+            btn.disabled = true;
+
+            setTimeout(() => {
+                alert("敏感词库及规则保存成功！");
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }, 800);
+        }
+    </script>
+</body>
+</html>

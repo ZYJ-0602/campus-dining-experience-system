@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2>{{ dish.name }} <span class="badge bg-secondary">￥{{ dish.price }}</span></h2>
+        <p class="lead">{{ dish.description }}</p>
+        <hr>
+        
+        <h4>用户点评 ({{ dish.reviews|length }})</h4>
+        {% for review in dish.reviews %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">
+                    {{ review.user.username }} 
+                    <span class="text-warning">
+                        {% for i in range(review.rating) %}★{% endfor %}
+                    </span>
+                </h5>
+                <p class="card-text">{{ review.content }}</p>
+                <p class="card-text"><small class="text-muted">{{ review.timestamp.strftime('%Y-%m-%d %H:%M') }}</small></p>
+            </div>
+        </div>
+        {% endfor %}
+
+        <hr>
+        {% if session.get('user_id') %}
+        <h4>我要点评</h4>
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label">评分</label>
+                <select name="rating" class="form-select">
+                    <option value="5">★★★★★ (5分)</option>
+                    <option value="4">★★★★ (4分)</option>
+                    <option value="3">★★★ (3分)</option>
+                    <option value="2">★★ (2分)</option>
+                    <option value="1">★ (1分)</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">评价内容</label>
+                <textarea name="content" class="form-control" rows="3" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">提交点评</button>
+        </form>
+        {% else %}
+        <div class="alert alert-info">请 <a href="/login">登录</a> 后发表评论</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

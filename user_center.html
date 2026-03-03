@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>个人中心</title>
+    <!-- 引入 Bootstrap 5 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF7F24; /* 核心橙色 */
+            --primary-gradient: linear-gradient(135deg, #FF7F24 0%, #FFB07C 100%);
+            --bg-color: #f8f9fa;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            padding-bottom: 70px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* 1. 个人信息模块 */
+        .user-header {
+            background: var(--primary-gradient);
+            padding: 30px 20px 50px; /* 底部留空给卡片上浮 */
+            color: #fff;
+            border-radius: 0 0 20px 20px;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+        
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            margin-right: 15px;
+            background: #fff;
+            object-fit: cover;
+        }
+        
+        .user-meta h5 {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .role-badge {
+            font-size: 12px;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        
+        .edit-btn {
+            margin-left: auto;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* 2. 功能入口 (4宫格) */
+        .grid-card {
+            background: #fff;
+            border-radius: 12px;
+            margin: -30px 15px 15px; /* 上浮效果 */
+            padding: 20px 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+        
+        .grid-item {
+            flex: 1;
+            cursor: pointer;
+        }
+        
+        .grid-icon {
+            font-size: 24px;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .grid-text {
+            font-size: 13px;
+            color: #333;
+        }
+
+        /* 3. 内容列表模块 */
+        .content-section {
+            padding: 0 15px;
+            margin-bottom: 20px;
+        }
+        
+        .tab-bar {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .tab-item {
+            padding: 10px 15px;
+            font-size: 15px;
+            color: #666;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .tab-item.active {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        .tab-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 2px;
+            background: var(--primary-color);
+        }
+
+        .list-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        
+        .card-header-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .card-title {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .card-status {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #f0f0f0;
+            color: #666;
+        }
+        
+        .card-status.success { background: #e6f7e9; color: #28a745; }
+        
+        .card-desc {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #999;
+            border-top: 1px solid #f9f9f9;
+            padding-top: 10px;
+        }
+        
+        .action-btns span {
+            margin-left: 15px;
+            cursor: pointer;
+        }
+        
+        .btn-edit { color: var(--primary-color); }
+        .btn-del { color: #dc3545; }
+
+        /* 4. 系统设置模块 */
+        .settings-list {
+            background: #fff;
+            margin: 0 15px 20px;
+            border-radius: 8px;
+            padding: 0 15px;
+        }
+        
+        .setting-item {
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 15px;
+            color: #333;
+            cursor: pointer;
+        }
+        
+        .setting-item:last-child { border-bottom: none; }
+
+        /* 底部导航栏 */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-around;
+            padding: 8px 0;
+            z-index: 1000;
+        }
+        
+        .nav-item {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        
+        .nav-item.active { color: var(--primary-color); }
+        .nav-item i { font-size: 20px; display: block; margin-bottom: 2px; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. 个人信息模块 -->
+    <div class="user-header">
+        <div class="user-info" id="userInfo">
+            <!-- 登录后显示 -->
+            <img src="https://via.placeholder.com/60" class="avatar" id="userAvatar">
+            <div class="user-meta">
+                <h5 id="userName">未登录</h5>
+                <div class="role-badge" id="userRole">游客</div>
+            </div>
+            <i class="bi bi-pencil-square edit-btn" onclick="editProfile()"></i>
+        </div>
+    </div>
+
+    <!-- 2. 功能入口 -->
+    <div class="grid-card">
+        <div class="grid-item" onclick="switchTab('eval')">
+            <i class="bi bi-star grid-icon"></i>
+            <span class="grid-text">我的评价</span>
+        </div>
+        <div class="grid-item" onclick="switchTab('note')">
+            <i class="bi bi-journal-text grid-icon"></i>
+            <span class="grid-text">我的笔记</span>
+        </div>
+        <div class="grid-item" onclick="switchTab('fav')">
+            <i class="bi bi-heart grid-icon"></i>
+            <span class="grid-text">我的收藏</span>
+        </div>
+        <div class="grid-item" onclick="alert('跳转反馈页')">
+            <i class="bi bi-envelope grid-icon"></i>
+            <span class="grid-text">意见反馈</span>
+        </div>
+    </div>
+
+    <!-- 3. 内容列表模块 -->
+    <div class="content-section">
+        <div class="tab-bar">
+            <div class="tab-item active" id="tab-eval" onclick="switchTab('eval')">我的评价</div>
+            <div class="tab-item" id="tab-note" onclick="switchTab('note')">我的笔记</div>
+            <div class="tab-item" id="tab-fav" onclick="switchTab('fav')">我的收藏</div>
+        </div>
+        
+        <div id="contentList">
+            <!-- 动态插入 -->
+        </div>
+        
+        <div class="text-center text-muted py-3" style="font-size:12px;" onclick="loadMore()">点击加载更多</div>
+    </div>
+
+    <!-- 4. 系统设置模块 -->
+    <div class="settings-list">
+        <div class="setting-item" onclick="alert('跳转消息通知设置')">
+            <span>消息通知</span>
+            <i class="bi bi-chevron-right text-muted"></i>
+        </div>
+        <div class="setting-item" onclick="clearCache()">
+            <span>清除缓存</span>
+            <span class="text-muted" style="font-size:12px;">12.5MB</span>
+        </div>
+        <div class="setting-item" onclick="alert('跳转关于我们')">
+            <span>关于我们</span>
+            <i class="bi bi-chevron-right text-muted"></i>
+        </div>
+        <div class="setting-item text-danger" id="logoutBtn" onclick="logout()" style="display:none; justify-content:center;">
+            退出登录
+        </div>
+    </div>
+
+    <!-- 底部导航栏 -->
+    <div class="bottom-nav">
+        <a href="index.html" class="nav-item">
+            <i class="bi bi-house"></i>首页
+        </a>
+        <a href="rank_list.html" class="nav-item">
+            <i class="bi bi-bar-chart"></i>榜单
+        </a>
+        <a href="#" class="nav-item active">
+            <i class="bi bi-person"></i>我的
+        </a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ==========================================
+        // 模拟数据
+        // ==========================================
+        const mockUser = {
+            id: 1,
+            name: "吃货小明",
+            phone: "138****8000",
+            avatar: "https://via.placeholder.com/60",
+            role: "普通用户"
+        };
+
+        const mockData = {
+            eval: [
+                { id: 1, title: "北区食堂 - 番茄炒蛋", score: 9.0, time: "2024-05-01", status: "已提交" },
+                { id: 2, title: "南区食堂 - 特色小炒", score: 8.5, time: "2024-04-28", status: "已提交" }
+            ],
+            note: [
+                { id: 1, title: "番茄炒蛋封神！", desc: "真的太好吃了，强烈推荐给大家...", time: "2024-05-01", status: "已发布" },
+                { id: 2, title: "避雷！这个窗口千万别去", desc: "排队半小时，结果...", time: "2024-04-25", status: "审核中" }
+            ],
+            fav: [
+                { id: 1, title: "北区食堂", type: "食堂", time: "2024-05-02" },
+                { id: 2, title: "红烧肉", type: "菜品", time: "2024-04-30" }
+            ]
+        };
+
+        // 全局状态
+        let isLogin = false; // 默认未登录
+        let currentTab = 'eval';
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkLogin();
+            renderList();
+        });
+
+        // 1. 登录状态管理
+        function checkLogin() {
+            // 模拟：检查 localStorage 或 Cookie
+            // 这里简单切换：如果 URL 带 ?login=1 则视为登录
+            const urlParams = new URLSearchParams(window.location.search);
+            isLogin = urlParams.get('login') === '1';
+
+            if (isLogin) {
+                document.getElementById('userName').innerText = mockUser.name;
+                document.getElementById('userRole').innerText = mockUser.role;
+                document.getElementById('userAvatar').src = mockUser.avatar;
+                document.getElementById('logoutBtn').style.display = 'flex';
+            } else {
+                document.getElementById('userName').innerHTML = '<span onclick="login()" style="cursor:pointer;text-decoration:underline;">点击登录/注册</span>';
+                document.getElementById('userRole').innerText = '游客';
+                document.getElementById('logoutBtn').style.display = 'none';
+            }
+        }
+
+        function login() {
+            window.location.href = '?login=1'; // 刷新模拟登录
+        }
+
+        function logout() {
+            if(confirm("确定要退出登录吗？")) {
+                window.location.href = '?login=0';
+            }
+        }
+
+        function editProfile() {
+            if (!isLogin) return login();
+            alert("跳转资料修改页");
+        }
+
+        // 2. 内容列表切换
+        function switchTab(type) {
+            if (!isLogin && type !== 'eval') { // 假设评价未登录也能看部分？通常都需要登录
+                // 这里统一要求登录
+                if(!isLogin) return login();
+            }
+            
+            currentTab = type;
+            
+            // 更新 Tab 样式
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${type}`).classList.add('active');
+            
+            renderList();
+        }
+
+        function renderList() {
+            const container = document.getElementById('contentList');
+            container.innerHTML = '';
+
+            if (!isLogin) {
+                container.innerHTML = '<div class="text-center py-5 text-muted">请先登录查看内容</div>';
+                return;
+            }
+
+            const data = mockData[currentTab];
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="text-center py-5 text-muted">暂无数据</div>';
+                return;
+            }
+
+            data.forEach(item => {
+                let html = '';
+                if (currentTab === 'eval') {
+                    html = `
+                        <div class="list-card">
+                            <div class="card-header-row">
+                                <span class="card-title">${item.title}</span>
+                                <span class="card-status success">${item.status}</span>
+                            </div>
+                            <div class="card-desc">评分：${item.score}分</div>
+                            <div class="card-footer">
+                                <span>${item.time}</span>
+                                <div class="action-btns">
+                                    <span class="btn-del" onclick="deleteItem(${item.id})">删除</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (currentTab === 'note') {
+                    html = `
+                        <div class="list-card">
+                            <div class="card-header-row">
+                                <span class="card-title">${item.title}</span>
+                                <span class="card-status">${item.status}</span>
+                            </div>
+                            <div class="card-desc text-truncate">${item.desc}</div>
+                            <div class="card-footer">
+                                <span>${item.time}</span>
+                                <div class="action-btns">
+                                    <span class="btn-edit" onclick="alert('编辑笔记 ${item.id}')">编辑</span>
+                                    <span class="btn-del" onclick="deleteItem(${item.id})">删除</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else { // fav
+                    html = `
+                        <div class="list-card">
+                            <div class="card-header-row">
+                                <span class="card-title">${item.title}</span>
+                                <span class="card-status">${item.type}</span>
+                            </div>
+                            <div class="card-footer">
+                                <span>收藏于 ${item.time}</span>
+                                <div class="action-btns">
+                                    <span class="btn-del" onclick="deleteItem(${item.id})">取消收藏</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                container.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
+        // 3. 操作逻辑
+        function deleteItem(id) {
+            if(confirm("确定要删除这条记录吗？")) {
+                // 模拟删除
+                const idx = mockData[currentTab].findIndex(i => i.id === id);
+                if (idx > -1) {
+                    mockData[currentTab].splice(idx, 1);
+                    renderList();
+                    // showToast("删除成功");
+                }
+            }
+        }
+
+        function loadMore() {
+            if (!isLogin) return;
+            alert("加载更多数据...");
+        }
+
+        function clearCache() {
+            if(confirm("确定要清除 12.5MB 缓存吗？")) {
+                setTimeout(() => {
+                    alert("缓存已清除");
+                }, 500);
+            }
+        }
+
+    </script>
+</body>
+</html>

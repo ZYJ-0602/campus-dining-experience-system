@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+venv/
+.env
+.DS_Store
+.vscode/
+.idea/
+*.db
+instance/
+.trae/
+dining_system/__pycache__/
+dining_system/instance/
+dining_system/*.db

@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>个人中心 - 校园食堂点评系统</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-bottom: 70px; /* 为底部导航留出空间 */
+        }
+
+        /* 个人信息卡片 - 渐变背景 */
+        .user-header-card {
+            background: linear-gradient(135deg, #FF7F24 0%, #FFB07C 100%);
+            color: white;
+            padding: 30px 20px;
+            border-radius: 0 0 20px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(255, 127, 36, 0.3);
+        }
+
+        .avatar-container {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            margin-right: 15px;
+        }
+
+        .user-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            object-fit: cover;
+            background-color: #fff;
+        }
+
+        .role-badge {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 5px;
+            backdrop-filter: blur(5px);
+        }
+
+        .edit-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 5px 15px;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .edit-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* 功能入口九宫格 */
+        .function-grid {
+            background-color: white;
+            border-radius: 12px;
+            padding: 20px 10px;
+            margin: 0 15px 20px 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .grid-item {
+            text-align: center;
+            color: #333;
+            text-decoration: none;
+            padding: 10px 0;
+            transition: transform 0.2s;
+        }
+
+        .grid-item:active {
+            transform: scale(0.95);
+        }
+
+        .grid-icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .grid-label {
+            font-size: 13px;
+            color: #666;
+        }
+
+        /* 内容列表模块 */
+        .content-section {
+            background-color: white;
+            border-radius: 12px;
+            margin: 0 15px 20px 15px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            min-height: 300px;
+        }
+
+        .nav-tabs {
+            border-bottom: 1px solid #eee;
+        }
+
+        .nav-link {
+            color: #666;
+            border: none;
+            padding: 15px 0;
+            font-weight: 500;
+            position: relative;
+        }
+
+        .nav-link.active {
+            color: #FF7F24;
+            background-color: transparent;
+        }
+
+        .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 3px;
+            background-color: #FF7F24;
+            border-radius: 3px;
+        }
+
+        .content-list {
+            padding: 0;
+            list-style: none;
+            margin: 0;
+        }
+
+        .list-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .item-main {
+            flex: 1;
+        }
+
+        .item-title {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .item-meta {
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .item-score {
+            color: #FF7F24;
+            font-weight: bold;
+        }
+
+        .item-status {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+
+        .status-success {
+            background-color: #e6f7e9;
+            color: #28a745;
+        }
+
+        .status-pending {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .item-actions {
+            margin-left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            color: #999;
+            font-size: 14px;
+            background: none;
+            border: none;
+            padding: 5px;
+        }
+
+        .action-btn:hover {
+            color: #FF7F24;
+        }
+
+        /* 系统设置模块 */
+        .settings-section {
+            background-color: white;
+            border-radius: 12px;
+            margin: 0 15px 20px 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .setting-item {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f0f0f0;
+            text-decoration: none;
+            color: #333;
+            transition: background-color 0.2s;
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+
+        .setting-item:active {
+            background-color: #f8f9fa;
+        }
+
+        .setting-icon {
+            margin-right: 10px;
+            color: #FF7F24;
+        }
+
+        /* 登录按钮 */
+        .login-placeholder {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .btn-login {
+            background-color: white;
+            color: #FF7F24;
+            border: none;
+            padding: 8px 25px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-top: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* 底部导航栏 */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            z-index: 1000;
+        }
+
+        .nav-item-bottom {
+            text-align: center;
+            color: #999;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .nav-item-bottom.active {
+            color: #FF7F24;
+        }
+
+        .nav-item-bottom i {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+
+        /* 加载更多 */
+        .load-more {
+            text-align: center;
+            padding: 15px;
+            color: #999;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: #999;
+        }
+        .empty-state i {
+            font-size: 40px;
+            margin-bottom: 10px;
+            display: block;
+            color: #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 个人信息卡片 -->
+    <div class="user-header-card" id="userInfoSection">
+        <!-- 未登录状态 -->
+        <div id="notLoginState" class="login-placeholder" style="display: none;">
+            <div class="avatar-container mx-auto mb-2">
+                <img src="https://via.placeholder.com/80/cccccc/ffffff?text=User" class="user-avatar" alt="默认头像">
+            </div>
+            <h5 class="mb-1">未登录</h5>
+            <p class="small opacity-75 mb-3">登录后体验更多功能</p>
+            <button class="btn btn-login" onclick="simulateLogin()">立即登录</button>
+        </div>
+
+        <!-- 已登录状态 -->
+        <div id="loginState" class="d-flex align-items-center">
+            <div class="avatar-container">
+                <img src="https://via.placeholder.com/80/FF7F24/ffffff?text=M" class="user-avatar" id="userAvatar" alt="用户头像">
+            </div>
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center mb-1">
+                    <h5 class="mb-0 fw-bold" id="userName">小明同学</h5>
+                    <span class="role-badge" id="userRole">普通用户</span>
+                </div>
+                <p class="mb-2 opacity-75 small" id="userPhone">138****8000</p>
+                <button class="edit-btn" onclick="location.href='#'">
+                    <i class="bi bi-pencil-square me-1"></i>编辑资料
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 功能入口九宫格 -->
+    <div class="function-grid">
+        <div class="row g-0">
+            <div class="col-3">
+                <a href="#myEvaluations" class="grid-item d-block" onclick="switchTab('evaluations')">
+                    <i class="bi bi-star-fill grid-icon text-warning"></i>
+                    <span class="grid-label">我的评价</span>
+                </a>
+            </div>
+            <div class="col-3">
+                <a href="#myNotes" class="grid-item d-block" onclick="switchTab('notes')">
+                    <i class="bi bi-journal-text grid-icon text-primary"></i>
+                    <span class="grid-label">我的笔记</span>
+                </a>
+            </div>
+            <div class="col-3">
+                <a href="#myFavorites" class="grid-item d-block" onclick="switchTab('favorites')">
+                    <i class="bi bi-heart-fill grid-icon text-danger"></i>
+                    <span class="grid-label">我的收藏</span>
+                </a>
+            </div>
+            <div class="col-3">
+                <a href="#" class="grid-item d-block" onclick="alert('跳转到意见反馈页')">
+                    <i class="bi bi-envelope-fill grid-icon text-success"></i>
+                    <span class="grid-label">意见反馈</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 内容列表模块 -->
+    <div class="content-section">
+        <!-- 选项卡导航 -->
+        <ul class="nav nav-tabs nav-fill" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" id="tab-evaluations" onclick="switchTab('evaluations')">我的评价</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="tab-notes" onclick="switchTab('notes')">我的笔记</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="tab-favorites" onclick="switchTab('favorites')">我的收藏</button>
+            </li>
+        </ul>
+
+        <!-- 列表内容容器 -->
+        <div id="contentContainer">
+            <!-- 动态加载内容 -->
+        </div>
+        
+        <!-- 加载更多 -->
+        <div class="load-more" onclick="loadMore()" id="loadMoreBtn">
+            点击加载更多 <i class="bi bi-chevron-down ms-1"></i>
+        </div>
+    </div>
+
+    <!-- 4. 系统设置模块 -->
+    <div class="settings-section">
+        <a href="#" class="setting-item" onclick="alert('跳转到消息通知设置')">
+            <div>
+                <i class="bi bi-bell setting-icon"></i>
+                <span>消息通知</span>
+            </div>
+            <i class="bi bi-chevron-right text-secondary small"></i>
+        </a>
+        <a href="#" class="setting-item" onclick="clearCache()">
+            <div>
+                <i class="bi bi-hdd setting-icon"></i>
+                <span>清除缓存</span>
+            </div>
+            <span class="text-secondary small" id="cacheSize">24.5MB</span>
+        </a>
+        <a href="#" class="setting-item" onclick="alert('关于我们：校园食堂点评系统 v1.0')">
+            <div>
+                <i class="bi bi-info-circle setting-icon"></i>
+                <span>关于我们</span>
+            </div>
+            <i class="bi bi-chevron-right text-secondary small"></i>
+        </a>
+        <a href="#" class="setting-item text-danger" onclick="logout()">
+            <div>
+                <i class="bi bi-box-arrow-right setting-icon text-danger"></i>
+                <span>退出登录</span>
+            </div>
+        </a>
+    </div>
+
+    <!-- 底部导航栏 -->
+    <div class="bottom-nav">
+        <a href="index.html" class="nav-item-bottom">
+            <i class="bi bi-house"></i>
+            首页
+        </a>
+        <a href="rank_list.html" class="nav-item-bottom">
+            <i class="bi bi-trophy"></i>
+            榜单
+        </a>
+        <a href="post_publish.html" class="nav-item-bottom">
+            <i class="bi bi-plus-circle-fill text-warning" style="font-size: 32px; margin-top: -10px;"></i>
+        </a>
+        <a href="canteen_detail.html?name=北区食堂" class="nav-item-bottom">
+            <i class="bi bi-shop"></i>
+            食堂
+        </a>
+        <a href="#" class="nav-item-bottom active">
+            <i class="bi bi-person-fill"></i>
+            我的
+        </a>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 模拟当前登录用户ID
+        let currentUserId = 1;
+        // 当前选中的标签页
+        let currentTab = 'evaluations';
+
+        // 模拟数据
+        const mockData = {
+            evaluations: [
+                { id: 1, title: "北区食堂 - 番茄炒蛋", score: 9.0, time: "2024-05-01 12:30", status: "published" },
+                { id: 2, title: "南区食堂 - 2号窗口", score: 8.5, time: "2024-04-28 18:15", status: "published" },
+                { id: 3, title: "西区食堂 - 烤肉饭", score: 7.0, time: "2024-04-25 12:00", status: "published" }
+            ],
+            notes: [
+                { id: 1, title: "北区食堂番茄炒蛋封神！", time: "2024-05-01", status: "已发布", like: 128 },
+                { id: 2, title: "避雷！这个菜太咸了", time: "2024-04-29", status: "审核中", like: 0 },
+                { id: 3, title: "南区新开的窗口实测", time: "2024-04-20", status: "草稿", like: 0 }
+            ],
+            favorites: [
+                { id: 1, title: "番茄炒蛋 (北区食堂)", type: "菜品", time: "收藏于 2024-05-02" },
+                { id: 2, title: "北区食堂", type: "食堂", time: "收藏于 2024-04-30" },
+                { id: 3, title: "超详细的食堂攻略", type: "笔记", time: "收藏于 2024-04-28" }
+            ]
+        };
+
+        // 页面加载初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            checkLoginStatus();
+            renderContent('evaluations');
+        });
+
+        // 检查登录状态
+        function checkLoginStatus() {
+            const isLogin = localStorage.getItem('isLogin') === 'true';
+            const userSection = document.getElementById('userInfoSection');
+            
+            if (isLogin) {
+                document.getElementById('notLoginState').style.display = 'none';
+                document.getElementById('loginState').style.display = 'flex';
+                // 模拟获取用户信息接口
+                fetchUserInfo();
+            } else {
+                document.getElementById('notLoginState').style.display = 'block';
+                document.getElementById('loginState').style.display = 'none';
+                // 未登录时点击功能跳转登录
+                document.querySelectorAll('.grid-item').forEach(item => {
+                    item.onclick = function(e) {
+                        e.preventDefault();
+                        simulateLogin();
+                    };
+                });
+            }
+        }
+
+        // 模拟登录
+        function simulateLogin() {
+            // 实际项目中应跳转登录页
+            const confirmLogin = confirm("这是模拟登录，点击确定将模拟用户登录状态");
+            if (confirmLogin) {
+                localStorage.setItem('isLogin', 'true');
+                location.reload();
+            }
+        }
+
+        // 退出登录
+        function logout() {
+            if (confirm("确定要退出登录吗？")) {
+                localStorage.removeItem('isLogin');
+                location.reload();
+            }
+        }
+
+        // 获取用户信息（模拟）
+        function fetchUserInfo() {
+            // 模拟 API 请求: GET /api/user/info
+            // 这里直接设置模拟数据
+            document.getElementById('userName').textContent = "小明同学";
+            document.getElementById('userPhone').textContent = "138****8000";
+            document.getElementById('userRole').textContent = "普通用户";
+            document.getElementById('userAvatar').src = "https://ui-avatars.com/api/?name=小明&background=FF7F24&color=fff";
+        }
+
+        // 切换标签页
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            // 更新Tab样式
+            document.querySelectorAll('.nav-link').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            // 渲染内容
+            renderContent(tabName);
+        }
+
+        // 渲染列表内容
+        function renderContent(type) {
+            const container = document.getElementById('contentContainer');
+            const data = mockData[type] || [];
+            
+            if (data.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>暂无相关内容</p>
+                    </div>
+                `;
+                document.getElementById('loadMoreBtn').style.display = 'none';
+                return;
+            }
+
+            let html = '<ul class="content-list">';
+            
+            data.forEach(item => {
+                if (type === 'evaluations') {
+                    html += `
+                        <li class="list-item" id="item-${item.id}">
+                            <div class="item-main" onclick="location.href='dish_detail.html?id=${item.id}'">
+                                <div class="item-title">${item.title}</div>
+                                <div class="item-meta">
+                                    <span class="item-score">${item.score}分</span>
+                                    <span>${item.time}</span>
+                                    <span class="item-status status-success">已发布</span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="action-btn" onclick="deleteItem('${type}', ${item.id})"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </li>
+                    `;
+                } else if (type === 'notes') {
+                    const statusClass = item.status === '已发布' ? 'status-success' : 'status-pending';
+                    html += `
+                        <li class="list-item" id="item-${item.id}">
+                            <div class="item-main" onclick="location.href='post_detail.html?id=${item.id}'">
+                                <div class="item-title">${item.title}</div>
+                                <div class="item-meta">
+                                    <span class="item-status ${statusClass}">${item.status}</span>
+                                    <span>${item.time}</span>
+                                    <span><i class="bi bi-heart-fill text-danger small"></i> ${item.like}</span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="action-btn" onclick="editItem(${item.id})"><i class="bi bi-pencil"></i></button>
+                                <button class="action-btn" onclick="deleteItem('${type}', ${item.id})"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </li>
+                    `;
+                } else if (type === 'favorites') {
+                    html += `
+                        <li class="list-item" id="item-${item.id}">
+                            <div class="item-main" onclick="location.href='#'">
+                                <div class="item-title">${item.title}</div>
+                                <div class="item-meta">
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary">${item.type}</span>
+                                    <span>${item.time}</span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="action-btn" onclick="deleteItem('${type}', ${item.id})"><i class="bi bi-heart-fill text-danger"></i></button>
+                            </div>
+                        </li>
+                    `;
+                }
+            });
+            
+            html += '</ul>';
+            container.innerHTML = html;
+            document.getElementById('loadMoreBtn').style.display = 'block';
+        }
+
+        // 模拟删除
+        function deleteItem(type, id) {
+            if (confirm("确定要删除这条记录吗？此操作不可恢复。")) {
+                // 模拟 API 请求
+                const element = document.getElementById(`item-${id}`);
+                element.style.opacity = '0';
+                setTimeout(() => {
+                    element.remove();
+                    // 检查是否为空
+                    if (document.querySelectorAll('.list-item').length === 0) {
+                        document.getElementById('contentContainer').innerHTML = `
+                            <div class="empty-state">
+                                <i class="bi bi-inbox"></i>
+                                <p>暂无相关内容</p>
+                            </div>
+                        `;
+                        document.getElementById('loadMoreBtn').style.display = 'none';
+                    }
+                }, 300);
+            }
+        }
+
+        // 模拟编辑
+        function editItem(id) {
+            if (confirm("跳转到编辑页面？")) {
+                location.href = `post_publish.html?edit=${id}`;
+            }
+        }
+
+        // 清除缓存
+        function clearCache() {
+            if (confirm("确定要清除本地缓存吗？(将清除草稿箱和浏览记录)")) {
+                // 模拟清除
+                localStorage.removeItem('draft_post');
+                document.getElementById('cacheSize').textContent = "0MB";
+                alert("缓存已清除");
+            }
+        }
+
+        // 加载更多
+        function loadMore() {
+            const btn = document.getElementById('loadMoreBtn');
+            btn.innerHTML = '<div class="spinner-border spinner-border-sm text-secondary" role="status"></div> 加载中...';
+            
+            // 模拟网络延迟
+            setTimeout(() => {
+                // 这里应该追加数据，为演示简单弹个提示
+                alert("已加载到底部，没有更多数据了");
+                btn.innerHTML = '已显示全部内容';
+                btn.onclick = null;
+                btn.style.cursor = 'default';
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
