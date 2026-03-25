@@ -1,5 +1,10 @@
 # Campus Dining Quality Evaluation System (校园餐饮质量评价系统)
 
+[![Python CI](https://github.com/ZYJ-0602/campus-dining-experience-system/actions/workflows/python-tests.yml/badge.svg)](https://github.com/ZYJ-0602/campus-dining-experience-system/actions/workflows/python-tests.yml)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1.0-000000?logo=flask&logoColor=white)
+![License](https://img.shields.io/github/license/ZYJ-0602/campus-dining-experience-system)
+
 这是一个面向高校的综合性餐饮服务质量评价系统。系统旨在建立学生与食堂之间的沟通桥梁，不仅关注**菜品质量**，更全面覆盖**服务态度**、**用餐环境**及**基础设施**等多维度的评价，助力校园餐饮服务水平的整体提升。
 
 ## 📖 项目背景 (Project Background)
@@ -42,8 +47,8 @@
 
 ### 2. 获取代码
 ```bash
-git clone <你的Gitee仓库地址>
-cd dining-evaluation
+git clone https://github.com/ZYJ-0602/campus-dining-experience-system.git
+cd campus-dining-experience/dining_system
 ```
 
 ### 3. 安装依赖
