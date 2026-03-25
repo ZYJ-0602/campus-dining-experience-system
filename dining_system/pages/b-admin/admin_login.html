@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台登录 - 校园食堂点评系统</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-light: #f0f8ff;
+            --text-dark: #333;
+            --bg-color: #f8f9fa;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            padding: 30px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+            border: 1px solid #dee2e6;
+        }
+
+        .login-title {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .role-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .role-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            color: #666;
+        }
+
+        .role-btn.active {
+            border-color: var(--primary-color);
+            background-color: var(--primary-light);
+            color: var(--primary-color);
+        }
+
+        .role-btn i {
+            font-size: 24px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: #0069d9;
+            border-color: #0062cc;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <h4 class="login-title">管理后台登录</h4>
+        
+        <div class="role-selector">
+            <div class="role-btn active" onclick="selectRole(3, this)">
+                <i class="bi bi-shop"></i>
+                <span class="small">食堂运营方</span>
+            </div>
+            <div class="role-btn" onclick="selectRole(1, this)">
+                <i class="bi bi-shield-lock"></i>
+                <span class="small">系统管理员</span>
+            </div>
+        </div>
+
+        <form id="loginForm">
+            <div class="mb-3">
+                <label class="form-label small text-muted">管理账号</label>
+                <input type="text" class="form-control" id="account" placeholder="请输入用户名" required>
+            </div>
+            <div class="mb-4">
+                <label class="form-label small text-muted">登录密码</label>
+                <input type="password" class="form-control" id="password" placeholder="请输入密码" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 py-2">登 录</button>
+        </form>
+
+        <div class="mt-4 text-center">
+            <a href="../c-client/index.html" class="text-secondary small text-decoration-none">
+                <i class="bi bi-arrow-left"></i> 返回门户首页
+            </a>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="../c-client/js/api.js"></script>
+    <script>
+        let selectedRoleId = 3; // 默认食堂运营方
+
+        function resolveUserRoleCode(user) {
+            if (user && user.role) return String(user.role).toLowerCase();
+
+            // 兼容历史字段 identity_id
+            if (user && typeof user.identity_id !== 'undefined') {
+                if (Number(user.identity_id) === 1) return 'admin';
+                if (Number(user.identity_id) === 3) return 'operator';
+            }
+            return 'unknown';
+        }
+
+        function expectedRoleCodeBySelection(roleId) {
+            return Number(roleId) === 1 ? 'admin' : 'operator';
+        }
+
+        function getAdminApiBaseUrl() {
+            if (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) {
+                return API_BASE_URL;
+            }
+
+            // 本地直接双击 html（file://）时没有 host/port，强制走后端开发端口。
+            if (window.location.protocol === 'file:') {
+                return 'http://127.0.0.1:5000/api';
+            }
+
+            if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+                if (window.location.port === '8000' || window.location.port === '5500') {
+                    return 'http://127.0.0.1:5000/api';
+                }
+            }
+            return '/api';
+        }
+
+        async function adminFetchApi(path, payload) {
+            const apiUrl = `${getAdminApiBaseUrl()}${path}`;
+
+            // 优先复用项目通用封装
+            if (typeof fetchApi === 'function') {
+                return fetchApi(apiUrl, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            // 兜底：即便 api.js 未加载，也能直接登录
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+                const body = await response.json();
+                return body;
+            } catch (error) {
+                return { code: 500, msg: `网络请求失败: ${error.message}` };
+            }
+        }
+
+        function selectRole(roleId, el) {
+            selectedRoleId = roleId;
+            document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const account = document.getElementById('account').value;
+            const password = document.getElementById('password').value;
+            const btn = e.target.querySelector('button');
+            
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 登录中...';
+            btn.disabled = true;
+
+            try {
+                const res = await adminFetchApi('/login', { username: account, password: password });
+
+                if (res.code === 200) {
+                    const user = res.data;
+                    
+                    // 角色匹配校验
+                    const actualRole = resolveUserRoleCode(user);
+                    const expectedRole = expectedRoleCodeBySelection(selectedRoleId);
+                    if (actualRole !== expectedRole) {
+                        alert('登录失败：账号角色不匹配，请检查选择的角色');
+                        btn.innerHTML = '登 录';
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    // 存储状态
+                    localStorage.setItem('isLogin', 'true');
+                    localStorage.setItem('user', JSON.stringify(user));
+                    
+                    // 根据角色跳转到不同的管理后台主页
+                    if (selectedRoleId === 1) {
+                        location.href = 'admin_index_sys.html'; // 系统管理员 -> 系统管理主页
+                    } else {
+                        location.href = 'admin_index_operator.html'; // 运营方 -> 运营管理主页
+                    }
+                } else {
+                    alert(res.msg || '账号或密码错误');
+                    btn.innerHTML = '登 录';
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error(error);
+                alert(`网络连接失败: ${error.message || error}`);
+                btn.innerHTML = '登 录';
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

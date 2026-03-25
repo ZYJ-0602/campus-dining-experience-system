@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统设置 - 食堂点评管理后台</title>
+    <!-- 引入 Bootstrap 5 CSS -->
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <!-- 引入 Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-light: #f0f8ff;
+            --text-dark: #333;
+            --bg-color: #f8f9fa;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航栏 */
+        .navbar-custom {
+            background-color: #343a40;
+            color: #fff;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .navbar-brand {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .navbar-title {
+            font-size: 16px;
+            color: rgba(255,255,255,0.7);
+            border-left: 1px solid rgba(255,255,255,0.3);
+            padding-left: 15px;
+            margin-left: 15px;
+        }
+
+        /* 主内容布局 */
+        .main-container {
+            flex: 1;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .settings-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+
+        .card-header-custom {
+            padding: 15px 20px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+            color: #333;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-body-custom {
+            padding: 20px;
+        }
+
+        /* 表单样式 */
+        .form-label {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 8px;
+        }
+        
+        .form-text {
+            font-size: 12px;
+            color: #999;
+        }
+
+        /* 开关样式 */
+        .form-check-input:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        /* 备份记录列表 */
+        .backup-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .backup-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .backup-item:last-child {
+            border-bottom: none;
+        }
+
+        .backup-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .backup-time {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .backup-size {
+            font-size: 12px;
+            color: #999;
+        }
+
+        /* 通知多选框组 */
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            padding: 8px 0;
+        }
+    </style>
+    <link href="../../static/css/common.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- 1. 顶部导航栏 -->
+    <div class="navbar-custom bg-white text-dark shadow-sm mb-3">
+        <div class="d-flex align-items-center">
+            <!-- 返回按钮 -->
+            <a href="admin_index_sys.html" class="btn btn-outline-secondary btn-sm me-3 d-none d-md-inline-block" target="_top" id="backBtn"><i class="bi bi-chevron-left"></i> 返回首页</a>
+            <span class="navbar-title text-dark fw-bold border-0 p-0 m-0 fs-5">系统设置</span>
+        </div>
+        <div>
+            <button id="saveBtn" class="btn btn-primary btn-sm" onclick="saveSettings()" disabled>
+                <i class="bi bi-save"></i> 保存设置
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 如果在 iframe 中运行，隐藏返回按钮
+        if (window.self !== window.top) {
+            document.getElementById('backBtn').style.display = 'none';
+        }
+    </script>
+
+    <div class="main-container">
+        <form id="settingsForm" onchange="enableSave()">
+            <div class="row">
+                <!-- 左列：基础配置 -->
+                <div class="col-md-6">
+                    <!-- 2. 基础配置模块 -->
+                    <div class="settings-card">
+                        <div class="card-header-custom">
+                            <i class="bi bi-sliders text-primary"></i> 基础参数配置
+                        </div>
+                        <div class="card-body-custom">
+                            <h6 class="border-bottom pb-2 mb-3 text-secondary">评价相关</h6>
+                            <div class="mb-3">
+                                <label class="form-label">防重复提交时间 (分钟)</label>
+                                <input type="number" class="form-control" name="repeatTime" value="5" min="1" max="60">
+                                <div class="form-text">同一用户对此时间内的同一窗口评价将被拦截</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">评分范围 (1-10分)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">最低</span>
+                                    <input type="number" class="form-control" name="scoreMin" value="1" readonly>
+                                    <span class="input-group-text">最高</span>
+                                    <input type="number" class="form-control" name="scoreMax" value="10" readonly>
+                                </div>
+                            </div>
+
+                            <h6 class="border-bottom pb-2 mb-3 mt-4 text-secondary">内容发布</h6>
+                            <div class="mb-3 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <label class="form-label mb-0">开启内容审核</label>
+                                    <div class="form-text mt-0">开启后，笔记需管理员审核通过才可显示</div>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="auditEnabled" checked>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">单次图片上传上限 (张)</label>
+                                <input type="number" class="form-control" name="imgLimit" value="9" min="1" max="20">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">单文件大小限制 (MB)</label>
+                                <input type="number" class="form-control" name="fileSize" value="10" min="1" max="50">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">允许上传格式</label>
+                                <div class="checkbox-group">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" checked disabled>
+                                        <label class="form-check-label">JPG/JPEG</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" checked disabled>
+                                        <label class="form-check-label">PNG</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="allowPDF">
+                                        <label class="form-check-label">PDF (仅限食安公示)</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右列：数据维护与通知 -->
+                <div class="col-md-6">
+                    <!-- 3. 数据维护模块 -->
+                    <div class="settings-card">
+                        <div class="card-header-custom">
+                            <i class="bi bi-database text-success"></i> 数据维护
+                        </div>
+                        <div class="card-body-custom">
+                            <div class="d-flex gap-3 mb-4">
+                                <button type="button" class="btn btn-outline-success flex-grow-1" id="backupBtn" onclick="backupData()">
+                                    <i class="bi bi-cloud-arrow-down"></i> 立即备份数据库
+                                </button>
+                                <button type="button" class="btn btn-outline-warning flex-grow-1" onclick="repairData()">
+                                    <i class="bi bi-tools"></i> 检测并修复数据
+                                </button>
+                            </div>
+                            <h6 class="text-secondary small mb-2">最近备份记录</h6>
+                            <ul class="backup-list border rounded" id="backupList">
+                                <!-- 备份记录动态生成 -->
+                                <li class="backup-item">
+                                    <div class="backup-info">
+                                        <span class="backup-time">2024-05-01 12:00:00</span>
+                                        <span class="backup-size">2.5MB (自动备份)</span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-link text-decoration-none" onclick="downloadBackup('20240501.sql')">下载</button>
+                                </li>
+                                <li class="backup-item">
+                                    <div class="backup-info">
+                                        <span class="backup-time">2024-04-30 12:00:00</span>
+                                        <span class="backup-size">2.4MB (自动备份)</span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-link text-decoration-none" onclick="downloadBackup('20240430.sql')">下载</button>
+                                </li>
+                                <li class="backup-item">
+                                    <div class="backup-info">
+                                        <span class="backup-time">2024-04-29 12:00:00</span>
+                                        <span class="backup-size">2.3MB (自动备份)</span>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-link text-decoration-none" onclick="downloadBackup('20240429.sql')">下载</button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 4. 通知设置模块 -->
+                    <div class="settings-card">
+                        <div class="card-header-custom">
+                            <i class="bi bi-bell text-warning"></i> 通知规则设置
+                        </div>
+                        <div class="card-body-custom">
+                            <div class="mb-3">
+                                <label class="form-label">差评提醒 (通知食堂运营)</label>
+                                <div class="checkbox-group">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="notifyBadReview" value="site" checked>
+                                        <label class="form-check-label">站内信</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="notifyBadReview" value="email">
+                                        <label class="form-check-label">邮件通知</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="notifyBadReview" value="sms" disabled>
+                                        <label class="form-check-label text-muted">短信 (需配置网关)</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">待审核提醒 (通知管理员)</label>
+                                <div class="checkbox-group">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="notifyAudit" value="site" checked>
+                                        <label class="form-check-label">站内信</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="notifyAudit" value="email" checked>
+                                        <label class="form-check-label">邮件通知</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">通知频率限制</label>
+                                <select class="form-select" name="notifyFreq">
+                                    <option value="realtime">实时发送</option>
+                                    <option value="hourly">每小时汇总</option>
+                                    <option value="daily">每天汇总</option>
+                                </select>
+                            </div>
+                            <div class="mt-3 pt-3 border-top">
+                                <label class="form-label">邮件服务测试</label>
+                                <div class="input-group">
+                                    <input type="email" class="form-control" id="testEmail" placeholder="输入接收测试邮件的邮箱">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="sendTestEmail()">发送测试</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="../c-client/js/api.js"></script>
+    <script>
+        const API_SETTINGS = `${API_BASE_URL}/admin/settings`;
+        const API_SETTINGS_BACKUP = `${API_BASE_URL}/admin/settings/backup`;
+        const API_SETTINGS_REPAIR = `${API_BASE_URL}/admin/settings/repair`;
+        const API_SETTINGS_TEST_EMAIL = `${API_BASE_URL}/admin/settings/test-email`;
+        let isModified = false;
+        let isLoading = false;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchSettings();
+        });
+
+        function showToast(message, type = 'success') {
+            let holder = document.getElementById('toastHolder');
+            if (!holder) {
+                holder = document.createElement('div');
+                holder.id = 'toastHolder';
+                holder.style.position = 'fixed';
+                holder.style.top = '16px';
+                holder.style.right = '16px';
+                holder.style.zIndex = '2000';
+                holder.style.minWidth = '260px';
+                document.body.appendChild(holder);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `alert ${type === 'error' ? 'alert-danger' : 'alert-success'} shadow-sm`;
+            toast.style.marginBottom = '10px';
+            toast.textContent = message;
+            holder.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 2200);
+        }
+
+        function setSaveBtnLoading(loading) {
+            const btn = document.getElementById('saveBtn');
+            if (!btn) return;
+            if (loading) {
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+                btn.disabled = true;
+                return;
+            }
+
+            btn.innerHTML = btn.dataset.originalText || '<i class="bi bi-save"></i> 保存设置';
+            btn.disabled = !isModified;
+        }
+
+        function setActionBtnLoading(btnId, loading, loadingText) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            if (loading) {
+                btn.dataset.originalText = btn.innerHTML;
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ${loadingText}`;
+                btn.disabled = true;
+                return;
+            }
+            btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+            btn.disabled = false;
+        }
+
+        function normalizeArray(value) {
+            if (Array.isArray(value)) return value;
+            if (typeof value === 'string') {
+                return value.split(',').map(v => v.trim()).filter(Boolean);
+            }
+            return [];
+        }
+
+        function renderBackups(backups) {
+            const list = document.getElementById('backupList');
+            if (!list) return;
+
+            const rows = Array.isArray(backups) ? backups : [];
+            if (!rows.length) {
+                list.innerHTML = '<li class="backup-item"><div class="backup-info"><span class="backup-time text-muted">暂无备份记录</span></div></li>';
+                return;
+            }
+
+            list.innerHTML = rows.map(item => `
+                <li class="backup-item">
+                    <div class="backup-info">
+                        <span class="backup-time">${item.time || '-'}</span>
+                        <span class="backup-size">${item.size || '-'} (${item.type || '手动备份'})</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-link text-decoration-none" onclick="downloadBackup(${item.id})">下载</button>
+                </li>
+            `).join('');
+        }
+
+        async function fetchSettings() {
+            if (isLoading) return;
+            isLoading = true;
+            try {
+                const res = await fetchApi(API_SETTINGS, { method: 'GET' });
+                if (res.code === 200) {
+                    fillForm(res.data || {});
+                    renderBackups((res.data || {}).backups || []);
+                    isModified = false;
+                    setSaveBtnLoading(false);
+                } else {
+                    showToast(res.msg || '加载配置失败', 'error');
+                }
+            } catch (error) {
+                console.error('Fetch settings error:', error);
+                showToast('加载配置失败，请稍后重试', 'error');
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        function fillForm(data) {
+            const form = document.getElementById('settingsForm');
+            if (!form) return;
+
+            form.elements.repeatTime.value = data.repeatTime ?? 5;
+            form.elements.scoreMin.value = data.scoreMin ?? 1;
+            form.elements.scoreMax.value = data.scoreMax ?? 10;
+            form.elements.auditEnabled.checked = !!data.auditEnabled;
+            form.elements.imgLimit.value = data.imgLimit ?? 9;
+            form.elements.fileSize.value = data.fileSize ?? 10;
+            form.elements.allowPDF.checked = !!data.allowPDF;
+
+            const badReviewChannels = normalizeArray(data.notifyBadReview);
+            document.querySelectorAll('input[name="notifyBadReview"]').forEach(cb => {
+                cb.checked = badReviewChannels.includes(cb.value);
+            });
+
+            const auditChannels = normalizeArray(data.notifyAudit);
+            document.querySelectorAll('input[name="notifyAudit"]').forEach(cb => {
+                cb.checked = auditChannels.includes(cb.value);
+            });
+
+            if (form.elements.notifyFreq) {
+                form.elements.notifyFreq.value = data.notifyFreq || 'realtime';
+            }
+        }
+
+        function enableSave() {
+            isModified = true;
+            setSaveBtnLoading(false);
+        }
+
+        function collectSettingsPayload() {
+            const form = document.getElementById('settingsForm');
+            const badReviewChannels = [];
+            const auditChannels = [];
+
+            document.querySelectorAll('input[name="notifyBadReview"]:checked').forEach(cb => {
+                badReviewChannels.push(cb.value);
+            });
+            document.querySelectorAll('input[name="notifyAudit"]:checked').forEach(cb => {
+                auditChannels.push(cb.value);
+            });
+
+            return {
+                repeatTime: Number(form.elements.repeatTime.value || 5),
+                scoreMin: Number(form.elements.scoreMin.value || 1),
+                scoreMax: Number(form.elements.scoreMax.value || 10),
+                auditEnabled: !!form.elements.auditEnabled.checked,
+                imgLimit: Number(form.elements.imgLimit.value || 9),
+                fileSize: Number(form.elements.fileSize.value || 10),
+                allowPDF: !!form.elements.allowPDF.checked,
+                notifyBadReview: badReviewChannels,
+                notifyAudit: auditChannels,
+                notifyFreq: form.elements.notifyFreq.value || 'realtime'
+            };
+        }
+
+        async function saveSettings() {
+            if (!isModified) {
+                showToast('当前无变更，无需保存');
+                return;
+            }
+
+            setSaveBtnLoading(true);
+            const data = collectSettingsPayload();
+
+            try {
+                const res = await fetchApi(API_SETTINGS, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+                
+                if (res.code === 200) {
+                    fillForm(res.data || {});
+                    renderBackups((res.data || {}).backups || []);
+                    showToast('系统配置已保存并生效');
+                    isModified = false;
+                } else {
+                    showToast(res.msg || '保存失败', 'error');
+                    isModified = true;
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('网络错误，保存失败', 'error');
+                isModified = true;
+            } finally {
+                setSaveBtnLoading(false);
+            }
+        }
+
+        // 数据库备份
+        async function backupData() {
+            setActionBtnLoading('backupBtn', true, '备份中...');
+            try {
+                const res = await fetchApi(API_SETTINGS_BACKUP, { method: 'POST' });
+                if (res.code === 200) {
+                    showToast('数据库备份完成');
+                    await fetchSettings();
+                } else {
+                    showToast(res.msg || '备份失败', 'error');
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('备份失败，请稍后重试', 'error');
+            } finally {
+                setActionBtnLoading('backupBtn', false, '');
+            }
+        }
+
+        // 数据修复
+        async function repairData() {
+            try {
+                const res = await fetchApi(API_SETTINGS_REPAIR, { method: 'POST' });
+                if (res.code === 200) {
+                    showToast(res.msg || '检测并修复完成');
+                } else {
+                    showToast(res.msg || '修复失败', 'error');
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('修复失败，请稍后重试', 'error');
+            }
+        }
+
+        // 下载备份
+        function downloadBackup(backupId) {
+            if (!backupId) {
+                showToast('无效的备份记录', 'error');
+                return;
+            }
+            const url = `${API_BASE_URL}/admin/settings/backup/${backupId}/download`;
+            window.open(url, '_blank');
+        }
+
+        // 发送测试邮件
+        async function sendTestEmail() {
+            const email = (document.getElementById('testEmail').value || '').trim();
+            if (!email) {
+                showToast('请输入测试邮箱', 'error');
+                return;
+            }
+
+            const res = await fetchApi(API_SETTINGS_TEST_EMAIL, {
+                method: 'POST',
+                body: JSON.stringify({ email })
+            });
+            if (res.code === 200) {
+                showToast(res.msg || '测试请求已发送');
+            } else {
+                showToast(res.msg || '测试失败', 'error');
+            }
+        }
+    </script>
+    <!-- <script src="../../static/js/common.js"></script> -->
+    <!-- <script src="../../static/js/mock_data.js"></script> -->
+</body>
+</html>

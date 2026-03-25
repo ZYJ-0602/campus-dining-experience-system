@@ -113,6 +113,10 @@ def update_resource_paths():
             # 在 </body> 前插入 common.js
             if 'common.js' not in new_content:
                 new_content = new_content.replace('</body>', '    <script src="../../static/js/common.js"></script>\n</body>')
+            
+            # 在 </body> 前插入 mock_data.js (用于演示)
+            if 'mock_data.js' not in new_content:
+                new_content = new_content.replace('</body>', '    <script src="../../static/js/mock_data.js"></script>\n</body>')
 
             # 2. 应用正则替换规则 (修正 Bootstrap 等路径)
             # 注意：这里的替换比较暴力，实际项目中建议使用 HTML 解析库

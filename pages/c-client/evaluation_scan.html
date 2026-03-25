@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>窗口快速评价</title>
+    <!-- 引入 Bootstrap 5 CDN -->
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #FF7F24; /* 核心橙色 */
+            --primary-light: #FFF5EB;
+            --bg-color: #f8f9fa;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            padding-bottom: 80px; /* 底部留白 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* 1. 顶部栏 */
+        .navbar-custom {
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            height: 50px;
+        }
+        
+        .nav-title {
+            font-size: 18px;
+            font-weight: 600;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .back-btn {
+            font-size: 24px;
+            color: #333;
+            padding: 10px;
+        }
+
+        .help-btn {
+            font-size: 20px;
+            color: #666;
+            padding: 10px;
+        }
+
+        /* 2. 窗口识别模块 */
+        .scan-section {
+            background: #fff;
+            padding: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .scan-btn {
+            width: 120px;
+            height: 120px;
+            background-color: var(--primary-light);
+            border: 2px dashed var(--primary-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 15px;
+            color: var(--primary-color);
+            cursor: pointer;
+        }
+        
+        .scan-icon {
+            font-size: 40px;
+            margin-bottom: 5px;
+        }
+
+        .window-info-card {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+            display: none; /* 默认隐藏，识别成功后显示 */
+            text-align: left;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .canteen-name {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .window-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* 3. 评分模块 */
+        .rating-module {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        }
+
+        .module-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .module-title {
+            font-size: 16px;
+            font-weight: bold;
+            border-left: 3px solid var(--primary-color);
+            padding-left: 8px;
+        }
+        
+        .score-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        /* 滑块自定义样式 */
+        .custom-range {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #e9ecef;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .custom-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid var(--primary-color);
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 标签 */
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .tag-item {
+            padding: 6px 12px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        
+        .tag-item.active {
+            background: var(--primary-light);
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        /* 输入框 */
+        .detail-input {
+            margin-top: 15px;
+            font-size: 14px;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        /* 4. 提交按钮 */
+        .submit-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 15px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            z-index: 100;
+        }
+
+        .submit-btn {
+            width: 100%;
+            height: 44px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+        }
+        
+        .submit-btn:disabled {
+            background-color: #ccc;
+        }
+
+        /* 弹窗样式 */
+        .toast-custom {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            z-index: 2000;
+            display: none;
+            text-align: center;
+            min-width: 150px;
+        }
+        
+        .toast-success { background: rgba(40, 167, 69, 0.9); }
+        .toast-error { background: rgba(220, 53, 69, 0.9); }
+
+        /* 禁用遮罩 */
+        .rating-disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+    </style>
+    <link href="../../static/css/common.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- 1. 顶部栏 -->
+    <nav class="navbar navbar-custom fixed-top">
+        <div class="container-fluid px-2">
+            <a href="index.html" class="back-btn text-decoration-none">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            <span class="nav-title">窗口快速评价</span>
+            <div class="help-btn" onclick="showHelp()">
+                <i class="bi bi-question-circle"></i>
+            </div>
+        </div>
+    </nav>
+    <div style="height: 50px;"></div>
+
+    <!-- 2. 窗口识别模块 -->
+    <div class="scan-section">
+        <div id="scanArea">
+            <div class="scan-btn" onclick="startScan()">
+                <i class="bi bi-qr-code-scan scan-icon"></i>
+                <div>点击扫码</div>
+            </div>
+            <div class="input-group mb-3" style="max-width: 200px; margin: 0 auto;">
+                <input type="number" class="form-control" id="windowIdInput" placeholder="输入ID" value="1">
+                <button class="btn btn-outline-secondary" type="button" onclick="verifyWindow()">确认</button>
+            </div>
+        </div>
+        
+        <div id="windowInfo" class="window-info-card">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="canteen-name" id="canteenName">--</div>
+                    <div class="window-name" id="windowName">--</div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="resetScan()">重扫</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 评分区域 (默认禁用，识别后开启) -->
+    <div id="ratingContainer" class="container rating-disabled">
+        
+        <!-- 维度1: 食品口味 -->
+        <div class="rating-module" data-type="food">
+            <div class="module-header">
+                <div class="module-title">食品口味</div>
+                <div class="score-display"><span class="score-val">0</span>分</div>
+            </div>
+            <input type="range" class="custom-range" min="0" max="10" step="1" value="0" oninput="updateScore(this)">
+            <div class="tags-container">
+                <div class="tag-item" onclick="toggleTag(this)">口感绝佳</div>
+                <div class="tag-item" onclick="toggleTag(this)">味道正宗</div>
+                <div class="tag-item" onclick="toggleTag(this)">分量足</div>
+                <div class="tag-item" onclick="toggleTag(this)">味道寡淡</div>
+                <div class="tag-item" onclick="toggleTag(this)">太咸</div>
+                <div class="tag-item" onclick="toggleTag(this)">食材不新鲜</div>
+            </div>
+            <input type="text" class="form-control detail-input" placeholder="选填评价细节（如‘番茄炒蛋太咸’）">
+        </div>
+
+        <!-- 维度2: 环境卫生 -->
+        <div class="rating-module" data-type="environment">
+            <div class="module-header">
+                <div class="module-title">环境卫生</div>
+                <div class="score-display"><span class="score-val">0</span>分</div>
+            </div>
+            <input type="range" class="custom-range" min="0" max="10" step="1" value="0" oninput="updateScore(this)">
+            <div class="tags-container">
+                <div class="tag-item" onclick="toggleTag(this)">台面整洁</div>
+                <div class="tag-item" onclick="toggleTag(this)">地面干净</div>
+                <div class="tag-item" onclick="toggleTag(this)">通风好</div>
+                <div class="tag-item" onclick="toggleTag(this)">有异味</div>
+                <div class="tag-item" onclick="toggleTag(this)">桌椅脏乱</div>
+                <div class="tag-item" onclick="toggleTag(this)">餐具不洁</div>
+            </div>
+            <input type="text" class="form-control detail-input" placeholder="选填评价细节">
+        </div>
+
+        <!-- 维度3: 服务态度 -->
+        <div class="rating-module" data-type="service">
+            <div class="module-header">
+                <div class="module-title">服务态度</div>
+                <div class="score-display"><span class="score-val">0</span>分</div>
+            </div>
+            <input type="range" class="custom-range" min="0" max="10" step="1" value="0" oninput="updateScore(this)">
+            <div class="tags-container">
+                <div class="tag-item" onclick="toggleTag(this)">热情周到</div>
+                <div class="tag-item" onclick="toggleTag(this)">动作麻利</div>
+                <div class="tag-item" onclick="toggleTag(this)">着装整洁</div>
+                <div class="tag-item" onclick="toggleTag(this)">态度冷漠</div>
+                <div class="tag-item" onclick="toggleTag(this)">玩手机</div>
+                <div class="tag-item" onclick="toggleTag(this)">打菜手抖</div>
+            </div>
+            <input type="text" class="form-control detail-input" placeholder="选填评价细节">
+        </div>
+
+        <!-- 维度4: 食安评分 -->
+        <div class="rating-module" data-type="food_safety">
+            <div class="module-header">
+                <div class="module-title">食安评分</div>
+                <div class="score-display"><span class="score-val">0</span>分</div>
+            </div>
+            <input type="range" class="custom-range" min="0" max="10" step="1" value="0" oninput="updateScore(this)">
+            <div class="tags-container">
+                <div class="tag-item" onclick="toggleTag(this)">明厨亮灶</div>
+                <div class="tag-item" onclick="toggleTag(this)">佩戴口罩</div>
+                <div class="tag-item" onclick="toggleTag(this)">公示齐全</div>
+                <div class="tag-item" onclick="toggleTag(this)">操作违规</div>
+                <div class="tag-item" onclick="toggleTag(this)">异物</div>
+                <div class="tag-item" onclick="toggleTag(this)">未戴手套</div>
+            </div>
+            <input type="text" class="form-control detail-input" placeholder="选填评价细节">
+        </div>
+    </div>
+
+    <!-- 4. 提交按钮 -->
+    <div class="submit-bar">
+        <button class="submit-btn" id="submitBtn" onclick="submitEvaluation()" disabled>
+            <span class="spinner-border spinner-border-sm d-none" id="loadingIcon"></span>
+            <span id="btnText">快速提交</span>
+        </button>
+    </div>
+
+    <!-- 提示弹窗 -->
+    <div id="toast" class="toast-custom"></div>
+
+    <script>
+        // 全局状态
+        let currentWindowId = null;
+        let lastSubmitTime = 0; // 防重复提交时间戳
+
+        // 1. 模拟扫码/验证逻辑
+        function startScan() {
+            // 真实场景：调用微信JSSDK或原生API
+            // 这里直接模拟成功
+            document.getElementById('windowIdInput').value = "1";
+            verifyWindow();
+        }
+
+        function verifyWindow() {
+            const id = document.getElementById('windowIdInput').value;
+            if (!id) return showToast("请输入窗口ID", "error");
+
+            // 模拟 API 请求
+            // GET /api/window/info?window_id={id}
+            setTimeout(() => {
+                // 模拟数据
+                const mockData = {
+                    "1": { canteen: "北区食堂", name: "1号窗口" },
+                    "2": { canteen: "南区食堂", name: "特色小炒" }
+                };
+
+                const info = mockData[id] || { canteen: "未知食堂", name: `窗口 ${id}` };
+                
+                // 更新UI
+                document.getElementById('canteenName').innerText = info.canteen;
+                document.getElementById('windowName').innerText = info.name;
+                
+                document.getElementById('scanArea').style.display = 'none';
+                document.getElementById('windowInfo').style.display = 'block';
+                document.getElementById('ratingContainer').classList.remove('rating-disabled');
+                
+                currentWindowId = id;
+            }, 500);
+        }
+
+        function resetScan() {
+            currentWindowId = null;
+            document.getElementById('scanArea').style.display = 'block';
+            document.getElementById('windowInfo').style.display = 'none';
+            document.getElementById('ratingContainer').classList.add('rating-disabled');
+            // 重置评分
+            document.querySelectorAll('input[type=range]').forEach(i => {
+                i.value = 0;
+                updateScore(i);
+            });
+            document.querySelectorAll('.tag-item').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.detail-input').forEach(i => i.value = '');
+        }
+
+        // 2. 评分交互
+        function updateScore(input) {
+            const val = input.value;
+            const display = input.closest('.rating-module').querySelector('.score-val');
+            display.innerText = val == 0 ? "未评" : val;
+            
+            // 颜色反馈
+            const percentage = (val / 10) * 100;
+            if (val == 0) {
+                input.style.background = '#e9ecef';
+                display.style.color = '#999';
+            } else {
+                input.style.background = `linear-gradient(to right, #FF7F24 ${percentage}%, #e9ecef ${percentage}%)`;
+                display.style.color = '#FF7F24';
+            }
+
+            checkSubmitEnable();
+        }
+
+        function toggleTag(el) {
+            el.classList.toggle('active');
+        }
+
+        // 3. 校验逻辑
+        function checkSubmitEnable() {
+            if (!currentWindowId) return;
+            
+            const ranges = document.querySelectorAll('input[type=range]');
+            let allFilled = true;
+            ranges.forEach(r => {
+                if (r.value == 0) allFilled = false;
+            });
+            
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = !allFilled;
+        }
+
+        // 4. 提交逻辑
+        function submitEvaluation() {
+            // 防重复校验 (5分钟 = 300000ms)
+            const now = Date.now();
+            if (now - lastSubmitTime < 300000) {
+                return showToast("5分钟内已评价，请勿重复提交", "error");
+            }
+
+            // 收集数据
+            const data = {
+                window_id: currentWindowId,
+                food_score: getModuleData('food').score,
+                environment_score: getModuleData('environment').score,
+                service_score: getModuleData('service').score,
+                food_safety_score: getModuleData('food_safety').score,
+                tags: getAllTags(),
+                // 仅演示，实际可能需要拼接待传
+            };
+
+            // UI Loading
+            const btn = document.getElementById('submitBtn');
+            const icon = document.getElementById('loadingIcon');
+            const text = document.getElementById('btnText');
+            
+            btn.disabled = true;
+            icon.classList.remove('d-none');
+            text.innerText = "提交中...";
+
+            // 模拟 API 请求
+            setTimeout(() => {
+                // 恢复 UI
+                icon.classList.add('d-none');
+                text.innerText = "快速提交";
+                btn.disabled = false; // 实际场景可能保持禁用或跳转
+                
+                lastSubmitTime = now;
+                showToast("提交成功", "success");
+                
+                // 模拟跳转回首页
+                setTimeout(() => {
+                    // window.location.href = 'index.html';
+                    // 这里仅重置
+                    resetScan();
+                }, 1500);
+            }, 1000);
+        }
+
+        function getModuleData(type) {
+            const module = document.querySelector(`.rating-module[data-type="${type}"]`);
+            return {
+                score: module.querySelector('input[type=range]').value,
+                content: module.querySelector('.detail-input').value
+            };
+        }
+
+        function getAllTags() {
+            const tags = [];
+            document.querySelectorAll('.tag-item.active').forEach(t => tags.push(t.innerText));
+            return tags;
+        }
+
+        // 辅助：弹窗
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.className = `toast-custom ${type === 'success' ? 'toast-success' : 'toast-error'}`;
+            toast.style.display = 'block';
+            
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 2000);
+        }
+
+        function showHelp() {
+            alert("评分说明：\n1. 请对用餐窗口进行真实评价\n2. 四个维度均为必填项\n3. 恶意差评将被屏蔽");
+        }
+
+    </script>
+    <script src="../../static/js/common.js"></script>
+</body>
+</html>

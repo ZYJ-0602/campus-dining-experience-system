@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>审核笔记 - 食堂点评管理后台</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --brand: #ff7f24;
+            --brand-soft: #fff3e7;
+            --line: #ececec;
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #fff8f3 0%, #f4f6f9 100%);
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: #2f2f2f;
+        }
+
+        .wrap {
+            max-width: 980px;
+            margin: 24px auto;
+            padding: 0 16px;
+        }
+
+        .card-audit {
+            background: #fff;
+            border-radius: 16px;
+            border: 1px solid #f0ece7;
+            box-shadow: 0 10px 26px rgba(20, 20, 20, 0.06);
+            overflow: hidden;
+        }
+
+        .head {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .body {
+            padding: 22px;
+        }
+
+        .meta {
+            padding: 10px 12px;
+            background: #fafafa;
+            border: 1px solid #efefef;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .content-box {
+            background: #fffdf8;
+            border: 1px solid #ffe8ce;
+            border-radius: 10px;
+            padding: 14px;
+            min-height: 140px;
+            line-height: 1.7;
+        }
+
+        .img-list {
+            margin-top: 14px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .img-list img {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            cursor: pointer;
+        }
+
+        .foot {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 14px;
+            border-top: 1px solid var(--line);
+            padding: 18px 22px;
+        }
+
+        #rejectReason {
+            min-height: 92px;
+            border-radius: 10px;
+        }
+
+        .btn-brand {
+            background: var(--brand);
+            border-color: var(--brand);
+            color: #fff;
+        }
+
+        .btn-brand:hover {
+            background: #e56e14;
+            border-color: #e56e14;
+            color: #fff;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card-audit">
+        <div class="head">
+            <h5 class="mb-0"><i class="bi bi-pencil-square me-2 text-warning"></i>审核笔记</h5>
+            <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">关闭</button>
+        </div>
+        <div class="body">
+            <h4 id="noteTitle">加载中...</h4>
+            <div class="meta" id="noteMeta">-</div>
+            <div class="content-box" id="noteContent">-</div>
+            <div class="img-list" id="noteImages"></div>
+        </div>
+        <div class="foot">
+            <div class="w-100">
+                <label class="form-label text-danger">驳回原因（仅驳回时必填）</label>
+                <textarea class="form-control" id="rejectReason" placeholder="请输入驳回原因"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger" onclick="submitAudit(2)"><i class="bi bi-x-circle me-1"></i>驳回</button>
+                <button class="btn btn-brand" onclick="submitAudit(1)"><i class="bi bi-check-circle me-1"></i>通过</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script src="../c-client/js/api.js"></script>
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const noteId = Number(params.get('id') || 0);
+    const API_AUDIT_NOTES = `${API_BASE_URL}/admin/audit/notes`;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (!noteId) {
+            alert('缺少笔记ID');
+            return;
+        }
+        loadDetail();
+    });
+
+    async function loadDetail() {
+        const res = await fetchApi(`${API_AUDIT_NOTES}/${noteId}`);
+        if (res.code !== 200) {
+            alert(res.msg || '加载失败');
+            return;
+        }
+
+        const data = res.data || {};
+        document.getElementById('noteTitle').textContent = data.title || '-';
+        document.getElementById('noteMeta').textContent = `${data.user_nickname || '未知用户'} · ${data.create_time || '-'}`;
+        document.getElementById('noteContent').textContent = data.content || '-';
+
+        const images = Array.isArray(data.images) ? data.images : [];
+        const imgWrap = document.getElementById('noteImages');
+        imgWrap.innerHTML = images.map(src => `<img src="${src}" onclick="window.open('${src}')">`).join('');
+    }
+
+    async function submitAudit(status) {
+        if (!noteId) return;
+
+        const reason = document.getElementById('rejectReason').value.trim();
+        if (status === 2 && !reason) {
+            alert('请填写驳回原因');
+            return;
+        }
+
+        const res = await fetchApi(`${API_AUDIT_NOTES}/${noteId}`, {
+            method: 'POST',
+            body: JSON.stringify({ status: status, reason: reason })
+        });
+
+        if (res.code === 200) {
+            alert(status === 1 ? '审核通过' : '已驳回');
+            if (window.opener) {
+                window.opener.postMessage({ type: 'admin-audit-changed' }, '*');
+            }
+            window.close();
+            return;
+        }
+
+        alert(res.msg || '提交失败');
+    }
+</script>
+</body>
+</html>

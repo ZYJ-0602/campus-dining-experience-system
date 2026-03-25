@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>发布笔记 - 校园食堂点评系统</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #ff9933;
+            --primary-hover: #f08f2d;
+            --bg-gradient: linear-gradient(135deg, #ff9933 0%, #ffb366 100%);
+            --golden-input-width: 74%;
+        }
+
+        body {
+            background: #f8f9fa;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 16px 10px;
+        }
+
+        .auth-container {
+            width: 460px;
+            max-width: 100%;
+        }
+
+        .card-custom {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: none;
+            overflow: hidden;
+        }
+
+        .card-header-custom {
+            background: var(--bg-gradient);
+            padding: 24px 20px;
+            text-align: center;
+            color: #fff;
+            position: relative;
+        }
+
+        .back-link {
+            position: absolute;
+            left: 14px;
+            top: 14px;
+            color: #fff;
+            font-size: 22px;
+            text-decoration: none;
+        }
+
+        .system-title {
+            font-size: 19px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .card-body-custom {
+            padding: 28px;
+        }
+
+        .golden-row {
+            width: var(--golden-input-width);
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 16px;
+        }
+
+        .field-wrap {
+            position: relative;
+            width: 100%;
+        }
+
+        .form-control {
+            border-radius: 4px;
+            width: 100%;
+            min-height: 40px;
+            height: 40px;
+            padding: 10px 10px 10px 44px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+        }
+
+        textarea.form-control {
+            min-height: 220px;
+            height: 220px;
+            padding-top: 10px;
+            resize: vertical;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(255, 153, 51, 0.12);
+        }
+
+        .field-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #b8b8b8;
+            width: 20px;
+            height: 20px;
+            border: 1px solid #d9d9d9;
+            border-radius: 3px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            line-height: 1;
+            pointer-events: none;
+            background: transparent;
+        }
+
+        .field-wrap.textarea-wrap .field-icon {
+            top: 20px;
+            transform: none;
+        }
+
+        .btn-primary-custom {
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 4px;
+            min-height: 40px;
+            height: 40px;
+            padding: 9px 12px;
+            font-size: 15px;
+            font-weight: 600;
+            width: var(--golden-input-width);
+            display: block;
+            margin: 8px auto 0;
+            transition: all 0.2s;
+            color: #fff;
+        }
+
+        .btn-primary-custom:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .hint {
+            width: var(--golden-input-width);
+            margin: 10px auto 0;
+            color: #999;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="card card-custom">
+            <div class="card-header-custom">
+                <a class="back-link" href="user_center.html?tab=notes" aria-label="返回"><i class="bi bi-chevron-left"></i></a>
+                <h1 class="system-title" id="pageTitle">发布笔记</h1>
+            </div>
+            <div class="card-body-custom">
+                <form id="noteForm">
+                    <div class="golden-row">
+                        <div class="field-wrap">
+                            <span class="field-icon"><i class="bi bi-journal"></i></span>
+                            <input id="noteTitle" type="text" class="form-control" maxlength="200" placeholder="请输入标题（2-200字）" required>
+                        </div>
+                    </div>
+                    <div class="golden-row">
+                        <div class="field-wrap textarea-wrap">
+                            <span class="field-icon"><i class="bi bi-card-text"></i></span>
+                            <textarea id="noteContent" class="form-control" maxlength="5000" placeholder="请输入笔记内容（至少5个字）" required></textarea>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary-custom" id="submitBtn">发 布 笔 记</button>
+                </form>
+                <div class="hint" id="hintText">发布后可在「我的笔记」中查看与编辑。</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        let editId = null;
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            const meRes = await fetchApi(API.AUTH_ME);
+            if (meRes.code !== 200) {
+                alert('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+
+            const url = new URL(window.location.href);
+            const edit = url.searchParams.get('edit');
+            if (edit && /^\d+$/.test(edit)) {
+                editId = Number(edit);
+                document.getElementById('pageTitle').textContent = '编辑笔记';
+                document.getElementById('submitBtn').textContent = '保 存 笔 记';
+                document.getElementById('hintText').textContent = '保存后将返回「我的笔记」列表。';
+                await loadEditData(editId);
+            }
+        });
+
+        async function loadEditData(id) {
+            const res = await fetchApi(API.MY_NOTES);
+            if (res.code !== 200 || !Array.isArray(res.data)) {
+                alert('加载笔记失败');
+                return;
+            }
+            const note = res.data.find(item => Number(item.id) === Number(id));
+            if (!note) {
+                alert('未找到要编辑的笔记');
+                return;
+            }
+            document.getElementById('noteTitle').value = note.title || '';
+            document.getElementById('noteContent').value = note.content || '';
+        }
+
+        document.getElementById('noteForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = editId ? '保存中...' : '发布中...';
+
+            const payload = {
+                title: document.getElementById('noteTitle').value.trim(),
+                content: document.getElementById('noteContent').value.trim()
+            };
+
+            let res;
+            if (editId) {
+                res = await fetchApi(`${API.MY_NOTES}/${editId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                res = await fetchApi(API.MY_NOTES, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+            }
+
+            btn.disabled = false;
+            btn.textContent = editId ? '保 存 笔 记' : '发 布 笔 记';
+
+            if (res.code !== 200) {
+                alert(res.msg || '操作失败');
+                return;
+            }
+
+            alert(editId ? '笔记已更新' : '笔记发布成功');
+            window.location.href = 'user_center.html?tab=notes';
+        });
+    </script>
+</body>
+</html>

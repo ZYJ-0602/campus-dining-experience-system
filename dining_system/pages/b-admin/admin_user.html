@@ -1,0 +1,1167 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>用户管理 - 食堂点评管理后台</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --success: #52c41a;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap {
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: minmax(280px, 1.2fr) minmax(340px, 1.8fr) auto;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box .bi-search {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0a5b0;
+        }
+
+        .search-input {
+            width: 100%;
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px 0 36px;
+            color: var(--text-dark);
+            outline: none;
+            background: #fff;
+        }
+
+        .search-input:focus,
+        .filter-select:focus,
+        .filter-date:focus,
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .filter-group {
+            display: grid;
+            grid-template-columns: 120px 120px 1fr 1fr;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-select,
+        .filter-date,
+        .form-input,
+        .form-select {
+            width: 100%;
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            color: var(--text-dark);
+            background: #fff;
+            outline: none;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .btn-ghost-blue,
+        .btn-primary-blue,
+        .btn-gray,
+        .btn-danger-outline,
+        .btn-outline-gray,
+        .btn-primary {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary,
+        .btn-primary-blue {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .btn-primary:hover,
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+            color: #fff;
+        }
+
+        .btn-ghost-blue {
+            background: #fff;
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-ghost-blue:hover {
+            background: #eef4ff;
+        }
+
+        .btn-gray {
+            background: #f2f3f5;
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-gray:hover {
+            background: #e8eaef;
+        }
+
+        .btn-danger-outline {
+            background: #fff;
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .btn-danger-outline:hover {
+            background: #fff1f0;
+        }
+
+        .btn-outline-gray {
+            background: #fff;
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .batch-bar {
+            margin-top: 24px;
+            background: #f7f8fa;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .batch-tip {
+            color: #909399;
+            margin-left: auto;
+        }
+
+        .table-card {
+            margin-top: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-responsive-wrap {
+            overflow-x: auto;
+        }
+
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .user-table th,
+        .user-table td {
+            padding: 12px 16px;
+            line-height: 48px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .user-table thead th {
+            background: #f7f8fa;
+            font-weight: 700;
+            color: #303133;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .user-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .user-table tbody tr:hover td {
+            background: #fafafa;
+        }
+
+        .status-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 28px;
+            border-radius: 14px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .status-enabled {
+            background: var(--success);
+        }
+
+        .status-disabled {
+            background: #8c8c8c;
+        }
+
+        .action-links {
+            display: inline-flex;
+            gap: 14px;
+            align-items: center;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .action-edit {
+            color: var(--primary);
+        }
+
+        .action-reset {
+            color: #86909c;
+        }
+
+        .action-delete {
+            color: var(--danger);
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            padding: 28px 0;
+            line-height: 1.5;
+        }
+
+        .table-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .pager {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .pager-btn {
+            min-width: 34px;
+            height: 32px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #fff;
+            color: #4e5969;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+
+        .pager-btn.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #eef4ff;
+            font-weight: 700;
+        }
+
+        .pager-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-panel {
+            width: 100%;
+            max-width: 600px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #303133;
+            margin: 0;
+        }
+
+        .modal-close {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #606266;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            background: #f2f3f5;
+        }
+
+        .modal-body {
+            padding: 16px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        .form-item {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .form-label {
+            color: #303133;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .form-help {
+            color: #909399;
+            font-size: 12px;
+            margin-top: -2px;
+            line-height: 1.4;
+        }
+
+        .required {
+            color: var(--danger);
+            margin-left: 4px;
+        }
+
+        .modal-foot {
+            padding: 14px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .top-note {
+            margin-bottom: 6px;
+            color: #909399;
+            font-size: 12px;
+        }
+
+        @media (max-width: 1280px) {
+            .toolbar-card {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .filter-group {
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+            }
+
+            .toolbar-actions {
+                justify-content: flex-start;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .page-wrap {
+                padding: 16px;
+            }
+
+            .filter-group {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .batch-tip {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .table-footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .pager {
+                width: 100%;
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="toolbar-card">
+        <div class="search-box">
+            <i class="bi bi-search"></i>
+            <input id="searchInput" class="search-input" type="text" placeholder="搜索用户名/手机号" autocomplete="off">
+        </div>
+
+        <div class="filter-group">
+            <select id="roleFilter" class="filter-select">
+                <option value="">全部角色</option>
+                <option value="管理员">管理员</option>
+                <option value="普通用户">普通用户</option>
+                <option value="食堂运营">食堂运营</option>
+            </select>
+            <select id="statusFilter" class="filter-select">
+                <option value="">全部状态</option>
+                <option value="启用">启用</option>
+                <option value="禁用">禁用</option>
+            </select>
+            <input id="startDateFilter" class="filter-date" type="date" title="注册时间起始">
+            <input id="endDateFilter" class="filter-date" type="date" title="注册时间结束">
+        </div>
+
+        <div class="toolbar-actions">
+            <button id="resetFiltersBtn" class="btn-ghost-blue" type="button">重置筛选</button>
+            <button id="openAddUserBtn" class="btn-primary" type="button">新增用户</button>
+        </div>
+    </div>
+
+    <div class="batch-bar" id="batchActions">
+        <strong>已选 <span id="selectedCount">0</span> 项：</strong>
+        <button class="btn-primary-blue" type="button" onclick="batchOperate('enable')">批量启用</button>
+        <button class="btn-gray" type="button" onclick="batchOperate('disable')">批量禁用</button>
+        <button class="btn-danger-outline" type="button" onclick="batchOperate('delete')">批量删除</button>
+        <span class="batch-tip">勾选后生效，可跨页保留选择。</span>
+    </div>
+
+    <div class="table-card">
+        <div class="table-responsive-wrap">
+            <table class="user-table">
+                <thead>
+                <tr>
+                    <th style="width:52px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+                    <th>ID</th>
+                    <th>用户名</th>
+                    <th>手机号</th>
+                    <th>角色</th>
+                    <th>注册时间</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="userTableBody"></tbody>
+            </table>
+        </div>
+
+        <div class="table-footer">
+            <div>共 <span id="totalUsers">0</span> 条记录</div>
+            <div class="pager" id="pagination"></div>
+        </div>
+    </div>
+</div>
+
+<div id="userModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="userModalTitle">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-head">
+            <h3 class="modal-title" id="userModalTitle">新增用户</h3>
+            <button class="modal-close" type="button" id="closeUserModalBtn" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+            <form id="userForm" novalidate>
+                <div class="form-grid">
+                    <div class="form-item">
+                        <label class="form-label" for="formUsername">用户名<span class="required">*</span></label>
+                        <input class="form-input" id="formUsername" type="text" minlength="2" maxlength="20" required autocomplete="off">
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label" for="formNickname">昵称</label>
+                        <input class="form-input" id="formNickname" type="text" maxlength="80" autocomplete="off">
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label" for="formPhone">手机号<span class="required">*</span></label>
+                        <input class="form-input" id="formPhone" type="tel" pattern="[0-9]{11}" maxlength="11" required autocomplete="off">
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label" for="formPassword">密码<span class="required" id="passwordRequiredMark">*</span></label>
+                        <input class="form-input" id="formPassword" type="password" minlength="6" required autocomplete="new-password" value="123456">
+                        <div class="form-help" id="passwordTip">默认密码为 123456，长度至少 6 位。</div>
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label" for="formRole">角色<span class="required">*</span></label>
+                        <select class="form-select" id="formRole" required>
+                            <option value="2">普通用户</option>
+                            <option value="1">管理员</option>
+                            <option value="3">食堂运营</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-outline-gray" type="button" id="cancelUserModalBtn">取消</button>
+            <button class="btn-primary" type="button" id="saveUserBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="../c-client/js/api.js"></script>
+<script>
+    const API_USER_LIST = `${API_BASE_URL}/admin/users`;
+
+    let allUsers = [];
+    let filteredUsers = [];
+    let currentUsers = [];
+    let currentPage = 1;
+    const pageSize = 10;
+    let totalUsers = 0;
+    let currentKeyword = '';
+    let selectedIds = new Set();
+    let editingUserId = null;
+    let searchDebounce = null;
+    const statusOverrides = new Map();
+
+    function isSuccessResponse(res) {
+        const code = Number(res && res.code);
+        return code === 200 || code === 0;
+    }
+
+    function readResponseData(res) {
+        if (!res || typeof res !== 'object') return {};
+        const data = res.data;
+        return data && typeof data === 'object' ? data : {};
+    }
+
+    function parseDateTime(text) {
+        if (!text || text === '-') return 0;
+        const normalized = String(text).trim().replace(' ', 'T').replace(/\.(\d{3})\d+/, '.$1');
+        const ts = Date.parse(normalized);
+        return Number.isNaN(ts) ? 0 : ts;
+    }
+
+    function normalizeRoleName(roleValue) {
+        const raw = String(roleValue || '').trim().toLowerCase();
+        if (!raw) return '未知角色';
+        if (raw === '管理员' || raw === 'admin' || raw === '1') return '管理员';
+        if (raw === '食堂运营' || raw === 'operator' || raw === '3') return '食堂运营';
+        if (raw === '普通用户' || raw === 'student' || raw === 'user' || raw === '2') return '普通用户';
+        return String(roleValue);
+    }
+
+    function normalizeUser(user) {
+        return {
+            ...user,
+            role_name: normalizeRoleName(user.role_name || user.role),
+            status: statusOverrides.get(user.id) || user.status || '启用',
+            display_name: user.nickname || user.username || '-',
+            create_time: user.create_time || user.created_at || user.register_time || '-',
+        };
+    }
+
+    function getUserStatus(user) {
+        return statusOverrides.get(user.id) || user.status || '启用';
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        bindToolbarEvents();
+        bindModalEvents();
+        updateBatchActions();
+        const pass = await ensureAdminSession();
+        if (!pass) return;
+        await fetchUsers();
+    });
+
+    async function ensureAdminSession() {
+        try {
+            const res = await fetchApi(`${API_BASE_URL}/auth/me`, { method: 'GET' });
+            if (!isSuccessResponse(res)) {
+                window.top.location.href = 'admin_login.html';
+                return false;
+            }
+            const data = readResponseData(res);
+            const roleRaw = String(data.role || '').trim().toLowerCase();
+            if (roleRaw !== 'admin' && roleRaw !== '管理员' && roleRaw !== '1') {
+                alert('当前账号不是管理员，请使用管理员账号登录。');
+                window.top.location.href = 'admin_login.html';
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('Auth check failed:', error);
+            window.top.location.href = 'admin_login.html';
+            return false;
+        }
+    }
+
+    function bindToolbarEvents() {
+        const input = document.getElementById('searchInput');
+        input.addEventListener('input', (e) => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => {
+                const keyword = e.target.value.trim();
+                if (keyword !== currentKeyword) {
+                    currentKeyword = keyword;
+                    currentPage = 1;
+                    selectedIds.clear();
+                    fetchUsers();
+                }
+            }, 350);
+        });
+
+        ['roleFilter', 'statusFilter', 'startDateFilter', 'endDateFilter'].forEach((id) => {
+            document.getElementById(id).addEventListener('change', () => {
+                currentPage = 1;
+                applyFiltersAndRender();
+            });
+        });
+
+        document.getElementById('resetFiltersBtn').addEventListener('click', () => {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('roleFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('startDateFilter').value = '';
+            document.getElementById('endDateFilter').value = '';
+            currentKeyword = '';
+            currentPage = 1;
+            selectedIds.clear();
+            fetchUsers();
+        });
+
+        document.getElementById('openAddUserBtn').addEventListener('click', openAddUserModal);
+    }
+
+    function bindModalEvents() {
+        const overlay = document.getElementById('userModalOverlay');
+        document.getElementById('closeUserModalBtn').addEventListener('click', closeUserModal);
+        document.getElementById('cancelUserModalBtn').addEventListener('click', closeUserModal);
+        document.getElementById('saveUserBtn').addEventListener('click', saveUser);
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeUserModal();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && overlay.classList.contains('show')) {
+                closeUserModal();
+            }
+        });
+    }
+
+    async function fetchUsers() {
+        const tbody = document.getElementById('userTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-row">正在加载用户数据...</td></tr>';
+
+        try {
+            const rows = await fetchAllUserRows(currentKeyword);
+            allUsers = (rows || []).map(normalizeUser);
+            allUsers.sort((a, b) => {
+                const diff = parseDateTime(b.create_time) - parseDateTime(a.create_time);
+                return diff !== 0 ? diff : Number(b.id || 0) - Number(a.id || 0);
+            });
+            applyFiltersAndRender();
+        } catch (error) {
+            console.error('fetchUsers error', error);
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-row">加载失败，请刷新后重试</td></tr>';
+        }
+    }
+
+    async function fetchAllUserRows(keyword) {
+        const rows = [];
+        let page = 1;
+        let totalPages = 1;
+        const limit = 50;
+
+        while (page <= totalPages) {
+            const params = new URLSearchParams({ page, limit });
+            if (keyword) params.append('keyword', keyword);
+            const res = await fetchApi(`${API_USER_LIST}?${params.toString()}`);
+
+            if (!isSuccessResponse(res)) {
+                const err = new Error(res.msg || '加载失败');
+                err.code = Number(res && res.code);
+                throw err;
+            }
+
+            const data = readResponseData(res);
+            const listRows = Array.isArray(data.list)
+                ? data.list
+                : Array.isArray(data.users)
+                    ? data.users
+                    : Array.isArray(data.items)
+                        ? data.items
+                        : Array.isArray(data.rows)
+                            ? data.rows
+                            : [];
+
+            rows.push(...listRows);
+
+            const pageCount = Number(data.pages);
+            const total = Number(data.total);
+            if (Number.isFinite(pageCount) && pageCount > 0) {
+                totalPages = pageCount;
+            } else if (Number.isFinite(total) && total >= 0) {
+                totalPages = Math.max(1, Math.ceil(total / limit));
+            } else if (listRows.length < limit) {
+                totalPages = page;
+            } else {
+                totalPages = page + 1;
+            }
+
+            page += 1;
+            if (page > 200) break;
+        }
+
+        return rows;
+    }
+
+    function applyFiltersAndRender() {
+        const role = document.getElementById('roleFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const startDate = document.getElementById('startDateFilter').value;
+        const endDate = document.getElementById('endDateFilter').value;
+
+        const startTs = startDate ? Date.parse(`${startDate}T00:00:00`) : null;
+        const endTs = endDate ? Date.parse(`${endDate}T23:59:59`) : null;
+
+        filteredUsers = allUsers.filter((user) => {
+            if (role && user.role_name !== role) return false;
+            if (status && getUserStatus(user) !== status) return false;
+            const createdTs = parseDateTime(user.create_time);
+            if (startTs !== null && createdTs < startTs) return false;
+            if (endTs !== null && createdTs > endTs) return false;
+            return true;
+        });
+
+        totalUsers = filteredUsers.length;
+        const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        const start = (currentPage - 1) * pageSize;
+        currentUsers = filteredUsers.slice(start, start + pageSize);
+
+        renderTable();
+        renderPagination();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('userTableBody');
+        document.getElementById('totalUsers').textContent = totalUsers;
+
+        if (!currentUsers.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-row">暂无用户数据</td></tr>';
+            document.getElementById('selectAll').checked = false;
+            updateBatchActions();
+            return;
+        }
+
+        let html = '';
+        currentUsers.forEach((user) => {
+            const checked = selectedIds.has(user.id) ? 'checked' : '';
+            const status = getUserStatus(user);
+            const statusClass = status === '启用' ? 'status-enabled' : 'status-disabled';
+            const nextAction = status === '启用' ? 'disable' : 'enable';
+            const statusTitle = status === '启用' ? '点击禁用' : '点击启用';
+
+            html += `
+                <tr>
+                    <td><input type="checkbox" class="user-checkbox" value="${user.id}" ${checked} onclick="toggleSelect(${user.id})"></td>
+                    <td>${user.id}</td>
+                    <td>${user.display_name}</td>
+                    <td>${user.phone || '-'}</td>
+                    <td>${user.role_name}</td>
+                    <td>${user.create_time || '-'}</td>
+                    <td>
+                        <span class="status-tag ${statusClass}" title="${statusTitle}" onclick="changeStatus(${user.id}, '${nextAction}')">${status}</span>
+                    </td>
+                    <td>
+                        <div class="action-links">
+                            <button class="action-link action-edit" onclick="openEditUserModal(${user.id})">编辑</button>
+                            <button class="action-link action-reset" onclick="resetPassword(${user.id}, '${user.username}')">重置密码</button>
+                            <button class="action-link action-delete" onclick="deleteUser(${user.id}, '${user.username}')">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = html;
+        syncSelectAllCheckbox();
+        updateBatchActions();
+    }
+
+    function renderPagination() {
+        const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+        const el = document.getElementById('pagination');
+
+        if (totalUsers === 0) {
+            el.innerHTML = '';
+            return;
+        }
+
+        let html = `
+            <button class="pager-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>
+        `;
+
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                html += `<button class="pager-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+            } else if (i === currentPage - 3 || i === currentPage + 3) {
+                html += `<button class="pager-btn" disabled>...</button>`;
+            }
+        }
+
+        html += `<button class="pager-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`;
+        el.innerHTML = html;
+    }
+
+    function changePage(page) {
+        const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        applyFiltersAndRender();
+    }
+
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll');
+        document.querySelectorAll('.user-checkbox').forEach((cb) => {
+            cb.checked = selectAll.checked;
+            const id = Number(cb.value);
+            if (selectAll.checked) selectedIds.add(id);
+            else selectedIds.delete(id);
+        });
+        updateBatchActions();
+    }
+
+    function toggleSelect(id) {
+        if (selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        syncSelectAllCheckbox();
+        updateBatchActions();
+    }
+
+    function syncSelectAllCheckbox() {
+        const boxes = document.querySelectorAll('.user-checkbox');
+        if (!boxes.length) {
+            document.getElementById('selectAll').checked = false;
+            return;
+        }
+        document.getElementById('selectAll').checked = Array.from(boxes).every((cb) => cb.checked);
+    }
+
+    function updateBatchActions() {
+        document.getElementById('selectedCount').textContent = selectedIds.size;
+        const disabled = selectedIds.size === 0;
+        document.querySelectorAll('#batchActions button').forEach((btn) => {
+            btn.disabled = disabled;
+        });
+    }
+
+    async function changeStatus(id, action) {
+        const newStatus = action === 'enable' ? '启用' : '禁用';
+        if (!confirm(`确定要${newStatus}该用户吗？`)) return;
+
+        try {
+            const res = await fetchApi(`${API_USER_LIST}/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ status: newStatus }),
+            });
+            if (!isSuccessResponse(res)) {
+                alert(res.msg || `${newStatus}失败`);
+                return;
+            }
+            statusOverrides.set(id, newStatus);
+            allUsers = allUsers.map((user) => (user.id === id ? { ...user, status: newStatus } : user));
+            applyFiltersAndRender();
+        } catch (error) {
+            console.error(error);
+            alert('网络错误');
+        }
+    }
+
+    async function resetPassword(id, username) {
+        if (!confirm(`确定要重置用户 "${username}" 的密码吗？`)) return;
+
+        try {
+            const res = await fetchApi(`${API_USER_LIST}/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ password: '123456' }),
+            });
+            if (!isSuccessResponse(res)) {
+                alert(res.msg || '重置失败');
+                return;
+            }
+            alert(`重置成功！\n用户 "${username}" 的新密码为：123456`);
+        } catch (error) {
+            console.error(error);
+            alert('网络错误');
+        }
+    }
+
+    async function deleteUser(id, username) {
+        if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复！`)) return;
+
+        try {
+            const res = await fetchApi(`${API_USER_LIST}/${id}`, { method: 'DELETE' });
+            if (!isSuccessResponse(res)) {
+                alert(res.msg || '删除失败');
+                return;
+            }
+            selectedIds.delete(id);
+            statusOverrides.delete(id);
+            await fetchUsers();
+        } catch (error) {
+            console.error(error);
+            alert('网络错误');
+        }
+    }
+
+    async function batchOperate(action) {
+        if (!selectedIds.size) {
+            alert('请先勾选要操作的用户');
+            return;
+        }
+
+        const ids = Array.from(selectedIds);
+        const actionMap = { enable: '批量启用', disable: '批量禁用', delete: '批量删除' };
+        if (!confirm(`确定要${actionMap[action]} ${ids.length} 个用户吗？`)) return;
+
+        try {
+            let okCount = 0;
+            for (const id of ids) {
+                if (action === 'delete') {
+                    const res = await fetchApi(`${API_USER_LIST}/${id}`, { method: 'DELETE' });
+                    if (isSuccessResponse(res)) {
+                        okCount += 1;
+                        statusOverrides.delete(id);
+                    }
+                } else {
+                    const newStatus = action === 'enable' ? '启用' : '禁用';
+                    const res = await fetchApi(`${API_USER_LIST}/${id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ status: newStatus }),
+                    });
+                    if (isSuccessResponse(res)) {
+                        okCount += 1;
+                        statusOverrides.set(id, newStatus);
+                    }
+                }
+            }
+
+            if (action === 'delete') {
+                selectedIds.clear();
+                await fetchUsers();
+            } else {
+                allUsers = allUsers.map((user) => {
+                    if (!selectedIds.has(user.id)) return user;
+                    return { ...user, status: action === 'enable' ? '启用' : '禁用' };
+                });
+                applyFiltersAndRender();
+            }
+
+            alert(`${actionMap[action]}完成，成功 ${okCount} 项`);
+        } catch (error) {
+            console.error(error);
+            alert('批量操作失败，请稍后重试');
+        }
+    }
+
+    function openAddUserModal() {
+        editingUserId = null;
+        document.getElementById('userModalTitle').textContent = '新增用户';
+        document.getElementById('saveUserBtn').textContent = '保存';
+        document.getElementById('formUsername').disabled = false;
+        document.getElementById('passwordRequiredMark').style.display = 'inline';
+        document.getElementById('passwordTip').textContent = '默认密码为 123456，长度至少 6 位。';
+        document.getElementById('formPassword').required = true;
+
+        const form = document.getElementById('userForm');
+        form.reset();
+        document.getElementById('formRole').value = '2';
+        document.getElementById('formPassword').value = '123456';
+        showUserModal();
+    }
+
+    async function openEditUserModal(userId) {
+        try {
+            const res = await fetchApi(`${API_USER_LIST}/${userId}`);
+            if (!isSuccessResponse(res)) {
+                alert(res.msg || '加载用户详情失败');
+                return;
+            }
+            const data = readResponseData(res);
+            editingUserId = userId;
+            document.getElementById('userModalTitle').textContent = `编辑用户 #${userId}`;
+            document.getElementById('saveUserBtn').textContent = '保存修改';
+            document.getElementById('formUsername').value = data.username || '';
+            document.getElementById('formUsername').disabled = true;
+            document.getElementById('formNickname').value = data.nickname || '';
+            document.getElementById('formPhone').value = data.phone || '';
+            document.getElementById('formRole').value = String(data.role || 2);
+            document.getElementById('passwordRequiredMark').style.display = 'none';
+            document.getElementById('passwordTip').textContent = '留空则不修改密码，填写则更新为新密码。';
+            document.getElementById('formPassword').value = '';
+            document.getElementById('formPassword').required = false;
+            showUserModal();
+        } catch (error) {
+            console.error(error);
+            alert('网络错误，无法加载用户详情');
+        }
+    }
+
+    function showUserModal() {
+        document.getElementById('userModalOverlay').classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeUserModal() {
+        document.getElementById('userModalOverlay').classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    async function saveUser() {
+        const form = document.getElementById('userForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const username = document.getElementById('formUsername').value.trim();
+        const nickname = document.getElementById('formNickname').value.trim();
+        const phone = document.getElementById('formPhone').value.trim();
+        const password = document.getElementById('formPassword').value.trim();
+        const roleId = Number(document.getElementById('formRole').value);
+
+        const payload = {
+            phone,
+            nickname: nickname || username,
+            role_id: roleId,
+        };
+
+        try {
+            let res;
+            if (editingUserId) {
+                if (password) payload.password = password;
+                res = await fetchApi(`${API_USER_LIST}/${editingUserId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload),
+                });
+            } else {
+                if (password.length < 6) {
+                    alert('密码长度至少 6 位');
+                    return;
+                }
+                res = await fetchApi(API_USER_LIST, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...payload,
+                        username,
+                        password,
+                    }),
+                });
+            }
+
+            if (!isSuccessResponse(res)) {
+                alert(res.msg || '保存失败');
+                return;
+            }
+
+            closeUserModal();
+            currentPage = 1;
+            selectedIds.clear();
+            await fetchUsers();
+            alert(editingUserId ? '用户信息更新成功！' : '用户新增成功！');
+        } catch (error) {
+            console.error(error);
+            alert('网络错误');
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>菜品评价管理 - 食堂点评管理后台</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="../../static/css/common.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --success: #52c41a;
+            --warning: #faad14;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap {
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .page-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .toolbar-card,
+        .panel-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .toolbar-card {
+            padding: 14px 16px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-left,
+        .toolbar-right {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 140px;
+        }
+
+        .toolbar-field label {
+            font-size: 12px;
+            color: #86909c;
+        }
+
+        .input-base,
+        .date-base {
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            color: var(--text-dark);
+            background: #fff;
+            outline: none;
+        }
+
+        .input-base:focus,
+        .date-base:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .date-range {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .date-range .date-base { width: 155px; }
+
+        .btn-primary-blue,
+        .btn-gray,
+        .btn-green,
+        .btn-ghost {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-green {
+            background: var(--success);
+            border-color: var(--success);
+            color: #fff;
+        }
+
+        .btn-green:hover {
+            background: #389e0d;
+            border-color: #389e0d;
+        }
+
+        .btn-gray {
+            background: #f2f3f5;
+            border-color: #dcdfe6;
+            color: #4e5969;
+        }
+
+        .btn-gray:hover { background: #e8eaef; }
+
+        .btn-ghost {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: #fff;
+        }
+
+        .btn-ghost.active {
+            color: #fff;
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-loading {
+            opacity: 0.72;
+            pointer-events: none;
+        }
+
+        .panel-card { margin-top: 16px; overflow: hidden; }
+
+        .table-wrap { overflow-x: auto; }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0 16px;
+            height: 48px;
+            line-height: 48px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .data-table thead th {
+            background: #f7f8fa;
+            color: #303133;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .data-table tbody tr:hover td { background: #fafafa; }
+
+        .score-text.high { color: var(--success); font-weight: 700; }
+        .score-text.mid { color: var(--warning); font-weight: 700; }
+        .score-text.low { color: var(--danger); font-weight: 700; }
+
+        .link-btn {
+            border: none;
+            background: transparent;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            font-size: 14px;
+        }
+
+        .link-btn:hover { text-decoration: underline; }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            line-height: 1.8;
+            padding: 22px 0;
+        }
+
+        .table-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 16px;
+        }
+
+        .pager-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .pager-btn {
+            height: 32px;
+            min-width: 32px;
+            border: 1px solid #dcdfe6;
+            border-radius: 6px;
+            background: #fff;
+            color: #4e5969;
+            cursor: pointer;
+            padding: 0 10px;
+        }
+
+        .pager-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .pager-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .detail-panel {
+            margin-top: 16px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .detail-panel.show { display: block; }
+
+        .detail-head {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 10px;
+            background: #fff;
+        }
+
+        .detail-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .tab-wrap {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .detail-body {
+            padding: 14px 16px;
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 16px;
+        }
+
+        .eval-list {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
+        .eval-item {
+            border-bottom: 1px solid #f0f1f5;
+            padding: 12px 14px;
+            line-height: 1.5;
+        }
+
+        .eval-item:last-child { border-bottom: none; }
+
+        .eval-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }
+
+        .stars {
+            color: #faad14;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        .dim-badge {
+            display: inline-flex;
+            align-items: center;
+            height: 22px;
+            border-radius: 11px;
+            background: #eef4ff;
+            color: var(--primary);
+            font-size: 12px;
+            padding: 0 8px;
+        }
+
+        .eval-time {
+            font-size: 12px;
+            color: #86909c;
+        }
+
+        .eval-content {
+            color: #4e5969;
+            font-size: 13px;
+            white-space: normal;
+        }
+
+        .chart-box {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .chart-title {
+            margin: 0 0 8px;
+            color: #303133;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        #scoreChart {
+            width: 100%;
+            height: 360px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show { display: flex; }
+
+        .modal-panel {
+            width: 100%;
+            max-width: 420px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            background: #f7f8fa;
+        }
+
+        .modal-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: #86909c;
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 16px 18px;
+            color: #4e5969;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 18px;
+            border-top: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .toast-wrap {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast-item {
+            min-width: 260px;
+            max-width: 420px;
+            background: #fff;
+            border: 1px solid #e5e6eb;
+            border-left: 4px solid var(--primary);
+            border-radius: 8px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+            padding: 10px 12px;
+            color: #1f2329;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .toast-success { border-left-color: var(--success); }
+        .toast-error { border-left-color: var(--danger); }
+
+        @media (max-width: 1200px) {
+            .detail-body { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 992px) {
+            .page-wrap { padding: 14px; }
+            .toolbar-field,
+            .date-range .date-base,
+            .input-base { width: 100%; min-width: 100%; }
+            .toolbar-left,
+            .toolbar-right { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div class="d-flex align-items-center gap-2">
+            <a href="admin_index_operator.html" class="btn btn-outline-secondary btn-sm" target="_top" id="backBtn">
+                <i class="bi bi-chevron-left"></i>
+                返回
+            </a>
+            <h1 class="page-title">菜品评价管理</h1>
+        </div>
+    </div>
+
+    <section class="toolbar-card">
+        <div class="toolbar-left">
+            <div class="toolbar-field">
+                <label for="keywordInput">菜品名称</label>
+                <input class="input-base" id="keywordInput" placeholder="输入关键词">
+            </div>
+            <div class="toolbar-field">
+                <label>评分范围</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input class="input-base" id="minScoreInput" type="number" min="1" max="10" step="0.1" placeholder="最小值">
+                    <span style="color:#86909c;">-</span>
+                    <input class="input-base" id="maxScoreInput" type="number" min="1" max="10" step="0.1" placeholder="最大值">
+                </div>
+            </div>
+            <div class="toolbar-field">
+                <label>日期范围</label>
+                <div class="date-range">
+                    <input class="date-base" id="startDateInput" type="date">
+                    <span style="color:#86909c;">至</span>
+                    <input class="date-base" id="endDateInput" type="date">
+                </div>
+            </div>
+            <button class="btn-primary-blue" id="filterBtn">筛选</button>
+            <button class="btn-gray" id="resetBtn">重置</button>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn-primary-blue" id="generateBtn">生成测试数据</button>
+            <button class="btn-green" id="exportBtn">导出数据</button>
+        </div>
+    </section>
+
+    <section class="panel-card">
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>菜品名称</th>
+                    <th>窗口</th>
+                    <th>平均分</th>
+                    <th>评价数</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="tableBody">
+                <tr><td colspan="6" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-footer">
+            <small id="countText">共 0 条</small>
+            <div class="pager-wrap" id="pagerWrap"></div>
+        </div>
+    </section>
+
+    <section class="detail-panel" id="detailPanel">
+        <div class="detail-head">
+            <h3 class="detail-title" id="detailTitle">评价详情</h3>
+            <div class="tab-wrap">
+                <button class="btn-ghost active" data-detail-tab="all">全部</button>
+                <button class="btn-ghost" data-detail-tab="food">食品</button>
+                <button class="btn-ghost" data-detail-tab="env">环境</button>
+                <button class="btn-ghost" data-detail-tab="service">服务</button>
+            </div>
+        </div>
+        <div class="detail-body">
+            <div class="eval-list" id="detailList"></div>
+            <div class="chart-box">
+                <h4 class="chart-title">评分分布统计</h4>
+                <div id="scoreChart"></div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="modal-overlay" id="confirmModal" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h3 class="modal-title">确认操作</h3>
+            <button class="modal-close" type="button" id="confirmCloseBtn">×</button>
+        </div>
+        <div class="modal-body" id="confirmMessage">确认执行该操作吗？</div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" id="confirmCancelBtn">取消</button>
+            <button class="btn-primary-blue" type="button" id="confirmOkBtn">确认</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script>
+    const state = {
+        page: 1,
+        pageSize: 10,
+        allRows: [],
+        filteredRows: [],
+        activeDishId: null,
+        activeDishName: '',
+        detailRows: [],
+        detailTab: 'all',
+        detailCache: {},
+        confirmAction: null
+    };
+
+    const endpoints = {
+        stats: ['/api/dish-evaluation/stats', '/api/admin/dish_evaluations'],
+        detail: (dishId) => [`/api/dish-evaluation/list?dish_id=${dishId}`, `/api/admin/dish_evaluations/${dishId}/details`],
+        generate: ['/api/dish-evaluation/generate-test-data'],
+        generateFallbackSeed: ['/api/admin/operator/seed_test_data'],
+        export: ['/api/dish-evaluation/export', '/api/admin/operator/dashboard/export'],
+        dishes: ['/api/admin/dishes'],
+        createDish: ['/api/admin/dishes'],
+        submitEval: ['/api/evaluation/save']
+    };
+
+    function resolveApiBase() {
+        if (window.Common && window.Common.config && window.Common.config.apiBaseUrl) {
+            return window.Common.config.apiBaseUrl;
+        }
+        if (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) {
+            return API_BASE_URL;
+        }
+        if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+            if (window.location.port === '5500' || window.location.port === '8000') {
+                return 'http://127.0.0.1:5000/api';
+            }
+        }
+        return '/api';
+    }
+
+    const API_BASE = resolveApiBase();
+    let scoreChart = null;
+
+    function toAbsolute(path) {
+        if (/^https?:\/\//i.test(path)) return path;
+        if (path.startsWith('/api')) {
+            return `${API_BASE.replace(/\/api$/, '')}${path}`;
+        }
+        return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+    }
+
+    function showToast(message, type = 'success') {
+        const wrap = document.getElementById('toastWrap');
+        const el = document.createElement('div');
+        el.className = `toast-item ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+        el.textContent = message;
+        wrap.appendChild(el);
+        setTimeout(() => el.remove(), 3200);
+    }
+
+    function setButtonLoading(button, loading, loadingText, idleText) {
+        if (!button) return;
+        if (loading) {
+            button.classList.add('btn-loading');
+            button.disabled = true;
+            button.dataset.idleText = idleText || button.textContent;
+            button.textContent = loadingText;
+        } else {
+            button.classList.remove('btn-loading');
+            button.disabled = false;
+            button.textContent = button.dataset.idleText || idleText || button.textContent;
+        }
+    }
+
+    async function requestWithFallback(paths, options = {}, responseType = 'json') {
+        let lastError = null;
+        for (let i = 0; i < paths.length; i += 1) {
+            const path = paths[i];
+            const url = toAbsolute(path);
+            try {
+                const response = await fetch(url, { credentials: 'include', ...options });
+                if (response.status === 404 && i < paths.length - 1) {
+                    continue;
+                }
+                if (responseType === 'blob') {
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(text || `HTTP ${response.status}`);
+                    }
+                    return {
+                        ok: true,
+                        data: await response.blob(),
+                        source: path,
+                        headers: response.headers
+                    };
+                }
+
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = { code: response.status, msg: `服务器响应异常 (${response.status})` };
+                }
+                if (!response.ok) {
+                    data.code = data.code || response.status;
+                }
+                return { ok: true, data, source: path };
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        return { ok: false, error: lastError || new Error('请求失败') };
+    }
+
+    function normalizeStatsRows(payload) {
+        const rows = payload?.data?.list || payload?.data || payload?.list || [];
+        if (!Array.isArray(rows)) return [];
+        return rows.map((row) => ({
+            id: Number(row.id),
+            name: row.name || row.dish_name || '-',
+            window_name: row.window_name || '-',
+            window_id: Number(row.window_id || 0),
+            avg_score: Number(row.avg_score || row.average_score || 0),
+            eval_count: Number(row.eval_count || row.review_count || 0)
+        }));
+    }
+
+    function normalizeDetailRows(payload) {
+        const rows = payload?.data?.list || payload?.data || payload?.list || [];
+        if (!Array.isArray(rows)) return [];
+        return rows.map((row) => ({
+            id: row.id,
+            type: row.type || 'food',
+            avg_score: Number(row.avg_score || row.score || 0),
+            content: row.remark || row.content || '',
+            create_time: row.create_time || '-',
+            scores: row.scores || {}
+        }));
+    }
+
+    function mapDetailType(type) {
+        const map = { food: '食品', env: '环境', service: '服务' };
+        return map[type] || '全部';
+    }
+
+    function scoreClass(score) {
+        if (score >= 4.5) return 'high';
+        if (score >= 3) return 'mid';
+        return 'low';
+    }
+
+    function formatStars(score) {
+        const value = Math.max(1, Math.min(10, Math.round(Number(score || 0))));
+        return `${'★'.repeat(value)}${'☆'.repeat(10 - value)}`;
+    }
+
+    function getCurrentFilter() {
+        return {
+            keyword: document.getElementById('keywordInput').value.trim(),
+            minScore: document.getElementById('minScoreInput').value.trim(),
+            maxScore: document.getElementById('maxScoreInput').value.trim(),
+            startDate: document.getElementById('startDateInput').value,
+            endDate: document.getElementById('endDateInput').value
+        };
+    }
+
+    function showConfirm(message, action) {
+        state.confirmAction = action;
+        document.getElementById('confirmMessage').textContent = message;
+        const modal = document.getElementById('confirmModal');
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeConfirm() {
+        const modal = document.getElementById('confirmModal');
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        state.confirmAction = null;
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        const total = state.filteredRows.length;
+        document.getElementById('countText').textContent = `共 ${total} 条`;
+
+        if (!total) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-row">暂无菜品评价数据，请生成测试数据或导入数据</td></tr>';
+            renderPager();
+            return;
+        }
+
+        const start = (state.page - 1) * state.pageSize;
+        const end = start + state.pageSize;
+        const rows = state.filteredRows.slice(start, end);
+
+        tbody.innerHTML = rows.map((row) => `
+            <tr>
+                <td>${row.id}</td>
+                <td>${row.name}</td>
+                <td>${row.window_name || '-'}</td>
+                <td><span class="score-text ${scoreClass(row.avg_score)}">${row.avg_score.toFixed(2)}</span></td>
+                <td>${row.eval_count}</td>
+                <td>
+                    <button class="link-btn" onclick="toggleDetailPanel(${row.id}, '${String(row.name).replace(/'/g, "&#39;")}')">查看详情</button>
+                </td>
+            </tr>
+        `).join('');
+
+        renderPager();
+    }
+
+    function renderPager() {
+        const wrap = document.getElementById('pagerWrap');
+        const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / state.pageSize));
+        const page = Math.min(state.page, totalPages);
+        state.page = page;
+
+        let html = `<button class="pager-btn" onclick="changePage(${page - 1})" ${page <= 1 ? 'disabled' : ''}>上一页</button>`;
+        for (let i = 1; i <= totalPages; i += 1) {
+            if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) {
+                html += `<button class="pager-btn ${i === page ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+            }
+        }
+        html += `<button class="pager-btn" onclick="changePage(${page + 1})" ${page >= totalPages ? 'disabled' : ''}>下一页</button>`;
+        wrap.innerHTML = html;
+    }
+
+    window.changePage = function changePage(page) {
+        const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / state.pageSize));
+        if (page < 1 || page > totalPages) return;
+        state.page = page;
+        renderTable();
+    };
+
+    async function fetchDetails(dishId) {
+        if (state.detailCache[dishId]) {
+            return state.detailCache[dishId];
+        }
+        const result = await requestWithFallback(endpoints.detail(dishId));
+        if (!result.ok || (result.data.code && result.data.code !== 200)) {
+            return [];
+        }
+        const rows = normalizeDetailRows(result.data);
+        state.detailCache[dishId] = rows;
+        return rows;
+    }
+
+    async function filterByDateRange(rows, startDate, endDate) {
+        if (!startDate && !endDate) return rows;
+        const start = startDate ? new Date(`${startDate}T00:00:00`).getTime() : -Infinity;
+        const end = endDate ? new Date(`${endDate}T23:59:59`).getTime() : Infinity;
+
+        const checks = await Promise.all(rows.map(async (row) => {
+            const detail = await fetchDetails(row.id);
+            const matched = detail.some((item) => {
+                const time = new Date(String(item.create_time).replace(/-/g, '/')).getTime();
+                if (Number.isNaN(time)) return false;
+                return time >= start && time <= end;
+            });
+            return matched ? row : null;
+        }));
+        return checks.filter(Boolean);
+    }
+
+    async function loadStats() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">加载中...</td></tr>';
+
+        const filter = getCurrentFilter();
+        const query = new URLSearchParams();
+        if (filter.keyword) query.set('keyword', filter.keyword);
+        if (filter.minScore) query.set('min_score', filter.minScore);
+        if (filter.maxScore) query.set('max_score', filter.maxScore);
+        if (filter.startDate && filter.endDate) {
+            query.set('start_date', filter.startDate);
+            query.set('end_date', filter.endDate);
+            query.set('date', `${filter.startDate},${filter.endDate}`);
+        } else if (filter.startDate || filter.endDate) {
+            query.set('date', filter.startDate || filter.endDate);
+        }
+        query.set('page', '1');
+        query.set('limit', '500');
+
+        const paths = endpoints.stats.map((p) => `${p}?${query.toString()}`);
+        const result = await requestWithFallback(paths);
+        if (!result.ok) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast('评价列表加载失败', 'error');
+            return;
+        }
+        if (result.data.code && result.data.code !== 200) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast(result.data.msg || '评价列表加载失败', 'error');
+            return;
+        }
+
+        let rows = normalizeStatsRows(result.data);
+        if (result.source === '/api/admin/dish_evaluations' && (filter.startDate || filter.endDate)) {
+            rows = await filterByDateRange(rows, filter.startDate, filter.endDate);
+        }
+
+        state.allRows = rows;
+        state.filteredRows = rows;
+        state.page = 1;
+        renderTable();
+    }
+
+    function filteredDetailRows() {
+        return state.detailRows.filter((item) => state.detailTab === 'all' || item.type === state.detailTab);
+    }
+
+    function renderDetailRows() {
+        const box = document.getElementById('detailList');
+        const rows = filteredDetailRows();
+
+        if (!rows.length) {
+            box.innerHTML = '<div class="empty-row" style="padding:20px;">暂无该维度评价数据</div>';
+            renderChart([]);
+            return;
+        }
+
+        box.innerHTML = rows.map((row) => {
+            const score = Number(row.avg_score || 0);
+            const content = row.content || '暂无评价内容';
+            return `
+                <article class="eval-item">
+                    <div class="eval-top">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="stars">${formatStars(score)}</span>
+                            <span style="font-size:12px;color:#4e5969;">${score.toFixed(1)} 分</span>
+                            <span class="dim-badge">${mapDetailType(row.type)}</span>
+                        </div>
+                        <span class="eval-time">${row.create_time}</span>
+                    </div>
+                    <div class="eval-content">${content}</div>
+                </article>
+            `;
+        }).join('');
+
+        renderChart(rows);
+    }
+
+    function renderChart(rows) {
+        if (!scoreChart) {
+            scoreChart = echarts.init(document.getElementById('scoreChart'));
+        }
+
+        const buckets = new Array(10).fill(0);
+        rows.forEach((row) => {
+            const idx = Math.max(1, Math.min(10, Math.round(Number(row.avg_score || 0)))) - 1;
+            buckets[idx] += 1;
+        });
+
+        scoreChart.setOption({
+            color: ['#1677ff'],
+            grid: { left: 36, right: 16, top: 30, bottom: 30 },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            xAxis: {
+                type: 'category',
+                data: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+                axisLine: { lineStyle: { color: '#dcdfe6' } },
+                axisLabel: { color: '#606266' }
+            },
+            yAxis: {
+                type: 'value',
+                minInterval: 1,
+                axisLine: { show: false },
+                splitLine: { lineStyle: { color: '#f0f1f5' } },
+                axisLabel: { color: '#606266' }
+            },
+            series: [{
+                type: 'bar',
+                data: buckets,
+                barWidth: '52%',
+                itemStyle: { borderRadius: [4, 4, 0, 0] }
+            }]
+        });
+    }
+
+    window.toggleDetailPanel = async function toggleDetailPanel(dishId, dishName) {
+        const panel = document.getElementById('detailPanel');
+        if (state.activeDishId === dishId && panel.classList.contains('show')) {
+            panel.classList.remove('show');
+            state.activeDishId = null;
+            state.detailRows = [];
+            return;
+        }
+
+        state.activeDishId = dishId;
+        state.activeDishName = dishName;
+        state.detailTab = 'all';
+        document.querySelectorAll('[data-detail-tab]').forEach((button) => {
+            button.classList.toggle('active', button.getAttribute('data-detail-tab') === 'all');
+        });
+        document.getElementById('detailTitle').textContent = `${dishName} 评价详情`;
+        document.getElementById('detailList').innerHTML = '<div class="empty-row" style="padding:20px;">加载中...</div>';
+        panel.classList.add('show');
+
+        const details = await fetchDetails(dishId);
+        state.detailRows = details;
+        renderDetailRows();
+    };
+
+    async function tryGenerateByLocal() {
+        const listRes = await requestWithFallback(['/api/admin/dishes?page=1&limit=300']);
+        if (!listRes.ok || (listRes.data.code && listRes.data.code !== 200)) {
+            throw new Error('无法读取菜品基础数据');
+        }
+
+        let dishes = normalizeStatsRows({ data: { list: listRes.data.data?.list || [] } }).map((row, idx) => ({
+            dish_id: row.id,
+            dish_name: row.name,
+            window_id: Number(listRes.data.data.list[idx].window_id || row.window_id || 1)
+        }));
+
+        if (!dishes.length) {
+            throw new Error('暂无可关联菜品，请先配置菜品数据');
+        }
+
+        const windowIds = [...new Set(dishes.map((d) => d.window_id).filter((v) => v > 0))];
+        if (!windowIds.length) throw new Error('未找到可用窗口');
+
+        const dishNamePool = ['红烧肉', '番茄炒蛋', '宫保鸡丁', '鱼香肉丝', '麻婆豆腐', '糖醋里脊', '青椒肉丝', '香菇滑鸡', '清炒时蔬', '土豆炖牛腩'];
+        if (dishes.length < 10) {
+            for (let i = dishes.length; i < 10; i += 1) {
+                const payload = {
+                    name: `${dishNamePool[i % dishNamePool.length]}_测${Date.now().toString().slice(-4)}${i}`,
+                    window_id: windowIds[i % windowIds.length],
+                    price: Number((10 + Math.random() * 12).toFixed(2)),
+                    category: '热菜',
+                    portion: '常规',
+                    is_active: true
+                };
+                const createRes = await requestWithFallback(endpoints.createDish, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!createRes.ok || (createRes.data.code && createRes.data.code !== 200)) {
+                    continue;
+                }
+            }
+
+            const refresh = await requestWithFallback(['/api/admin/dishes?page=1&limit=300']);
+            if (refresh.ok && (!refresh.data.code || refresh.data.code === 200)) {
+                dishes = (refresh.data.data?.list || []).map((row) => ({
+                    dish_id: row.id,
+                    dish_name: row.name,
+                    window_id: Number(row.window_id || 1)
+                }));
+            }
+        }
+
+        dishes = dishes.slice(0, 10);
+        if (dishes.length < 10) {
+            throw new Error('测试菜品数量不足，无法生成完整样本');
+        }
+
+        const sampleFood = ['口味稳定，分量足，符合预期。', '今天偏咸，建议少放盐。', '搭配合理，米饭口感不错。', '菜温度合适，出餐速度快。', '有改进空间，整体中规中矩。'];
+        const sampleEnv = ['用餐区较干净，桌面清理及时。', '高峰期地面略湿滑，建议加强清洁。', '整体通风良好，噪音可接受。'];
+        const sampleService = ['窗口服务热情，沟通顺畅。', '高峰期响应稍慢，但态度良好。', '打餐速度快，服务规范。'];
+
+        const scorePool = [];
+        for (let i = 0; i < 5; i += 1) scorePool.push(1 + Math.floor(Math.random() * 2));
+        for (let i = 0; i < 10; i += 1) scorePool.push(3 + Math.floor(Math.random() * 2));
+        for (let i = 0; i < 20; i += 1) scorePool.push(5 + Math.floor(Math.random() * 3));
+        for (let i = 0; i < 15; i += 1) scorePool.push(8 + Math.floor(Math.random() * 3));
+
+        for (let i = scorePool.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [scorePool[i], scorePool[j]] = [scorePool[j], scorePool[i]];
+        }
+
+        let successCount = 0;
+        for (let i = 0; i < 50; i += 1) {
+            const dish = dishes[i % dishes.length];
+            const score = scorePool[i];
+            const daysAgo = Math.floor(Math.random() * 30);
+            const minuteOffset = Math.floor(Math.random() * 720);
+            const date = new Date(Date.now() - (daysAgo * 24 * 60 + minuteOffset) * 60 * 1000);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const mi = String(date.getMinutes()).padStart(2, '0');
+
+            const payload = {
+                canteen_id: 1,
+                window_id: dish.window_id,
+                buy_time: `${yyyy}-${mm}-${dd}T${hh}:${mi}`,
+                identity_type: 'student',
+                grade: '大三',
+                age: 21,
+                dining_years: 3,
+                env_scores: { cleanliness: Math.max(1, Math.min(10, score + (Math.random() > 0.5 ? 1 : -1))), noise: Math.max(1, Math.min(10, score)) },
+                service_scores: { attitude: Math.max(1, Math.min(10, score + (Math.random() > 0.5 ? 1 : 0))), speed: Math.max(1, Math.min(10, score)) },
+                safety_scores: { hygiene: Math.max(1, Math.min(10, score)) },
+                env_comment: sampleEnv[i % sampleEnv.length],
+                service_comment: sampleService[i % sampleService.length],
+                dishes: [{
+                    dish_id: dish.dish_id,
+                    dish_name: dish.dish_name,
+                    food_scores: { taste: score, portion: Math.max(1, Math.min(10, score + (Math.random() > 0.5 ? 1 : -1))) },
+                    remark: sampleFood[i % sampleFood.length]
+                }]
+            };
+
+            const submitRes = await requestWithFallback(endpoints.submitEval, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (submitRes.ok && (!submitRes.data.code || submitRes.data.code === 200)) {
+                successCount += 1;
+            }
+        }
+
+        if (successCount < 45) {
+            throw new Error('测试数据生成不完整');
+        }
+    }
+
+    async function generateTestData() {
+        const btn = document.getElementById('generateBtn');
+        setButtonLoading(btn, true, '生成中...', '生成测试数据');
+        try {
+            const direct = await requestWithFallback(endpoints.generate, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ count: 50 })
+            });
+
+            if (direct.ok && (!direct.data.code || direct.data.code === 200)) {
+                showToast('测试数据生成成功');
+                await loadStats();
+                return;
+            }
+
+            try {
+                await tryGenerateByLocal();
+                showToast('测试数据生成成功');
+                await loadStats();
+                return;
+            } catch (localError) {
+                const seed = await requestWithFallback(endpoints.generateFallbackSeed, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: false })
+                });
+                if (seed.ok && (!seed.data.code || seed.data.code === 200)) {
+                    showToast('测试数据生成成功');
+                    await loadStats();
+                    return;
+                }
+                throw localError;
+            }
+        } catch (error) {
+            showToast(error.message || '测试数据生成失败，请稍后重试', 'error');
+        } finally {
+            setButtonLoading(btn, false, '生成中...', '生成测试数据');
+        }
+    }
+
+    function tryGetFileName(headers, fallbackName) {
+        const disposition = headers?.get?.('Content-Disposition') || headers?.get?.('content-disposition') || '';
+        const match = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
+        if (match && match[1]) {
+            return decodeURIComponent(match[1].replace(/\"/g, '').trim());
+        }
+        return fallbackName;
+    }
+
+    function exportByClientCsv() {
+        const rows = [];
+        rows.push(['菜品ID', '菜品名称', '窗口', '评价维度', '评分', '评价内容', '评价时间']);
+
+        const tasks = state.allRows.map(async (dish) => {
+            const details = await fetchDetails(dish.id);
+            details.forEach((item) => {
+                rows.push([
+                    dish.id,
+                    dish.name,
+                    dish.window_name,
+                    mapDetailType(item.type),
+                    Number(item.avg_score || 0).toFixed(1),
+                    (item.content || '').replace(/\r?\n/g, ' '),
+                    item.create_time || ''
+                ]);
+            });
+        });
+
+        return Promise.all(tasks).then(() => {
+            const content = rows.map((row) => row.map((col) => `"${String(col || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `dish-evaluation-export-${Date.now()}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    async function exportData() {
+        const btn = document.getElementById('exportBtn');
+        setButtonLoading(btn, true, '导出中...', '导出数据');
+        try {
+            const result = await requestWithFallback(endpoints.export, { method: 'GET' }, 'blob');
+            if (result.ok) {
+                const url = URL.createObjectURL(result.data);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = tryGetFileName(result.headers, `dish-evaluation-export-${Date.now()}.xlsx`);
+                link.click();
+                URL.revokeObjectURL(url);
+                showToast('导出成功');
+                return;
+            }
+
+            await exportByClientCsv();
+            showToast('导出成功');
+        } catch (error) {
+            showToast('导出失败，请稍后重试', 'error');
+        } finally {
+            setButtonLoading(btn, false, '导出中...', '导出数据');
+        }
+    }
+
+    function bindEvents() {
+        document.getElementById('filterBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('filterBtn');
+            setButtonLoading(btn, true, '筛选中...', '筛选');
+            await loadStats();
+            setButtonLoading(btn, false, '筛选中...', '筛选');
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('resetBtn');
+            setButtonLoading(btn, true, '重置中...', '重置');
+            document.getElementById('keywordInput').value = '';
+            document.getElementById('minScoreInput').value = '';
+            document.getElementById('maxScoreInput').value = '';
+            document.getElementById('startDateInput').value = '';
+            document.getElementById('endDateInput').value = '';
+            state.detailCache = {};
+            await loadStats();
+            setButtonLoading(btn, false, '重置中...', '重置');
+        });
+
+        document.getElementById('generateBtn').addEventListener('click', () => {
+            showConfirm('确认生成50条测试评价数据吗？该操作会写入数据库。', generateTestData);
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', exportData);
+
+        document.querySelectorAll('[data-detail-tab]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const tab = button.getAttribute('data-detail-tab');
+                state.detailTab = tab;
+                document.querySelectorAll('[data-detail-tab]').forEach((btn) => {
+                    btn.classList.toggle('active', btn.getAttribute('data-detail-tab') === tab);
+                });
+                renderDetailRows();
+            });
+        });
+
+        document.getElementById('confirmCloseBtn').addEventListener('click', closeConfirm);
+        document.getElementById('confirmCancelBtn').addEventListener('click', closeConfirm);
+        document.getElementById('confirmOkBtn').addEventListener('click', async () => {
+            const action = state.confirmAction;
+            closeConfirm();
+            if (typeof action === 'function') {
+                await action();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeConfirm();
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        if (window.self !== window.top) {
+            const back = document.getElementById('backBtn');
+            if (back) back.style.display = 'none';
+        }
+
+        bindEvents();
+        await loadStats();
+    });
+
+    window.addEventListener('resize', () => {
+        if (scoreChart) scoreChart.resize();
+    });
+</script>
+</body>
+</html>

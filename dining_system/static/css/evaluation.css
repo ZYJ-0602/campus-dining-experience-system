@@ -1,0 +1,216 @@
+:root {
+    --primary-color: #FF7F24;
+    --primary-light: #FFF5EB;
+    --text-dark: #333;
+    --bg-color: #f8f9fa;
+}
+
+body {
+    background-color: var(--bg-color);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    padding-bottom: 80px;
+}
+
+/* 卡片样式 */
+.eval-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border-left: 4px solid transparent;
+}
+
+.eval-card.active {
+    border-left-color: var(--primary-color);
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-dark);
+    display: flex;
+    align-items: center;
+}
+
+.card-title i {
+    color: var(--primary-color);
+    margin-right: 8px;
+    font-size: 20px;
+}
+
+/* 评分条 */
+.range-wrap {
+    margin-bottom: 15px;
+}
+
+.range-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    font-size: 14px;
+    color: #666;
+}
+
+.score-value {
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.custom-range {
+    width: 100%;
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.custom-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border: 2px solid var(--primary-color);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.custom-range::-webkit-slider-thumb:active {
+    transform: scale(1.2);
+}
+
+/* 菜品选择 */
+.dish-select-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dish-checkbox {
+    display: none;
+}
+
+.dish-label {
+    padding: 8px 15px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.dish-checkbox:checked + .dish-label {
+    background: var(--primary-light);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+/* 提交按钮 */
+.submit-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    padding: 15px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    z-index: 1000;
+}
+
+.btn-primary-custom {
+    background-color: var(--primary-color);
+    border: none;
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 8px;
+}
+
+.btn-primary-custom:hover {
+    background-color: #e66a1f;
+}
+
+/* 动态显示的区域 */
+.hidden-section {
+    display: none;
+}
+
+/* 优化输入框 */
+.auto-height-textarea {
+    min-height: 80px;
+    max-height: 200px; /* 最大高度 */
+    overflow-y: hidden; /* 默认隐藏滚动条 */
+    resize: none; /* 禁止手动拖拽 */
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    padding: 10px;
+    background-color: #fcfcfc;
+    width: 100%;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    line-height: 1.5;
+}
+
+.auto-height-textarea:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(255, 127, 36, 0.1);
+    background-color: #fff;
+    outline: none;
+}
+
+/* 菜品图片预览 */
+.dish-img-preview {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-right: 12px;
+    border: 1px solid #eee;
+}
+
+.dish-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.dish-info {
+    display: flex;
+    align-items: center;
+}
+
+.dish-name-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}
+
+.dish-score-badge {
+    background: var(--primary-light);
+    color: var(--primary-color);
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    font-weight: 600;
+}
+
+.delete-dish-btn {
+    color: #999;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 5px;
+}
+
+.delete-dish-btn:hover {
+    color: #dc3545;
+}

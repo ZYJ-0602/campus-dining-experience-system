@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>关于我们 - 校园食堂点评系统</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #ff9933;
+        }
+
+        body {
+            background: #f9f9f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-bottom: 16px;
+        }
+
+        .header-nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            height: 52px;
+            background: linear-gradient(135deg, #ff9933 0%, #ffb366 100%);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
+        }
+
+        .back-btn {
+            color: #fff;
+            font-size: 22px;
+            text-decoration: none;
+        }
+
+        .page-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .container-wrap {
+            padding: 12px 12px 0;
+        }
+
+        .intro {
+            border: 1px solid #f0f0f0;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+            background: #fff;
+        }
+
+        .intro-head {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .intro-head i {
+            color: var(--primary-color);
+            font-size: 15px;
+        }
+
+        .intro-text {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.7;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-nav">
+        <a href="user_center.html" class="back-btn" aria-label="返回"><i class="bi bi-chevron-left"></i></a>
+        <h1 class="page-title">关于我们</h1>
+        <span style="width:22px;"></span>
+    </div>
+
+    <div class="container-wrap">
+        <div class="intro">
+            <div class="intro-head"><i class="bi bi-lightbulb"></i>设计初衷</div>
+            <p class="intro-text">校园食堂点评系统希望把师生的真实用餐体验转化为可追踪、可改进的数据，帮助食堂持续优化菜品、服务与环境。</p>
+        </div>
+
+        <div class="intro">
+            <div class="intro-head"><i class="bi bi-list-check"></i>核心功能</div>
+            <p class="intro-text">系统支持菜品评分、窗口评价、食堂排行、笔记发布、意见反馈和个人中心管理，形成完整的“反馈-改进-复盘”闭环。</p>
+        </div>
+
+        <div class="intro">
+            <div class="intro-head"><i class="bi bi-people"></i>使用场景</div>
+            <p class="intro-text">学生可以快速记录就餐体验，管理者可查看趋势与问题分布，及时对窗口服务、食品安全和环境细节进行针对性优化。</p>
+        </div>
+
+        <div class="intro mb-0">
+            <div class="intro-head"><i class="bi bi-shield-check"></i>服务承诺</div>
+            <p class="intro-text">我们持续关注可用性和数据真实性，确保系统交互简洁、反馈通道清晰，让每一条建议都更容易被看见和处理。</p>
+        </div>
+    </div>
+</body>
+</html>

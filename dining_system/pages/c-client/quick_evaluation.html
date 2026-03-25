@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快速点评 - 校园食堂用餐体验点评系统</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="../../static/css/common.css" rel="stylesheet">
+    <link href="../../static/css/evaluation.css" rel="stylesheet">
+    <style>
+        /* 全局样式覆盖 */
+        :root {
+            --primary-color: #FF7A00;
+            --secondary-color: #f8f9fa;
+            --text-color: #333;
+            --border-color: #eee;
+        }
+
+        /* 模块卡片 */
+        .module-card {
+            background: #fff;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        /* 折叠面板头部 */
+        .module-header {
+            padding: 15px 20px;
+            background: #fff;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .module-header:hover {
+            background: #fdfdfd;
+        }
+        
+        .module-header.active {
+            background: #fff8f0;
+            border-bottom-color: #ffe0cc;
+        }
+        
+        .module-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            margin: 0;
+            border: none;
+            padding: 0;
+        }
+
+        /* 进度条与分数 */
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .mini-score {
+            font-size: 14px;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .progress-circle {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            position: relative;
+        }
+        
+        .progress-circle.done {
+            border-color: var(--primary-color);
+            background: var(--primary-color);
+        }
+        
+        .progress-circle.done::after {
+            content: "✓";
+            color: #fff;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+        }
+
+        /* 模块内容 */
+        .module-body {
+            padding: 20px;
+            display: none;
+            background: #fff;
+        }
+        
+        .module-body.show {
+            display: block;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 评分控件组合 */
+        .score-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .range-slider {
+            flex: 3;
+            height: 6px;
+            -webkit-appearance: none;
+            background: #e9ecef;
+            border-radius: 3px;
+            outline: none;
+        }
+        
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        
+        .range-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        
+        .number-input {
+            flex: 1;
+            max-width: 80px;
+            text-align: center;
+            font-weight: bold;
+            color: var(--primary-color);
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 4px;
+        }
+        
+        .score-label {
+            width: 80px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 菜品卡片优化 */
+        .dish-card {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #fcfcfc;
+            position: relative;
+        }
+
+        .upload-box {
+            width: 80px;
+            height: 80px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #999;
+            font-size: 24px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .upload-box:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .upload-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .upload-del {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            width: 20px;
+            height: 20px;
+            text-align: center;
+            line-height: 20px;
+            font-size: 12px;
+            display: none;
+        }
+        
+        .upload-box:hover .upload-del {
+            display: block;
+        }
+
+        .auto-resize-textarea {
+            width: 100%;
+            min-height: 120px;
+            max-height: 400px;
+            padding: 12px 16px;
+            box-sizing: border-box;
+            border: 1px solid #E5E5E5;
+            border-radius: 8px;
+            resize: vertical;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: border-color 0.2s;
+            outline: none;
+            margin-bottom: 15px;
+        }
+        .auto-resize-textarea:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(255, 122, 0, 0.1);
+        }
+
+        .dish-select-disabled {
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        /* 悬浮总分栏 */
+        .sticky-score-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transform: translateY(-100%);
+            transition: transform 0.3s;
+        }
+        
+        .sticky-score-bar.visible {
+            transform: translateY(0);
+        }
+        
+        .total-score-badge {
+            background: var(--primary-color);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 悬浮总分栏 -->
+    <div class="sticky-score-bar" id="stickyBar">
+        <div class="d-flex align-items-center gap-3">
+            <span class="fw-bold text-dark">综合评分</span>
+            <span class="total-score-badge" id="stickyTotalScore">0.0</span>
+        </div>
+        <button class="btn btn-sm btn-warning rounded-pill px-3" onclick="document.getElementById('submitBtn').scrollIntoView()">
+            去提交
+        </button>
+    </div>
+
+    <!-- 顶部导航 -->
+    <div class="header-nav">
+        <a href="index.html" class="back-btn"><i class="bi bi-chevron-left"></i></a>
+        <div class="page-title">快速点评</div>
+        <div style="width: 32px;"></div>
+    </div>
+
+    <div class="container py-3" style="margin-top: 50px; padding-bottom: 80px;">
+        <h4 class="text-center mb-4" style="color: #FF7A00; font-weight: bold;">
+            <i class="bi bi-shop me-2"></i>用餐体验全维评价
+        </h4>
+
+        <!-- 综合得分展示 -->
+        <div class="text-center mb-5 mt-4">
+            <div class="d-inline-flex flex-column align-items-center justify-content-center" style="width: 150px; height: 150px; border-radius: 50%; border: 6px solid #FF7A00; background: #fff; box-shadow: 0 4px 15px rgba(255,122,0,0.2);">
+                <span id="mainTotalScore" style="font-size: 56px; font-weight: bold; color: #FF7A00; line-height: 1;">0.0</span>
+            </div>
+        </div>
+
+        <!-- Module 1: 用餐者信息 -->
+        <div class="module-card">
+            <div class="module-header" onclick="toggleModule('userInfoBody')">
+                <div class="module-title"><i class="bi bi-person-badge me-2 text-warning"></i>基本信息</div>
+                <div class="header-status">
+                    <div class="progress-circle" id="userInfoProgress"></div>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+            </div>
+            <div class="module-body show" id="userInfoBody">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4 col-sm-12">
+                        <label class="form-label small text-muted">身份</label>
+                        <select class="form-select" id="identitySelect" onchange="handleIdentityChange(); checkAndSyncUserInfo();">
+                            <option value="student">学生</option>
+                            <option value="teacher">老师</option>
+                            <option value="staff">员工</option>
+                            <option value="visitor">游客</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 col-sm-6" id="gradeContainer">
+                        <label class="form-label small text-muted" id="gradeLabel">年级</label>
+                        <select class="form-select" id="gradeSelect" onchange="checkAndSyncUserInfo()">
+                            <!-- 动态填充 -->
+                        </select>
+                    </div>
+                    <div class="col-md-4 col-sm-6" id="diningYearsContainer">
+                        <label class="form-label small text-muted">在校就餐年限</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="diningYears" placeholder="如：2" min="0" step="1" oninput="checkAndSyncUserInfo()">
+                            <span class="input-group-text">年</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 2: 食堂与菜品 -->
+        <div class="module-card">
+            <div class="module-header" onclick="toggleModule('dishBody')">
+                <div class="module-title"><i class="bi bi-egg-fried me-2 text-warning"></i>菜品评价</div>
+                <div class="header-status">
+                    <span class="mini-score" id="dishTotalScore">0.0分</span>
+                    <div class="progress-circle" id="dishProgress"></div>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+            </div>
+            <div class="module-body" id="dishBody">
+                <!-- 食堂选择 -->
+                <div class="row g-3 mb-4 pb-3 border-bottom">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">选择食堂</label>
+                        <select class="form-select" id="canteenSelect" onchange="loadWindows(); saveDraft();">
+                            <option value="1">北区食堂</option>
+                            <option value="2">南区食堂</option>
+                            <option value="3">清真食堂</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">选择窗口</label>
+                        <select class="form-select" id="windowSelect" onchange="loadDishesForOptions(); saveDraft();" disabled>
+                            <option value="">请选择窗口</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-3" id="dishSectionHead">
+                    <label class="form-label fw-bold mb-0">已点菜品</label>
+                    <button class="btn btn-outline-warning btn-sm rounded-pill" id="addDishBtn" onclick="addDishSection()" disabled>
+                        <i class="bi bi-plus-lg me-1"></i>添加菜品
+                    </button>
+                </div>
+
+                <div id="dishSelectArea" class="dish-select-disabled">
+                    <div id="dishesContainer">
+                    <!-- 动态菜品卡片 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 3: 服务评价 -->
+        <div class="module-card">
+            <div class="module-header" onclick="toggleModule('serviceBody')">
+                <div class="module-title"><i class="bi bi-emoji-smile me-2 text-warning"></i>服务评价</div>
+                <div class="header-status">
+                    <span class="mini-score" id="serviceTotalScore">0.0分</span>
+                    <div class="progress-circle" id="serviceProgress"></div>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+            </div>
+            <div class="module-body" id="serviceBody">
+                <div class="row g-4">
+                    <div class="col-md-12">
+                        <!-- 动态生成评分项 -->
+                        <div id="serviceScoreContainer"></div>
+                        <div class="mt-3">
+                            <label class="form-label small text-muted">服务评价文字（选填）</label>
+                            <textarea class="form-control auto-resize-textarea" id="serviceComment" placeholder="服务评价（选填）..." oninput="adjustTextareaHeight(this); saveDraft()"></textarea>
+                            
+                            <label class="form-label small text-muted mt-2">图片 (最多6张)</label>
+                            <div class="d-flex gap-2 flex-wrap photo-area" id="servicePhotoArea" data-max="6">
+                                <label class="upload-box">
+                                    <input type="file" hidden accept="image/*" onchange="handlePhotoUpload(this)">
+                                    <i class="bi bi-plus-lg"></i>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 4: 环境评价 -->
+        <div class="module-card">
+            <div class="module-header" onclick="toggleModule('envBody')">
+                <div class="module-title"><i class="bi bi-shop me-2 text-warning"></i>环境评价</div>
+                <div class="header-status">
+                    <span class="mini-score" id="envTotalScore">0.0分</span>
+                    <div class="progress-circle" id="envProgress"></div>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+            </div>
+            <div class="module-body" id="envBody">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 text-dark">环境打分</h6>
+                    <button class="btn btn-xs btn-outline-secondary rounded-pill" onclick="alert('查看后厨监控')">
+                        <i class="bi bi-camera-video me-1"></i>后厨透明
+                    </button>
+                </div>
+                <div id="envScoreContainer"></div>
+                <div class="mt-3">
+                    <label class="form-label small text-muted">环境评价文字（选填）</label>
+                    <textarea class="form-control auto-resize-textarea" id="envComment" placeholder="环境评价（选填）..." oninput="adjustTextareaHeight(this); saveDraft()"></textarea>
+                    
+                    <label class="form-label small text-muted mt-2">图片 (最多6张)</label>
+                    <div class="d-flex gap-2 flex-wrap photo-area" id="envPhotoArea" data-max="6">
+                        <label class="upload-box">
+                            <input type="file" hidden accept="image/*" onchange="handlePhotoUpload(this)">
+                            <i class="bi bi-plus-lg"></i>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module 5: 食安评价 -->
+        <div class="module-card">
+            <div class="module-header" onclick="toggleModule('safetyBody')">
+                <div class="module-title"><i class="bi bi-shield-check me-2 text-warning"></i>食品安全评价</div>
+                <div class="header-status">
+                    <span class="mini-score" id="safetyTotalScore">0.0分</span>
+                    <div class="progress-circle" id="safetyProgress"></div>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+            </div>
+            <div class="module-body" id="safetyBody">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 text-dark">食安打分</h6>
+                    <button class="btn btn-xs btn-outline-secondary rounded-pill" onclick="alert('查看检测报告')">
+                        <i class="bi bi-file-earmark-medical me-1"></i>检测报告
+                    </button>
+                </div>
+                <div id="safetyScoreContainer"></div>
+                <div class="mt-3">
+                    <label class="form-label small text-muted">食安评价文字（选填）</label>
+                    <textarea class="form-control auto-resize-textarea" id="safetyComment" placeholder="食品安全评价（选填）..." oninput="adjustTextareaHeight(this); saveDraft()"></textarea>
+                    
+                    <label class="form-label small text-muted mt-2">图片 (最多6张)</label>
+                    <div class="d-flex gap-2 flex-wrap photo-area" id="safetyPhotoArea" data-max="6">
+                        <label class="upload-box">
+                            <input type="file" hidden accept="image/*" onchange="handlePhotoUpload(this)">
+                            <i class="bi bi-plus-lg"></i>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提交按钮 -->
+        <div class="text-center mt-4 mb-5">
+            <div class="d-flex justify-content-center align-items-center gap-3 mb-3">
+                <span class="text-muted">综合评分权重：菜品40% + 服务20% + 环境20% + 食安20%</span>
+            </div>
+            <button class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow rounded-pill" id="submitBtn" onclick="submitEvaluation()">
+                <i class="bi bi-check2-circle me-2"></i>提交评价
+            </button>
+        </div>
+    </div>
+
+    <!-- 菜品模板 -->
+    <template id="dishTemplate">
+        <div class="dish-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div style="flex: 1; margin-right: 15px;">
+                    <select class="form-select dish-select" onchange="handleDishChange(this)">
+                        <option value="">请选择菜品...</option>
+                    </select>
+                </div>
+                <button class="btn btn-link text-danger p-0 dish-remove-btn" onclick="removeDishSection(this)">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+            
+            <div class="row g-3">
+                <!-- 6维度评分 -->
+                <div class="col-12">
+                    <div class="bg-light p-3 rounded">
+                        <div class="row g-3" id="dishScoreRow">
+                            <!-- 动态插入评分项 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-12">
+                    <label class="form-label small text-muted">评价备注 <span class="text-secondary count-tip">(0/500)</span></label>
+                    <textarea class="form-control auto-resize-textarea dish-remark" maxlength="500" placeholder="口味、分量等具体评价..." oninput="adjustTextareaHeight(this); updateCharCount(this);"></textarea>
+                </div>
+                
+                <div class="col-12">
+                    <label class="form-label small text-muted">图片 (最多6张)</label>
+                    <div class="d-flex gap-2 flex-wrap photo-area" data-max="6">
+                        <label class="upload-box">
+                            <input type="file" hidden accept="image/*" onchange="handlePhotoUpload(this)">
+                            <i class="bi bi-plus-lg"></i>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- JavaScript -->
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        let currentDishes = [];
+        const STORAGE_KEY = 'dining_evaluation_draft';
+        const SAVE_INTERVAL = 30000; // 30s
+        let saveTimer = null;
+
+        // 评分维度配置
+        const SCORE_CONFIGS = {
+            dish: [
+                { key: 'color', label: '色泽' },
+                { key: 'aroma', label: '香气' },
+                { key: 'taste', label: '口味' },
+                { key: 'shape', label: '形态' },
+                { key: 'portion', label: '分量' },
+                { key: 'price', label: '性价比' }
+            ],
+            service: [
+                { key: 'attitude', label: '服务态度' },
+                { key: 'speed', label: '出餐速度' },
+                { key: 'dress', label: '着装规范' }
+            ],
+            env: [
+                { key: 'clean', label: '桌面整洁' },
+                { key: 'air', label: '空调效果' },
+                { key: 'hygiene', label: '整体卫生' }
+            ],
+            safety: [
+                { key: 'fresh', label: '食材新鲜' },
+                { key: 'info', label: '公示完整' }
+            ]
+        };
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            // 初始化评分组件结构
+            renderScoreInputs('serviceScoreContainer', SCORE_CONFIGS.service, 'service-score');
+            renderScoreInputs('envScoreContainer', SCORE_CONFIGS.env, 'env-score');
+            renderScoreInputs('safetyScoreContainer', SCORE_CONFIGS.safety, 'safety-score');
+
+            // 恢复或初始化
+            await loadCanteens();
+            updateCascadeState();
+            const hasDraft = await restoreDraft();
+            
+            if (!hasDraft) {
+                handleIdentityChange(); 
+                toggleModule('userInfoBody'); // 展开第一个
+            }
+
+            // 启动自动保存
+            saveTimer = setInterval(saveDraft, SAVE_INTERVAL);
+            
+            // 绑定实时计算事件
+            document.body.addEventListener('input', function(e) {
+                if (e.target.classList.contains('range-slider') || e.target.classList.contains('number-input')) {
+                    calculateTotalScore();
+                }
+            });
+            
+            // 监听滚动显示悬浮栏
+            window.addEventListener('scroll', function() {
+                const bar = document.getElementById('stickyBar');
+                if (window.scrollY > 300) {
+                    bar.classList.add('visible');
+                } else {
+                    bar.classList.remove('visible');
+                }
+            });
+        });
+
+        // 渲染评分输入项 (Range + Number)
+        function renderScoreInputs(containerId, config, className) {
+            const container = document.getElementById(containerId);
+            let html = '';
+            config.forEach(item => {
+                html += `
+                    <div class="score-group">
+                        <div class="score-label">${item.label}</div>
+                        <input type="range" class="range-slider ${className}" min="1" max="10" value="0" data-key="${item.key}" oninput="syncScore(this, 'range')">
+                        <input type="number" class="number-input ${className}" min="1" max="10" placeholder="-" data-key="${item.key}" oninput="syncScore(this, 'number')">
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // 双向绑定逻辑
+        window.syncScore = function(el, source) {
+            const parent = el.closest('.score-group');
+            const range = parent.querySelector('.range-slider');
+            const number = parent.querySelector('.number-input');
+            let val = parseInt(el.value);
+
+            if (source === 'number') {
+                if (isNaN(val)) val = 0;
+                if (val > 10) val = 10;
+                if (val < 1 && el.value !== '') val = 1;
+                range.value = val || 0;
+            } else {
+                number.value = val;
+            }
+            
+            // 视觉反馈：已评分高亮
+            if (val > 0) {
+                range.style.background = `linear-gradient(to right, var(--primary-color) 0%, var(--primary-color) ${(val-1)*11}%, #e9ecef ${(val-1)*11}%, #e9ecef 100%)`;
+            } else {
+                range.style.background = '#e9ecef';
+            }
+            
+            saveDraft();
+        };
+
+        // 折叠面板切换
+        window.toggleModule = function(bodyId) {
+            const body = document.getElementById(bodyId);
+            const header = body.previousElementSibling;
+            
+            // 关闭其他
+            document.querySelectorAll('.module-body').forEach(b => {
+                if (b.id !== bodyId) {
+                    b.classList.remove('show');
+                    b.previousElementSibling.classList.remove('active');
+                }
+            });
+            
+            // 切换当前
+            if (body.classList.contains('show')) {
+                body.classList.remove('show');
+                header.classList.remove('active');
+            } else {
+                body.classList.add('show');
+                header.classList.add('active');
+            }
+        };
+
+        // 实时计算总分
+        function calculateTotalScore() {
+            // 1. 菜品总分 (所有菜品平均分)
+            let totalDishScore = 0;
+            let dishCount = 0;
+            document.querySelectorAll('.dish-card').forEach(card => {
+                let cardTotal = 0;
+                let validCount = 0;
+                card.querySelectorAll('.dish-score.number-input').forEach(input => {
+                    const val = parseInt(input.value) || 0;
+                    if (val > 0) {
+                        cardTotal += val;
+                        validCount++;
+                    }
+                });
+                if (validCount > 0) {
+                    const avg = cardTotal / validCount; 
+                    totalDishScore += avg;
+                    dishCount++;
+                }
+            });
+            const finalDishScore = dishCount > 0 ? (totalDishScore / dishCount) : 0;
+            updateModuleStatus('dish', finalDishScore, dishCount > 0);
+
+            // 2. 服务总分
+            const serviceScore = calculateModuleAvg('service-score');
+            updateModuleStatus('service', serviceScore, serviceScore > 0);
+
+            // 3. 环境与食安
+            const envScore = calculateModuleAvg('env-score');
+            const safetyScore = calculateModuleAvg('safety-score');
+            updateModuleStatus('env', envScore, envScore > 0);
+            updateModuleStatus('safety', safetyScore, safetyScore > 0);
+            updateModuleStatus('userInfo', 0, checkUserInfoComplete());
+
+            // 4. 综合评分 (菜品40% + 服务20% + 环境20% + 食安20%)
+            // 动态权重调整：只计算已评分的维度
+            let totalWeight = 0;
+            let overall = 0;
+            if (finalDishScore > 0) { overall += finalDishScore * 0.4; totalWeight += 0.4; }
+            if (serviceScore > 0) { overall += serviceScore * 0.2; totalWeight += 0.2; }
+            if (envScore > 0) { overall += envScore * 0.2; totalWeight += 0.2; }
+            if (safetyScore > 0) { overall += safetyScore * 0.2; totalWeight += 0.2; }
+            
+            if (totalWeight > 0) {
+                overall = overall / totalWeight;
+            }
+            
+            document.getElementById('stickyTotalScore').textContent = overall.toFixed(1);
+            document.getElementById('mainTotalScore').textContent = overall.toFixed(1);
+        }
+
+        function calculateModuleAvg(className) {
+            let total = 0;
+            let count = 0;
+            document.querySelectorAll(`.${className}.number-input`).forEach(input => {
+                const val = parseInt(input.value) || 0;
+                if (val > 0) {
+                    total += val;
+                    count++;
+                }
+            });
+            return count > 0 ? (total / count) : 0;
+        }
+
+        function updateModuleStatus(prefix, score, isDone) {
+            const scoreEl = document.getElementById(`${prefix}TotalScore`);
+            const progressEl = document.getElementById(`${prefix}Progress`);
+            
+            if (scoreEl) scoreEl.textContent = score.toFixed(1) + '分';
+            if (isDone) {
+                progressEl.classList.add('done');
+            } else {
+                progressEl.classList.remove('done');
+            }
+        }
+        
+        function checkUserInfoComplete() {
+            return document.getElementById('identitySelect').value && 
+                   document.getElementById('diningYears').value;
+        }
+
+        function checkAndSyncUserInfo() {
+            saveDraft();
+            updateModuleStatus('userInfo', 0, checkUserInfoComplete());
+        }
+
+        // 文本域自适应高度
+        window.adjustTextareaHeight = function(el) {
+            el.style.height = '120px';
+            const scrollHeight = el.scrollHeight;
+            el.style.height = Math.min(Math.max(scrollHeight, 120), 400) + 'px';
+        };
+
+        // 身份切换逻辑 (保留原有)
+        window.handleIdentityChange = function() {
+            const identity = document.getElementById('identitySelect').value;
+            const gradeLabel = document.getElementById('gradeLabel');
+            const gradeSelect = document.getElementById('gradeSelect');
+            
+            gradeSelect.innerHTML = '';
+            
+            if (identity === 'student') {
+                gradeLabel.innerText = '年级';
+                ['大一', '大二', '大三', '大四', '研一', '研二', '研三', '其他'].forEach(opt => {
+                    gradeSelect.innerHTML += `<option value="${opt}">${opt}</option>`;
+                });
+            } else if (identity === 'teacher' || identity === 'staff') {
+                gradeLabel.innerText = '部门';
+                ['计算机学院', '理学院', '马克思学院', '行政处', '后勤部', '其他'].forEach(opt => {
+                    gradeSelect.innerHTML += `<option value="${opt}">${opt}</option>`;
+                });
+            } else {
+                gradeLabel.innerText = '备注';
+                gradeSelect.innerHTML = `<option value="无">无</option>`;
+            }
+        };
+
+        // 菜品动态添加逻辑
+        window.addDishSection = function() {
+            const windowId = document.getElementById('windowSelect').value;
+            if (!windowId) {
+                alert('请先选择窗口后再添加菜品');
+                return;
+            }
+
+            const template = document.getElementById('dishTemplate');
+            const clone = template.content.cloneNode(true);
+            const container = document.getElementById('dishesContainer');
+            
+            // 渲染该卡片内的评分项
+            const scoreContainer = clone.getElementById('dishScoreRow');
+            let scoreHtml = '';
+            SCORE_CONFIGS.dish.forEach(item => {
+                scoreHtml += `
+                    <div class="col-md-6">
+                        <div class="score-group mb-2">
+                            <div class="score-label" style="width:60px">${item.label}</div>
+                            <input type="range" class="range-slider dish-score" min="1" max="10" value="0" data-key="${item.key}" oninput="syncScore(this, 'range')">
+                            <input type="number" class="number-input dish-score" min="1" max="10" placeholder="-" data-key="${item.key}" oninput="syncScore(this, 'number')">
+                        </div>
+                    </div>
+                `;
+            });
+            scoreContainer.innerHTML = scoreHtml;
+
+            container.appendChild(clone);
+            updateAllDishSelects();
+            toggleRemoveButtons();
+        };
+
+        window.removeDishSection = function(btn) {
+            if (confirm('确定删除此菜品评价吗？')) {
+                btn.closest('.dish-card').remove();
+                toggleRemoveButtons();
+                calculateTotalScore();
+                saveDraft();
+            }
+        };
+
+        // 图片处理
+        window.handlePhotoUpload = function(input) {
+            const files = input.files;
+            if (!files.length) return;
+            
+            const container = input.closest('.photo-area');
+            const maxFiles = parseInt(container.getAttribute('data-max')) || 6;
+            const currentCount = container.querySelectorAll('.upload-preview').length;
+            
+            if (currentCount >= maxFiles) {
+                alert(`最多只能上传${maxFiles}张图片`);
+                return;
+            }
+            
+            const file = files[0];
+            if (file.size > 2 * 1024 * 1024) {
+                alert('图片大小不能超过 2MB');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    // 压缩逻辑
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxWidth = 1280;
+                    
+                    if (width > maxWidth) {
+                        height = height * (maxWidth / width);
+                        width = maxWidth;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    const compressedData = canvas.toDataURL('image/jpeg', 0.8);
+                    addPhotoPreview(input.closest('.photo-area'), compressedData);
+                    saveDraft();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            input.value = ''; // 重置以便再次选择
+        };
+
+        function addPhotoPreview(container, base64) {
+            const box = document.createElement('div');
+            box.className = 'upload-box';
+            box.innerHTML = `
+                <img src="${base64}" class="upload-preview">
+                <div class="upload-del" onclick="this.parentElement.remove(); saveDraft();">×</div>
+                <input type="hidden" class="dish-photo-base64" value="${base64}">
+            `;
+            // 插入到上传按钮之前
+            container.insertBefore(box, container.lastElementChild);
+            
+            // 检查数量限制
+            const maxFiles = parseInt(container.getAttribute('data-max')) || 6;
+            if (container.querySelectorAll('.upload-preview').length >= maxFiles) {
+                container.lastElementChild.style.display = 'none';
+            }
+        }
+
+        window.updateCharCount = function(textarea) {
+            const count = textarea.value.length;
+            const tip = textarea.previousElementSibling.querySelector('.count-tip');
+            tip.textContent = `(${count}/500)`;
+            if (count >= 500) tip.classList.add('text-danger');
+            else tip.classList.remove('text-danger');
+            saveDraft();
+        };
+
+        // 草稿功能
+        function saveDraft() {
+            const data = {
+                identity: document.getElementById('identitySelect').value,
+                grade: document.getElementById('gradeSelect').value,
+                years: document.getElementById('diningYears').value,
+                canteen: document.getElementById('canteenSelect').value,
+                window: document.getElementById('windowSelect').value,
+                // 这里仅示例保存部分核心状态，完整恢复逻辑较复杂
+                timestamp: Date.now()
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        async function restoreDraft() {
+            const json = localStorage.getItem(STORAGE_KEY);
+            if (!json) return false;
+            
+            try {
+                const data = JSON.parse(json);
+                // 仅当草稿不超过24小时有效
+                if (Date.now() - data.timestamp > 24 * 60 * 60 * 1000) return false;
+                
+                if (confirm('检测到您有未完成的评价草稿，是否恢复？')) {
+                    document.getElementById('identitySelect').value = data.identity;
+                    handleIdentityChange();
+                    document.getElementById('gradeSelect').value = data.grade;
+                    document.getElementById('diningYears').value = data.years;
+                    
+                    if (data.canteen) {
+                        document.getElementById('canteenSelect').value = data.canteen;
+                        await loadWindows();
+                        if (data.window) {
+                            document.getElementById('windowSelect').value = data.window;
+                            await loadDishesForOptions();
+                        }
+                    }
+                    // 恢复菜品和评分逻辑需更细致实现，此处略
+                    return true;
+                }
+            } catch(e) { console.error(e); }
+            return false;
+        }
+
+        // 提交逻辑
+        window.submitEvaluation = async function() {
+            const canteenId = document.getElementById('canteenSelect').value;
+            const windowId = document.getElementById('windowSelect').value;
+            
+            if (!canteenId || !windowId) {
+                alert('请选择食堂和窗口！');
+                return;
+            }
+
+            // 收集细分维度分数
+            const envScores = collectScores('env-score');
+            const serviceScores = collectScores('service-score');
+            const safetyScores = collectScores('safety-score');
+            const dishList = collectDishData();
+
+            function getPhotos(containerId) {
+                const photos = [];
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.querySelectorAll('.dish-photo-base64').forEach(input => {
+                        if(input.value) photos.push(input.value);
+                    });
+                }
+                return photos;
+            }
+
+            // 校验
+            if (dishList.length === 0) {
+                alert('请至少评价一个菜品');
+                return;
+            }
+
+            // 构造符合后端扁平化要求的 payload
+            const payload = {
+                canteen_id: parseInt(canteenId),
+                window_id: parseInt(windowId),
+                identity_type: document.getElementById('identitySelect').value,
+                grade: document.getElementById('gradeSelect').value,
+                dining_years: parseInt(document.getElementById('diningYears').value) || 0,
+                buy_time: new Date().toISOString().slice(0, 16), // 添加购买时间
+                
+                // 服务评价 (扁平化)
+                service_attitude: serviceScores.attitude,
+                service_speed: serviceScores.speed,
+                service_dress: serviceScores.dress,
+                service_comment: document.getElementById('serviceComment').value,
+                service_images: getPhotos('servicePhotoArea'),
+                
+                // 环境评价 (扁平化)
+                env_clean: envScores.clean,
+                env_air: envScores.air,
+                env_hygiene: envScores.hygiene,
+                env_comment: document.getElementById('envComment').value,
+                env_images: getPhotos('envPhotoArea'),
+                
+                // 食安评价 (扁平化)
+                safety_fresh: safetyScores.fresh,
+                safety_info: safetyScores.info,
+                safety_comment: document.getElementById('safetyComment').value,
+                safety_images: getPhotos('safetyPhotoArea'),
+                
+                // 菜品评价
+                dishes: dishList
+            };
+
+            payload.dish_id = dishList[0].dish_id;
+            payload.dish_name = dishList[0].dish_name;
+            
+            // 发送
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '提交中...';
+            
+            try {
+                // 注意：这里假设 API.SUBMIT_EVALUATION 是 /api/submit_evaluation
+                // 如果是 submit_comment (sqlite版)，则字段完全不同。
+                // 根据 app.py 分析，submit_evaluation 是主逻辑 (SQLAlchemy)，submit_comment 是 sqlite 简单版
+                // 我们主要对接 submit_evaluation
+                const res = await fetchApi('/api/evaluate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.code === 200) {
+                    localStorage.removeItem(STORAGE_KEY);
+                    alert('评价提交成功！');
+                    location.href = 'index.html';
+                } else {
+                    alert(res.msg || '提交失败');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('网络错误或服务器异常');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle me-2"></i>提交评价';
+            }
+        };
+
+        function collectScores(className) {
+            const scores = {};
+            document.querySelectorAll(`.${className}.number-input`).forEach(input => {
+                scores[input.dataset.key] = parseInt(input.value) || 0;
+            });
+            return scores;
+        }
+
+        function collectDishData() {
+            const dishes = [];
+            document.querySelectorAll('.dish-card').forEach(card => {
+                const select = card.querySelector('.dish-select');
+                if (!select.value) return;
+                
+                // 收集该菜品的评分
+                const scores = {};
+                card.querySelectorAll('.dish-score.number-input').forEach(input => {
+                    scores[input.dataset.key] = parseInt(input.value) || 0;
+                });
+                
+                const images = [];
+                // 这里暂不处理 base64 上传到后端，因为后端 upload_image 接口是 multipart/form-data
+                // 如果需要支持 base64，后端需修改。或者前端先上传图片换取 URL。
+                // 简化起见，这里先留空或仅传 base64 字符串(如果后端支持)
+                // 查看 app.py: images=json.dumps(data.get('images', []))
+                // 后端存的是 JSON 字符串，所以可以存 base64，但数据库会很大。
+                // 建议：实际项目中应先上传。此处按原逻辑暂存。
+                card.querySelectorAll('.dish-photo-base64').forEach(input => {
+                    if(input.value) images.push(input.value);
+                });
+
+                dishes.push({
+                    dish_id: parseInt(select.value),
+                    dish_name: select.options[select.selectedIndex].text.split(' (')[0],
+                    food_scores: {
+                        color: scores.color,
+                        aroma: scores.aroma,
+                        taste: scores.taste,
+                        shape: scores.shape,
+                        portion: scores.portion,
+                        price: scores.price
+                    },
+                    remark: card.querySelector('.dish-remark').value,
+                    images: images
+                });
+            });
+            return dishes;
+        }
+        
+        async function loadCanteens() {
+            const select = document.getElementById('canteenSelect');
+            try {
+                const res = await fetchApi(API.CANTEENS);
+                if (res.code === 200 && res.data.length > 0) {
+                    select.innerHTML = '<option value="">请选择食堂...</option>' + 
+                        res.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                } else {
+                    select.innerHTML = '<option value="">暂无食堂</option>';
+                }
+            } catch (e) {
+                console.error(e);
+                select.innerHTML = '<option value="">加载失败</option>';
+            } finally {
+                updateCascadeState();
+            }
+        }
+
+        async function loadWindows() {
+            const canteenId = document.getElementById('canteenSelect').value;
+            const windowSelect = document.getElementById('windowSelect');
+            
+            windowSelect.innerHTML = '<option value="">请选择窗口...</option>';
+            windowSelect.value = '';
+            windowSelect.disabled = !canteenId;
+            currentDishes = [];
+            updateAllDishSelects();
+            updateCascadeState();
+            
+            if (!canteenId) return;
+            
+            try {
+                const res = await fetchApi(`${API.WINDOWS}?canteen_id=${canteenId}`);
+                if (res.code === 200 && res.data.length > 0) {
+                    windowSelect.innerHTML += res.data.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+                } else {
+                    windowSelect.innerHTML = '<option value="">暂无窗口</option>';
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                updateCascadeState();
+            }
+        }
+
+        async function loadDishesForOptions() {
+            const windowId = document.getElementById('windowSelect').value;
+            currentDishes = [];
+            updateCascadeState();
+            
+            if (!windowId) {
+                updateAllDishSelects();
+                return;
+            }
+            
+            try {
+                const res = await fetchApi(`${API.DISHES}?window_id=${windowId}`);
+                if (res.code === 200 && res.data.length > 0) {
+                    currentDishes = res.data;
+                }
+                updateAllDishSelects();
+                if (document.querySelectorAll('.dish-card').length === 0) {
+                    addDishSection();
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                updateCascadeState();
+            }
+        }
+
+        function updateAllDishSelects() {
+            const selects = document.querySelectorAll('.dish-select');
+            const windowId = document.getElementById('windowSelect').value;
+            
+            let optionsHtml = '';
+            if (!windowId) {
+                optionsHtml = '<option value="">请先选择窗口</option>';
+            } else if (currentDishes.length === 0) {
+                optionsHtml = '<option value="">该窗口暂无菜品</option>';
+            } else {
+                optionsHtml = '<option value="">请选择菜品...</option>' + 
+                    currentDishes.map(d => `<option value="${d.id}">${d.name} (￥${d.price})</option>`).join('');
+            }
+            
+            selects.forEach(select => {
+                const currentVal = select.value;
+                select.innerHTML = optionsHtml;
+                select.disabled = !windowId;
+                // 尝试保留之前选中的值
+                if (currentVal && currentDishes.find(d => d.id == currentVal)) {
+                    select.value = currentVal;
+                }
+            });
+        }
+
+        function updateCascadeState() {
+            const canteenId = document.getElementById('canteenSelect').value;
+            const windowId = document.getElementById('windowSelect').value;
+            const windowSelect = document.getElementById('windowSelect');
+            const addDishBtn = document.getElementById('addDishBtn');
+            const dishSelectArea = document.getElementById('dishSelectArea');
+
+            windowSelect.disabled = !canteenId;
+            addDishBtn.disabled = !windowId;
+
+            if (windowId) {
+                dishSelectArea.classList.remove('dish-select-disabled');
+            } else {
+                dishSelectArea.classList.add('dish-select-disabled');
+            }
+        }
+
+        function handleDishChange(select) {
+            // 可在此处处理菜品切换逻辑，如显示默认图片等
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>校园食堂公共数据分析看板</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="css/rank_list.css" rel="stylesheet">
+</head>
+<body>
+    <header class="dashboard-header">
+        <div class="header-top">
+            <button class="icon-btn" type="button" onclick="history.back()" aria-label="返回">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <div class="header-title-wrap">
+                <h1 class="header-title">校园食堂公共数据分析看板</h1>
+                <p class="header-subtitle">实时展示全校食堂满意度、热度与时段分布</p>
+            </div>
+            <a class="icon-btn" href="safety_list.html" aria-label="食安公示">
+                <i class="bi bi-shield-check"></i>
+            </a>
+        </div>
+
+        <div class="time-switch" id="timeSwitch">
+            <button class="time-pill active" data-range="today" type="button">今日</button>
+            <button class="time-pill" data-range="week" type="button">近7天</button>
+            <button class="time-pill" data-range="month" type="button">近30天</button>
+        </div>
+    </header>
+
+    <main class="dashboard-main">
+        <section class="metric-grid">
+            <article class="metric-card">
+                <div class="metric-label">就餐人次</div>
+                <div class="metric-value" id="totalVisits">0</div>
+                <div class="metric-foot">当前时间范围总记录</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">满意度均分</div>
+                <div class="metric-value" id="avgScore">0.0</div>
+                <div class="metric-foot">满分 5 分</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">差评总数</div>
+                <div class="metric-value" id="badReviewCount">0</div>
+                <div class="metric-foot">评分小于等于 2 分</div>
+            </article>
+            <article class="metric-card">
+                <div class="metric-label">上架菜品数</div>
+                <div class="metric-value" id="activeDishCount">0</div>
+                <div class="metric-foot">当前全校有效菜品</div>
+            </article>
+        </section>
+
+        <section class="panel-card">
+            <div class="panel-head">
+                <h2>食堂满意度排行</h2>
+                <span class="panel-note" id="updateTime">更新中...</span>
+            </div>
+            <div class="ranking-list" id="canteenRankingList">
+                <div class="empty-inline">暂无排行数据</div>
+            </div>
+        </section>
+
+        <section class="panel-card">
+            <div class="panel-head">
+                <h2>人次趋势</h2>
+                <span class="panel-note" id="trendRangeLabel">今日按小时</span>
+            </div>
+            <div id="trendChart" class="chart-box"></div>
+        </section>
+
+        <section class="panel-card">
+            <div class="panel-head">
+                <h2>TOP10 热门菜品</h2>
+                <span class="panel-note">按被评价次数统计</span>
+            </div>
+            <div id="topDishesChart" class="chart-box tall"></div>
+        </section>
+
+        <section class="panel-card">
+            <div class="panel-head">
+                <h2>高峰时段分布</h2>
+                <span class="panel-note">不同时段就餐占比</span>
+            </div>
+            <div id="peakTimeChart" class="chart-box"></div>
+        </section>
+
+        <section class="notice-card">
+            <div class="notice-title"><i class="bi bi-info-circle"></i> 食安公示</div>
+            <p class="notice-text">本页数据仅用于公开展示，不提供编辑入口。更多食安公告与整改信息请查看公示列表。</p>
+            <a class="notice-link" id="safetyLink" href="safety_list.html">查看食安公示</a>
+        </section>
+    </main>
+
+    <div class="loading-mask" id="loadingMask" aria-live="polite">
+        <div class="loading-card">
+            <div class="spinner-border text-warning" role="status"></div>
+            <div class="loading-text">正在加载公共看板数据...</div>
+        </div>
+    </div>
+
+    <div class="toast-wrap" id="toastWrap"></div>
+
+    <nav class="bottom-nav">
+        <a href="index.html" class="nav-item-bottom">
+            <i class="bi bi-house"></i>
+            首页
+        </a>
+        <a href="rank_list.html" class="nav-item-bottom active">
+            <i class="bi bi-bar-chart-line-fill"></i>
+            看板
+        </a>
+        <a href="note_publish.html" class="nav-item-bottom">
+            <i class="bi bi-plus-circle-fill nav-plus"></i>
+        </a>
+        <a href="canteen_detail.html?name=北区食堂" class="nav-item-bottom">
+            <i class="bi bi-shop"></i>
+            食堂
+        </a>
+        <a href="user_center.html" class="nav-item-bottom">
+            <i class="bi bi-person"></i>
+            我的
+        </a>
+    </nav>
+
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/rank_list.js"></script>
+</body>
+</html>

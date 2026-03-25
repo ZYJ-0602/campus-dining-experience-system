@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>菜品管理 - 食堂点评管理后台</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="../../static/css/common.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --success: #52c41a;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap {
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 280px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: flex-end;
+            min-width: 240px;
+            flex-wrap: wrap;
+        }
+
+        .input-base,
+        .select-base {
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            color: var(--text-dark);
+            background: #fff;
+            outline: none;
+        }
+
+        .keyword-input {
+            min-width: 220px;
+            flex: 1;
+        }
+
+        .status-select {
+            width: 120px;
+        }
+
+        .input-base:focus,
+        .select-base:focus,
+        .modal-input:focus,
+        .modal-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .btn-primary-blue,
+        .btn-gray,
+        .btn-ghost-blue,
+        .btn-success-green {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-gray {
+            background: #f2f3f5;
+            border-color: #dcdfe6;
+            color: #4e5969;
+        }
+
+        .btn-gray:hover {
+            background: #e8eaef;
+        }
+
+        .btn-ghost-blue {
+            background: #fff;
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-ghost-blue:hover {
+            background: #eef4ff;
+        }
+
+        .btn-success-green {
+            background: var(--success);
+            border-color: var(--success);
+            color: #fff;
+        }
+
+        .btn-success-green:hover {
+            background: #389e0d;
+            border-color: #389e0d;
+        }
+
+        .btn-loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .table-card {
+            margin-top: 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        .dish-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .dish-table th,
+        .dish-table td {
+            padding: 0 16px;
+            height: 48px;
+            line-height: 48px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .dish-table thead th {
+            background: #f7f8fa;
+            color: #303133;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dish-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .dish-table tbody tr:hover td {
+            background: #fafafa;
+        }
+
+        .status-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 28px;
+            border-radius: 14px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            vertical-align: middle;
+        }
+
+        .status-enabled {
+            background: var(--success);
+        }
+
+        .status-disabled {
+            background: #8c8c8c;
+        }
+
+        .action-links {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            padding: 0;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .action-edit {
+            color: var(--primary);
+        }
+
+        .action-delete {
+            color: var(--danger);
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            line-height: 1.8;
+            padding: 22px 0;
+        }
+
+        .table-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-panel {
+            width: 100%;
+            max-width: 560px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            background: #f7f8fa;
+        }
+
+        .modal-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: #86909c;
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 18px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .modal-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .modal-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .modal-field label {
+            color: #4e5969;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .modal-input,
+        .modal-select {
+            width: 100%;
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            outline: none;
+            color: var(--text-dark);
+        }
+
+        .switch-row {
+            margin-top: 4px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 18px;
+            border-top: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .import-tip {
+            margin: 0 0 12px;
+            font-size: 13px;
+            color: #7a8091;
+            line-height: 1.7;
+        }
+
+        .upload-zone {
+            border: 1px dashed #b7c0d0;
+            border-radius: 8px;
+            background: #fafcff;
+            min-height: 132px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 14px;
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--primary);
+            background: #eef4ff;
+        }
+
+        .upload-zone i {
+            font-size: 28px;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        .upload-filename {
+            margin-top: 8px;
+            color: #4e5969;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        .helper-line {
+            color: #a0a5b0;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .toast-wrap {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast-item {
+            min-width: 260px;
+            max-width: 420px;
+            background: #fff;
+            border: 1px solid #e5e6eb;
+            border-left: 4px solid var(--primary);
+            border-radius: 8px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+            padding: 10px 12px;
+            color: #1f2329;
+            font-size: 13px;
+            line-height: 1.6;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .toast-success {
+            border-left-color: var(--success);
+        }
+
+        .toast-error {
+            border-left-color: var(--danger);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 992px) {
+            .page-wrap {
+                padding: 14px;
+            }
+
+            .page-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .toolbar-card {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .toolbar-left,
+            .toolbar-right {
+                width: 100%;
+            }
+
+            .toolbar-right {
+                justify-content: flex-start;
+            }
+
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-header">
+        <div class="d-flex align-items-center gap-2">
+            <a href="admin_index_operator.html" class="btn btn-outline-secondary btn-sm" target="_top" id="backBtn">
+                <i class="bi bi-chevron-left"></i>
+                返回
+            </a>
+            <h1 class="page-title">菜品管理</h1>
+        </div>
+    </div>
+
+    <div class="toolbar-card">
+        <div class="toolbar-left">
+            <input class="input-base keyword-input" id="keywordInput" placeholder="请输入菜品关键词">
+            <select class="select-base status-select" id="statusSelect">
+                <option value="">全部</option>
+                <option value="active">上架</option>
+                <option value="inactive">下架</option>
+            </select>
+            <button class="btn-primary-blue" id="filterBtn">筛选</button>
+            <button class="btn-gray" id="resetBtn">重置</button>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn-primary-blue" id="addBtn">+ 新增菜品</button>
+            <button class="btn-success-green" id="importBtn">批量导入</button>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-wrap">
+            <table class="dish-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>菜品名称</th>
+                    <th>窗口</th>
+                    <th>价格</th>
+                    <th>分类</th>
+                    <th>分量</th>
+                    <th>平均评分/评价数</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="dishTableBody">
+                <tr><td colspan="9" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-footer">
+            <div id="tableCountText">共 0 条</div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="dishModalOverlay" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h3 class="modal-title" id="dishModalTitle">新增菜品</h3>
+            <button class="modal-close" type="button" data-close="dish">×</button>
+        </div>
+        <div class="modal-body">
+            <input id="dishIdInput" type="hidden">
+            <div class="modal-field">
+                <label for="dishNameInput">菜品名称（必填）</label>
+                <input class="modal-input" id="dishNameInput" maxlength="64" placeholder="请输入菜品名称">
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="windowIdInput">窗口ID（必填）</label>
+                    <input class="modal-input" id="windowIdInput" type="number" min="1" placeholder="请输入窗口ID">
+                </div>
+                <div class="modal-field">
+                    <label for="dishPriceInput">价格（必填）</label>
+                    <input class="modal-input" id="dishPriceInput" type="number" min="0" step="0.01" placeholder="请输入价格">
+                </div>
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="dishCategoryInput">分类（必填）</label>
+                    <input class="modal-input" id="dishCategoryInput" maxlength="30" placeholder="例如：热菜/主食/汤品">
+                </div>
+                <div class="modal-field">
+                    <label for="dishPortionInput">分量（必填）</label>
+                    <select class="modal-select" id="dishPortionInput">
+                        <option value="常规">常规</option>
+                        <option value="大份">大份</option>
+                        <option value="小份">小份</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-check switch-row">
+                <input class="form-check-input" type="checkbox" id="dishStatusInput" checked>
+                <label class="form-check-label" for="dishStatusInput">上架</label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" data-close="dish">取消</button>
+            <button class="btn-primary-blue" type="button" id="saveDishBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="importModalOverlay" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h3 class="modal-title">批量导入菜品</h3>
+            <button class="modal-close" type="button" data-close="import">×</button>
+        </div>
+        <div class="modal-body">
+            <p class="import-tip">
+                支持 Excel/CSV 文件，单次导入 ≤ 500 条，自动跳过重复行。<br>
+                模板字段：window_id, name, price, category, portion
+            </p>
+            <button class="btn-ghost-blue" type="button" id="downloadTemplateBtn">下载模板</button>
+            <div class="upload-zone" id="uploadZone">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <div>拖拽文件到此处，或点击上传文件</div>
+                <div class="helper-line">支持 .xlsx / .xls / .csv</div>
+                <input id="importFileInput" type="file" accept=".xlsx,.xls,.csv" hidden>
+                <div class="upload-filename" id="uploadFileName">未选择文件</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" data-close="import">取消</button>
+            <button class="btn-primary-blue" type="button" id="startImportBtn">开始导入</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="deleteModalOverlay" aria-hidden="true">
+    <div class="modal-panel" style="max-width: 460px;">
+        <div class="modal-header">
+            <h3 class="modal-title">删除确认</h3>
+            <button class="modal-close" type="button" data-close="delete">×</button>
+        </div>
+        <div class="modal-body">
+            确定删除该菜品吗？删除后数据不可恢复。
+        </div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" data-close="delete">取消</button>
+            <button class="btn-primary-blue" type="button" id="confirmDeleteBtn">确认删除</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script src="../c-client/js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+    const state = {
+        rows: [],
+        editing: false,
+        deletingId: null,
+        importFile: null,
+        query: {
+            keyword: '',
+            status: ''
+        }
+    };
+
+    const endpointPreference = {
+        list: ['/api/dish/list', '/api/admin/dishes'],
+        add: ['/api/dish/add', '/api/admin/dishes'],
+        update: (id) => [`/api/dish/${id}`, `/api/admin/dishes/${id}`],
+        remove: (id) => [`/api/dish/${id}`, `/api/admin/dishes/${id}`],
+        template: ['/api/dish/download-template'],
+        import: ['/api/dish/batch-import', '/api/admin/dishes/batch_import']
+    };
+
+    function resolveApiBase() {
+        if (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) {
+            return API_BASE_URL;
+        }
+        if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+            if (window.location.port === '5500' || window.location.port === '8000') {
+                return 'http://127.0.0.1:5000/api';
+            }
+        }
+        return '/api';
+    }
+
+    const API_BASE = resolveApiBase();
+
+    function toAbsolute(path) {
+        if (/^https?:\/\//i.test(path)) {
+            return path;
+        }
+        if (path.startsWith('/api')) {
+            return `${API_BASE.replace(/\/api$/, '')}${path}`;
+        }
+        return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+    }
+
+    function showToast(message, type = 'success') {
+        const wrap = document.getElementById('toastWrap');
+        const el = document.createElement('div');
+        el.className = `toast-item ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+        el.textContent = message;
+        wrap.appendChild(el);
+        setTimeout(() => {
+            el.remove();
+        }, 3000);
+    }
+
+    function setButtonLoading(button, loading, loadingText, idleText) {
+        if (!button) return;
+        if (loading) {
+            button.classList.add('btn-loading');
+            button.disabled = true;
+            button.dataset.idleText = idleText || button.textContent;
+            button.textContent = loadingText;
+        } else {
+            button.classList.remove('btn-loading');
+            button.disabled = false;
+            button.textContent = button.dataset.idleText || idleText || button.textContent;
+        }
+    }
+
+    async function requestWithFallback(paths, options = {}, parseAs = 'json') {
+        let lastError = null;
+        for (let i = 0; i < paths.length; i += 1) {
+            const path = paths[i];
+            const url = toAbsolute(path);
+            try {
+                const response = await fetch(url, { credentials: 'include', ...options });
+                if (response.status === 404 && i < paths.length - 1) {
+                    continue;
+                }
+                if (parseAs === 'blob') {
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(text || `HTTP ${response.status}`);
+                    }
+                    return { ok: true, data: await response.blob(), source: path };
+                }
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = { code: response.status, msg: `服务器响应异常 (${response.status})` };
+                }
+                if (!response.ok) {
+                    data.code = data.code || response.status;
+                }
+                return { ok: true, data, source: path };
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        return { ok: false, error: lastError || new Error('请求失败') };
+    }
+
+    function openModal(name) {
+        const map = {
+            dish: 'dishModalOverlay',
+            import: 'importModalOverlay',
+            delete: 'deleteModalOverlay'
+        };
+        const el = document.getElementById(map[name]);
+        if (el) {
+            el.classList.add('show');
+            el.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function closeModal(name) {
+        const map = {
+            dish: 'dishModalOverlay',
+            import: 'importModalOverlay',
+            delete: 'deleteModalOverlay'
+        };
+        const el = document.getElementById(map[name]);
+        if (el) {
+            el.classList.remove('show');
+            el.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function resetDishForm() {
+        document.getElementById('dishIdInput').value = '';
+        document.getElementById('dishNameInput').value = '';
+        document.getElementById('windowIdInput').value = '';
+        document.getElementById('dishPriceInput').value = '';
+        document.getElementById('dishCategoryInput').value = '';
+        document.getElementById('dishPortionInput').value = '常规';
+        document.getElementById('dishStatusInput').checked = true;
+    }
+
+    function fillDishForm(item) {
+        document.getElementById('dishIdInput').value = item.id;
+        document.getElementById('dishNameInput').value = item.name || '';
+        document.getElementById('windowIdInput').value = item.window_id || '';
+        document.getElementById('dishPriceInput').value = item.price ?? '';
+        document.getElementById('dishCategoryInput').value = item.category || '';
+        document.getElementById('dishPortionInput').value = item.portion || '常规';
+        document.getElementById('dishStatusInput').checked = !!item.is_active;
+    }
+
+    function normalizeListPayload(data) {
+        if (Array.isArray(data)) {
+            return data;
+        }
+        if (data && Array.isArray(data.data)) {
+            return data.data;
+        }
+        if (data && data.data && Array.isArray(data.data.list)) {
+            return data.data.list;
+        }
+        if (data && Array.isArray(data.list)) {
+            return data.list;
+        }
+        return [];
+    }
+
+    function renderTable() {
+        const body = document.getElementById('dishTableBody');
+        if (!state.rows.length) {
+            body.innerHTML = '<tr><td colspan="9" class="empty-row">暂无菜品数据，请新增或导入菜品</td></tr>';
+            document.getElementById('tableCountText').textContent = '共 0 条';
+            return;
+        }
+        body.innerHTML = state.rows.map((item) => {
+            const statusCls = item.is_active ? 'status-enabled' : 'status-disabled';
+            const statusText = item.is_active ? '上架' : '下架';
+            const score = Number(item.avg_score || item.average_score || 0).toFixed(2);
+            const evalCount = Number(item.eval_count || item.review_count || 0);
+            return `
+                <tr>
+                    <td>${item.id}</td>
+                    <td>${item.name || '-'}</td>
+                    <td>${item.window_name || item.window_id || '-'}</td>
+                    <td>￥${Number(item.price || 0).toFixed(2)}</td>
+                    <td>${item.category || '-'}</td>
+                    <td>${item.portion || '-'}</td>
+                    <td>${score} / ${evalCount}</td>
+                    <td><span class="status-tag ${statusCls}">${statusText}</span></td>
+                    <td>
+                        <div class="action-links">
+                            <button class="action-link action-edit" onclick="handleEdit(${item.id})">编辑</button>
+                            <button class="action-link action-delete" onclick="handleDelete(${item.id})">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        document.getElementById('tableCountText').textContent = `共 ${state.rows.length} 条`;
+    }
+
+    async function loadDishList() {
+        const body = document.getElementById('dishTableBody');
+        body.innerHTML = '<tr><td colspan="9" class="empty-row">加载中...</td></tr>';
+
+        const params = new URLSearchParams();
+        if (state.query.keyword) params.set('keyword', state.query.keyword);
+        if (state.query.status) params.set('status', state.query.status);
+
+        const paths = endpointPreference.list.map((path) => `${path}?${params.toString()}`);
+        const result = await requestWithFallback(paths);
+        if (!result.ok) {
+            body.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast('菜品列表加载失败', 'error');
+            return;
+        }
+
+        const payload = result.data;
+        if (payload.code && payload.code !== 200) {
+            body.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast(payload.msg || '菜品列表加载失败', 'error');
+            return;
+        }
+
+        state.rows = normalizeListPayload(payload);
+        renderTable();
+    }
+
+    function collectDishForm() {
+        const payload = {
+            name: document.getElementById('dishNameInput').value.trim(),
+            window_id: Number(document.getElementById('windowIdInput').value),
+            price: Number(document.getElementById('dishPriceInput').value),
+            category: document.getElementById('dishCategoryInput').value.trim(),
+            portion: document.getElementById('dishPortionInput').value,
+            status: document.getElementById('dishStatusInput').checked ? 'active' : 'inactive',
+            is_active: document.getElementById('dishStatusInput').checked
+        };
+        if (!payload.name) return { error: '请填写菜品名称' };
+        if (!payload.window_id || Number.isNaN(payload.window_id)) return { error: '请填写窗口ID' };
+        if (!Number.isFinite(payload.price)) return { error: '请填写正确价格' };
+        if (!payload.category) return { error: '请填写分类' };
+        if (!payload.portion) return { error: '请选择分量' };
+        return { payload };
+    }
+
+    async function saveDish() {
+        const saveBtn = document.getElementById('saveDishBtn');
+        const checked = collectDishForm();
+        if (checked.error) {
+            showToast(checked.error, 'error');
+            return;
+        }
+
+        const id = Number(document.getElementById('dishIdInput').value || 0);
+        const editing = !!id;
+        const requestPaths = editing ? endpointPreference.update(id) : endpointPreference.add;
+        const method = editing ? 'PUT' : 'POST';
+
+        setButtonLoading(saveBtn, true, '保存中...', '保存');
+        const result = await requestWithFallback(requestPaths, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(checked.payload)
+        });
+        setButtonLoading(saveBtn, false, '保存中...', '保存');
+
+        if (!result.ok) {
+            showToast('保存失败，请稍后重试', 'error');
+            return;
+        }
+
+        const body = result.data;
+        if (body.code && body.code !== 200) {
+            showToast(body.msg || '保存失败', 'error');
+            return;
+        }
+
+        closeModal('dish');
+        await loadDishList();
+        showToast('操作成功');
+    }
+
+    window.handleEdit = function handleEdit(id) {
+        const item = state.rows.find((row) => Number(row.id) === Number(id));
+        if (!item) {
+            showToast('未找到菜品数据', 'error');
+            return;
+        }
+        state.editing = true;
+        document.getElementById('dishModalTitle').textContent = '编辑菜品';
+        fillDishForm(item);
+        openModal('dish');
+    };
+
+    window.handleDelete = function handleDelete(id) {
+        state.deletingId = Number(id);
+        openModal('delete');
+    };
+
+    async function confirmDelete() {
+        const btn = document.getElementById('confirmDeleteBtn');
+        const id = state.deletingId;
+        if (!id) {
+            closeModal('delete');
+            return;
+        }
+        setButtonLoading(btn, true, '删除中...', '确认删除');
+        const result = await requestWithFallback(endpointPreference.remove(id), { method: 'DELETE' });
+        setButtonLoading(btn, false, '删除中...', '确认删除');
+
+        if (!result.ok) {
+            showToast('删除失败，请稍后重试', 'error');
+            return;
+        }
+
+        if (result.data.code && result.data.code !== 200) {
+            showToast(result.data.msg || '删除失败', 'error');
+            return;
+        }
+
+        closeModal('delete');
+        state.deletingId = null;
+        await loadDishList();
+        showToast('删除成功');
+    }
+
+    async function fetchAllExistingDishKeys() {
+        const result = await requestWithFallback(endpointPreference.list);
+        if (!result.ok || (result.data.code && result.data.code !== 200)) {
+            return new Set();
+        }
+        const rows = normalizeListPayload(result.data);
+        const set = new Set();
+        rows.forEach((item) => {
+            const name = String(item.name || '').trim().toLowerCase();
+            const key = `${item.window_id}::${name}`;
+            if (name) {
+                set.add(key);
+            }
+        });
+        return set;
+    }
+
+    function parseCSVRows(text) {
+        const lines = text.split(/\r?\n/).filter((line) => line.trim());
+        if (lines.length <= 1) {
+            return [];
+        }
+        const header = lines[0].split(',').map((c) => c.trim());
+        const expected = ['window_id', 'name', 'price', 'category', 'portion'];
+        const valid = expected.every((key) => header.includes(key));
+        if (!valid) {
+            throw new Error('CSV 模板字段不正确，请先下载模板');
+        }
+        const index = {
+            window_id: header.indexOf('window_id'),
+            name: header.indexOf('name'),
+            price: header.indexOf('price'),
+            category: header.indexOf('category'),
+            portion: header.indexOf('portion')
+        };
+        const rows = [];
+        for (let i = 1; i < lines.length; i += 1) {
+            const cols = lines[i].split(',');
+            rows.push({
+                window_id: Number((cols[index.window_id] || '').trim()),
+                name: (cols[index.name] || '').trim(),
+                price: Number((cols[index.price] || '').trim()),
+                category: (cols[index.category] || '').trim(),
+                portion: (cols[index.portion] || '').trim() || '常规'
+            });
+        }
+        return rows;
+    }
+
+    function parseExcelRows(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonRows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+                    const rows = jsonRows.map((item) => ({
+                        window_id: Number(item.window_id),
+                        name: String(item.name || '').trim(),
+                        price: Number(item.price),
+                        category: String(item.category || '').trim(),
+                        portion: String(item.portion || '').trim() || '常规'
+                    }));
+                    resolve(rows);
+                } catch (error) {
+                    reject(new Error('Excel 文件解析失败'));
+                }
+            };
+            reader.onerror = () => reject(new Error('文件读取失败'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function parseImportFile(file) {
+        const fileName = file.name.toLowerCase();
+        if (fileName.endsWith('.csv')) {
+            const text = await file.text();
+            return parseCSVRows(text.replace(/^\uFEFF/, ''));
+        }
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+            return parseExcelRows(file);
+        }
+        throw new Error('仅支持 Excel/CSV 文件');
+    }
+
+    async function startImport() {
+        const btn = document.getElementById('startImportBtn');
+        if (!state.importFile) {
+            showToast('请先选择导入文件', 'error');
+            return;
+        }
+
+        setButtonLoading(btn, true, '导入中...', '开始导入');
+        try {
+            const parsedRows = await parseImportFile(state.importFile);
+            if (!parsedRows.length) {
+                showToast('未识别到有效数据行', 'error');
+                setButtonLoading(btn, false, '导入中...', '开始导入');
+                return;
+            }
+            if (parsedRows.length > 500) {
+                showToast('单次导入不能超过 500 条', 'error');
+                setButtonLoading(btn, false, '导入中...', '开始导入');
+                return;
+            }
+
+            const existingKeys = await fetchAllExistingDishKeys();
+            const fileKeys = new Set();
+            const validRows = [];
+            let skipDuplicateInFile = 0;
+            let skipDuplicateExisting = 0;
+            let invalidRows = 0;
+
+            parsedRows.forEach((row) => {
+                const windowId = Number(row.window_id);
+                const name = String(row.name || '').trim();
+                const category = String(row.category || '').trim();
+                const portion = String(row.portion || '').trim();
+                const price = Number(row.price);
+                if (!windowId || !name || !category || !Number.isFinite(price)) {
+                    invalidRows += 1;
+                    return;
+                }
+                const key = `${windowId}::${name.toLowerCase()}`;
+                if (fileKeys.has(key)) {
+                    skipDuplicateInFile += 1;
+                    return;
+                }
+                if (existingKeys.has(key)) {
+                    skipDuplicateExisting += 1;
+                    return;
+                }
+                fileKeys.add(key);
+                validRows.push({
+                    window_id: windowId,
+                    name,
+                    price,
+                    category,
+                    portion: portion || '常规'
+                });
+            });
+
+            if (!validRows.length) {
+                const skipped = skipDuplicateInFile + skipDuplicateExisting;
+                showToast(`无可导入数据，跳过重复 ${skipped} 条`, 'error');
+                setButtonLoading(btn, false, '导入中...', '开始导入');
+                return;
+            }
+
+            const result = await requestWithFallback(endpointPreference.import, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows: validRows })
+            });
+
+            if (!result.ok) {
+                showToast('导入失败，请稍后重试', 'error');
+                setButtonLoading(btn, false, '导入中...', '开始导入');
+                return;
+            }
+
+            const body = result.data;
+            if (body.code && body.code !== 200) {
+                showToast(body.msg || '导入失败', 'error');
+                setButtonLoading(btn, false, '导入中...', '开始导入');
+                return;
+            }
+
+            const success = Number(body.data?.success_count || body.data?.success || validRows.length);
+            const skipped = skipDuplicateInFile + skipDuplicateExisting;
+            const failed = Number(body.data?.fail_count || (Array.isArray(body.data?.errors) ? body.data.errors.length : 0)) + invalidRows;
+            closeModal('import');
+            await loadDishList();
+            showToast(`导入成功，共 ${success} 条，跳过重复 ${skipped} 条${failed ? `，失败 ${failed} 条` : ''}`);
+        } catch (error) {
+            showToast(error.message || '导入失败', 'error');
+        }
+        setButtonLoading(btn, false, '导入中...', '开始导入');
+    }
+
+    async function downloadTemplate() {
+        const btn = document.getElementById('downloadTemplateBtn');
+        setButtonLoading(btn, true, '下载中...', '下载模板');
+        const result = await requestWithFallback(endpointPreference.template, { method: 'GET' }, 'blob');
+        setButtonLoading(btn, false, '下载中...', '下载模板');
+
+        if (result.ok && result.data) {
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(result.data);
+            link.href = url;
+            link.download = 'dish_import_template.xlsx';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            return;
+        }
+
+        const csv = 'window_id,name,price,category,portion\n1,红烧肉,18,热菜,常规\n1,番茄炒蛋,12,热菜,常规\n';
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'dish_import_template.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function bindUploadZone() {
+        const zone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('importFileInput');
+        const nameEl = document.getElementById('uploadFileName');
+
+        function setFile(file) {
+            state.importFile = file || null;
+            nameEl.textContent = file ? file.name : '未选择文件';
+        }
+
+        zone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => {
+            setFile(fileInput.files[0]);
+        });
+
+        zone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            zone.classList.add('dragover');
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('dragover');
+        });
+
+        zone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            zone.classList.remove('dragover');
+            const file = event.dataTransfer.files[0];
+            setFile(file);
+            fileInput.files = event.dataTransfer.files;
+        });
+    }
+
+    function bindEvents() {
+        document.querySelectorAll('[data-close]').forEach((el) => {
+            el.addEventListener('click', () => closeModal(el.getAttribute('data-close')));
+        });
+
+        document.getElementById('filterBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('filterBtn');
+            setButtonLoading(btn, true, '筛选中...', '筛选');
+            state.query.keyword = document.getElementById('keywordInput').value.trim();
+            state.query.status = document.getElementById('statusSelect').value;
+            await loadDishList();
+            setButtonLoading(btn, false, '筛选中...', '筛选');
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('resetBtn');
+            setButtonLoading(btn, true, '重置中...', '重置');
+            document.getElementById('keywordInput').value = '';
+            document.getElementById('statusSelect').value = '';
+            state.query.keyword = '';
+            state.query.status = '';
+            await loadDishList();
+            setButtonLoading(btn, false, '重置中...', '重置');
+        });
+
+        document.getElementById('addBtn').addEventListener('click', () => {
+            state.editing = false;
+            resetDishForm();
+            document.getElementById('dishModalTitle').textContent = '新增菜品';
+            openModal('dish');
+        });
+
+        document.getElementById('importBtn').addEventListener('click', () => {
+            openModal('import');
+        });
+
+        document.getElementById('saveDishBtn').addEventListener('click', saveDish);
+        document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
+        document.getElementById('startImportBtn').addEventListener('click', startImport);
+        document.getElementById('downloadTemplateBtn').addEventListener('click', downloadTemplate);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeModal('dish');
+                closeModal('import');
+                closeModal('delete');
+            }
+        });
+
+        if (window.self !== window.top) {
+            const back = document.getElementById('backBtn');
+            if (back) back.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        bindEvents();
+        bindUploadZone();
+        await loadDishList();
+    });
+</script>
+</body>
+</html>

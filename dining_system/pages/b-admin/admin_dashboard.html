@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运营数据看板</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body { background-color: #f4f6f9; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+        .stat-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; }
+        .bg-primary-soft { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
+        .bg-success-soft { background: linear-gradient(135deg, #198754, #157347); }
+        .bg-warning-soft { background: linear-gradient(135deg, #fd7e14, #dc6502); }
+        .bg-danger-soft { background: linear-gradient(135deg, #dc3545, #b02a37); }
+        .chart-card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); margin-bottom: 16px; }
+        .chart-container { width: 100%; height: 340px; }
+        .warning-list { max-height: 410px; overflow-y: auto; }
+        .warning-item { border-left: 4px solid #dc3545; background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); }
+        .empty-box { text-align: center; color: #6c757d; padding: 28px 0; }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <div class="d-flex align-items-center">
+            <a href="admin_index_operator.html" class="btn btn-outline-secondary btn-sm me-3 d-none d-md-inline-block" target="_top" id="backBtn"><i class="bi bi-chevron-left"></i> 返回</a>
+            <h4 class="m-0 fw-bold">运营数据看板</h4>
+        </div>
+        <div>
+            <span class="text-muted me-2 small" id="lastRefreshTime">最后刷新：-</span>
+            <button class="btn btn-outline-primary btn-sm me-2" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+            <button class="btn btn-primary btn-sm" id="exportBtn"><i class="bi bi-download"></i> 导出报表</button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div>
+                    <div class="text-muted mb-1">今日评价数</div>
+                    <h3 class="m-0 fw-bold" id="todayEvalCount">0</h3>
+                </div>
+                <div class="stat-icon bg-primary-soft"><i class="bi bi-chat-square-text"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div>
+                    <div class="text-muted mb-1">本周平均分</div>
+                    <h3 class="m-0 fw-bold" id="weekAvgScore">0.00</h3>
+                </div>
+                <div class="stat-icon bg-success-soft"><i class="bi bi-star"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div>
+                    <div class="text-muted mb-1">差评数预警</div>
+                    <h3 class="m-0 fw-bold text-danger" id="badReviewCount">0</h3>
+                </div>
+                <div class="stat-icon bg-danger-soft"><i class="bi bi-exclamation-triangle"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div>
+                    <div class="text-muted mb-1">笔记提及数</div>
+                    <h3 class="m-0 fw-bold" id="noteMentionCount">0</h3>
+                </div>
+                <div class="stat-icon bg-warning-soft"><i class="bi bi-journal-text"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="chart-card">
+                <h6 class="fw-bold mb-2">近30天评分趋势</h6>
+                <div id="trendChart" class="chart-container"></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="chart-card" style="height: 406px; display: flex; flex-direction: column;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold m-0 text-danger"><i class="bi bi-bell-fill"></i> 差评预警</h6>
+                </div>
+                <div class="warning-list flex-grow-1" id="warningList">
+                    <div class="empty-box">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-card">
+        <h6 class="fw-bold mb-2">热门菜品排行 Top 10</h6>
+        <div id="rankChart" class="chart-container"></div>
+    </div>
+
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div id="tipToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">提示</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastText"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_DASHBOARD = '/api/operation/dashboard';
+        const API_EXPORT = '/api/admin/operator/dashboard/export';
+        let trendChart;
+        let rankChart;
+
+        function showToast(message) {
+            document.getElementById('toastText').innerText = message;
+            const toast = new bootstrap.Toast(document.getElementById('tipToast'));
+            toast.show();
+        }
+
+        function formatScore(value) {
+            const num = Number(value || 0);
+            return Number.isFinite(num) ? num.toFixed(2) : '0.00';
+        }
+
+        function renderTrend(trendRows) {
+            const dates = (trendRows || []).map((item) => item.date || '');
+            const taste = (trendRows || []).map((item) => Number(item.taste_avg || 0));
+            const env = (trendRows || []).map((item) => Number(item.env_avg || 0));
+            const service = (trendRows || []).map((item) => Number(item.service_avg || 0));
+            if (!trendChart) {
+                trendChart = echarts.init(document.getElementById('trendChart'));
+            }
+            trendChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['口味', '环境', '服务'] },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: dates },
+                yAxis: { type: 'value', min: 0, max: 10 },
+                series: [
+                    { name: '口味', type: 'line', smooth: true, data: taste },
+                    { name: '环境', type: 'line', smooth: true, data: env },
+                    { name: '服务', type: 'line', smooth: true, data: service }
+                ]
+            });
+        }
+
+        function renderRank(hotDishes) {
+            const names = (hotDishes || []).map((item) => item.dish_name);
+            const evalCounts = (hotDishes || []).map((item) => Number(item.evaluation_count || 0));
+            const avgScores = (hotDishes || []).map((item) => Number(item.avg_score || 0));
+            if (!rankChart) {
+                rankChart = echarts.init(document.getElementById('rankChart'));
+            }
+            rankChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['评价数', '平均分'] },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: [{ type: 'category', data: names }],
+                yAxis: [{ type: 'value', name: '评价数' }, { type: 'value', name: '平均分', min: 0, max: 10 }],
+                series: [
+                    { name: '评价数', type: 'bar', data: evalCounts, itemStyle: { color: '#0d6efd' } },
+                    { name: '平均分', type: 'line', yAxisIndex: 1, data: avgScores, itemStyle: { color: '#fd7e14' } }
+                ]
+            });
+        }
+
+        async function handleWarning(id) {
+            try {
+                const response = await fetch(`/api/operation/bad_reviews/${id}/handle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handle_note: '已在运营看板标记处理' })
+                });
+                const res = await response.json();
+                if (res.code !== 200) {
+                    showToast(res.msg || '处理失败');
+                    return;
+                }
+                await fetchDashboard();
+                showToast('预警已标记处理');
+            } catch (error) {
+                showToast('加载失败，请稍后重试');
+            }
+        }
+
+        function renderWarnings(list) {
+            const box = document.getElementById('warningList');
+            if (!list || list.length === 0) {
+                box.innerHTML = '<div class="empty-box">暂无待处理预警</div>';
+                return;
+            }
+            box.innerHTML = list
+                .map((item) => {
+                    const isHandled = item.status === '已处理';
+                    const statusBadge = isHandled ? '<span class="badge bg-success">已处理</span>' : '<span class="badge bg-danger">待处理</span>';
+                    const actionBtn = isHandled
+                        ? ''
+                        : `<button class="btn btn-sm btn-outline-success" onclick="handleWarning(${item.bad_id})">标记处理</button>`;
+                    return `
+                        <div class="warning-item">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                ${statusBadge}
+                                <small class="text-muted">${item.create_time || '-'}</small>
+                            </div>
+                            <div class="fw-bold mb-1">${item.dish_name || '-'}</div>
+                            <div class="small text-muted mb-2">评分 ${formatScore(item.score)} · ${item.content || ''}</div>
+                            <div class="text-end">${actionBtn}</div>
+                        </div>
+                    `;
+                })
+                .join('');
+        }
+
+        function renderLoadFailed() {
+            document.getElementById('warningList').innerHTML = '<div class="empty-box">加载失败，请稍后重试</div>';
+        }
+
+        function renderLoading() {
+            document.getElementById('warningList').innerHTML = '<div class="empty-box">加载中...</div>';
+        }
+
+        async function fetchDashboard() {
+            document.getElementById('refreshBtn').disabled = true;
+            renderLoading();
+            try {
+                const response = await fetch(API_DASHBOARD);
+                const res = await response.json();
+                if (res.code !== 200) {
+                    renderLoadFailed();
+                    showToast(res.msg || '加载失败，请稍后重试');
+                    return;
+                }
+                const payload = res.data || {};
+                document.getElementById('todayEvalCount').innerText = payload.today_evaluation_count || 0;
+                document.getElementById('weekAvgScore').innerText = formatScore(payload.week_avg_score);
+                document.getElementById('badReviewCount').innerText = payload.bad_review_count || 0;
+                document.getElementById('noteMentionCount').innerText = payload.note_mention_count || 0;
+                document.getElementById('lastRefreshTime').innerText = `最后刷新：${payload.last_refresh_time || '-'}`;
+
+                renderTrend(payload['30day_score_trend'] || []);
+                renderRank(payload.hot_dishes_top10 || []);
+                renderWarnings(payload.bad_review_list || []);
+            } catch (error) {
+                renderLoadFailed();
+                showToast('加载失败，请稍后重试');
+            } finally {
+                document.getElementById('refreshBtn').disabled = false;
+            }
+        }
+
+        function exportDashboard() {
+            window.open(API_EXPORT, '_blank');
+        }
+
+        if (window.self !== window.top) {
+            document.getElementById('backBtn').style.display = 'none';
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', fetchDashboard);
+        document.getElementById('exportBtn').addEventListener('click', exportDashboard);
+
+        window.addEventListener('resize', function () {
+            if (trendChart) trendChart.resize();
+            if (rankChart) rankChart.resize();
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            fetchDashboard();
+            setInterval(fetchDashboard, 5 * 60 * 1000);
+        });
+    </script>
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

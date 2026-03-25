@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>个人中心 - 校园食堂点评系统</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-bottom: 78px;
+        }
+
+        .user-header-card {
+            background: linear-gradient(135deg, #FF7F24 0%, #FFB07C 100%);
+            color: white;
+            padding: 30px 20px;
+            border-radius: 0 0 20px 20px;
+            margin-bottom: 18px;
+            box-shadow: 0 4px 10px rgba(255, 127, 36, 0.3);
+        }
+
+        .avatar-container {
+            width: 80px;
+            height: 80px;
+            margin-right: 15px;
+        }
+
+        .user-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            object-fit: cover;
+            background-color: #fff;
+        }
+
+        .role-badge {
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 6px;
+            backdrop-filter: blur(5px);
+        }
+
+        .edit-btn {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 5px 15px;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .edit-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .login-placeholder {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .btn-login {
+            background-color: white;
+            color: #FF7F24;
+            border: none;
+            padding: 8px 25px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-top: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .function-grid {
+            background-color: white;
+            border-radius: 12px;
+            padding: 14px 10px;
+            margin: 0 15px 16px 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .grid-item {
+            text-align: center;
+            color: #333;
+            text-decoration: none;
+            padding: 10px 0;
+            transition: transform 0.2s;
+            border-radius: 10px;
+            display: block;
+        }
+
+        .grid-item:active {
+            transform: scale(0.95);
+        }
+
+        .grid-item.active {
+            background-color: rgba(255, 127, 36, 0.08);
+        }
+
+        .grid-icon {
+            font-size: 26px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .grid-label {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .content-section {
+            background-color: white;
+            border-radius: 12px;
+            margin: 0 15px 18px 15px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            min-height: 230px;
+        }
+
+        .section-head {
+            padding: 14px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .content-list {
+            padding: 0;
+            list-style: none;
+            margin: 0;
+        }
+
+        .list-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .item-main {
+            flex: 1;
+        }
+
+        .item-title {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .item-meta {
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .item-score {
+            color: #FF7F24;
+            font-weight: bold;
+        }
+
+        .item-status {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+
+        .status-success {
+            background-color: #e6f7e9;
+            color: #28a745;
+        }
+
+        .item-actions {
+            margin-left: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            color: #999;
+            font-size: 14px;
+            background: none;
+            border: none;
+            padding: 5px;
+        }
+
+        .action-btn:hover {
+            color: #FF7F24;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 0;
+            color: #999;
+        }
+
+        .empty-state i {
+            font-size: 40px;
+            margin-bottom: 10px;
+            display: block;
+            color: #ddd;
+        }
+
+        .load-more {
+            text-align: center;
+            padding: 15px;
+            color: #999;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .settings-section {
+            background-color: white;
+            border-radius: 12px;
+            margin: 0 15px 20px 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .setting-item {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f0f0f0;
+            text-decoration: none;
+            color: #333;
+            transition: background-color 0.2s;
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+
+        .setting-item:active {
+            background-color: #f8f9fa;
+        }
+
+        .setting-icon {
+            margin-right: 10px;
+            color: #FF7F24;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            z-index: 1000;
+        }
+
+        .nav-item-bottom {
+            text-align: center;
+            color: #999;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .nav-item-bottom.active {
+            color: #FF7F24;
+        }
+
+        .nav-item-bottom i {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+    </style>
+    <link href="../../static/css/common.css" rel="stylesheet">
+</head>
+<body>
+    <div class="user-header-card" id="userInfoSection">
+        <div id="notLoginState" class="login-placeholder" style="display: none;">
+            <div class="avatar-container mx-auto mb-2">
+                <img src="https://via.placeholder.com/80/cccccc/ffffff?text=User" class="user-avatar" alt="默认头像">
+            </div>
+            <h5 class="mb-1">未登录</h5>
+            <p class="small opacity-75 mb-3">登录后体验更多功能</p>
+            <button class="btn btn-login" onclick="goLogin()">立即登录</button>
+        </div>
+
+        <div id="loginState" class="d-flex align-items-center">
+            <div class="avatar-container">
+                <img src="https://via.placeholder.com/80/FF7F24/ffffff?text=M" class="user-avatar" id="userAvatar" alt="用户头像">
+            </div>
+            <div class="flex-grow-1">
+                <div class="d-flex align-items-center mb-1">
+                    <h5 class="mb-0 fw-bold" id="userName">未命名用户</h5>
+                    <span class="role-badge" id="userRole">用户</span>
+                </div>
+                <p class="mb-2 opacity-75 small" id="userPhone">未填写手机号</p>
+                <button class="edit-btn" onclick="goEditProfile()">
+                    <i class="bi bi-pencil-square me-1"></i>编辑资料
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="function-grid">
+        <div class="row g-0">
+            <div class="col-3">
+                <a href="#" class="grid-item d-block active" id="icon-evaluations" onclick="switchSection('evaluations'); return false;">
+                    <i class="bi bi-star-fill grid-icon text-warning"></i>
+                    <span class="grid-label">我的评价</span>
+                </a>
+            </div>
+            <div class="col-3">
+                <a href="#" class="grid-item d-block" id="icon-notes" onclick="switchSection('notes'); return false;">
+                    <i class="bi bi-journal-text grid-icon text-primary"></i>
+                    <span class="grid-label">我的笔记</span>
+                </a>
+            </div>
+            <div class="col-3">
+                <a href="#" class="grid-item d-block" id="icon-favorites" onclick="switchSection('favorites'); return false;">
+                    <i class="bi bi-heart-fill grid-icon text-danger"></i>
+                    <span class="grid-label">我的收藏</span>
+                </a>
+            </div>
+            <div class="col-3">
+                <a href="feedback.html" class="grid-item d-block" id="icon-feedback">
+                    <i class="bi bi-envelope-fill grid-icon text-success"></i>
+                    <span class="grid-label">意见反馈</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-section">
+        <div class="section-head">
+            <h5 class="section-title" id="listTitle">我的评价</h5>
+            <small class="text-secondary" id="listCount">0 条</small>
+        </div>
+        <div id="contentContainer"></div>
+        <div class="load-more" onclick="loadMore()" id="loadMoreBtn">
+            点击加载更多 <i class="bi bi-chevron-down ms-1"></i>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <a href="notifications.html" class="setting-item">
+            <div>
+                <i class="bi bi-bell setting-icon"></i>
+                <span>消息通知</span>
+            </div>
+            <i class="bi bi-chevron-right text-secondary small"></i>
+        </a>
+        <a href="about.html" class="setting-item">
+            <div>
+                <i class="bi bi-info-circle setting-icon"></i>
+                <span>关于我们</span>
+            </div>
+            <i class="bi bi-chevron-right text-secondary small"></i>
+        </a>
+        <a href="#" class="setting-item text-danger" onclick="logout(); return false;">
+            <div>
+                <i class="bi bi-box-arrow-right setting-icon text-danger"></i>
+                <span>退出登录</span>
+            </div>
+        </a>
+    </div>
+
+    <div class="bottom-nav">
+        <a href="index.html" class="nav-item-bottom">
+            <i class="bi bi-house"></i>
+            首页
+        </a>
+        <a href="rank_list.html" class="nav-item-bottom">
+            <i class="bi bi-trophy"></i>
+            榜单
+        </a>
+        <a href="note_publish.html" class="nav-item-bottom">
+            <i class="bi bi-plus-circle-fill text-warning" style="font-size: 32px; margin-top: -10px;"></i>
+        </a>
+        <a href="canteen_detail.html?name=北区食堂" class="nav-item-bottom">
+            <i class="bi bi-shop"></i>
+            食堂
+        </a>
+        <a href="#" class="nav-item-bottom active">
+            <i class="bi bi-person-fill"></i>
+            我的
+        </a>
+    </div>
+
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        let currentUser = null;
+        let currentSection = 'evaluations';
+        let currentItems = [];
+        let currentRenderedCount = 0;
+        const PAGE_SIZE = 10;
+
+        const titleMap = {
+            evaluations: '我的评价',
+            notes: '我的笔记',
+            favorites: '我的收藏'
+        };
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            await bootstrapPage();
+        });
+
+        async function bootstrapPage() {
+            const meRes = await fetchApi(API.AUTH_ME);
+            if (meRes.code !== 200) {
+                document.getElementById('notLoginState').style.display = 'block';
+                document.getElementById('loginState').style.display = 'none';
+                document.getElementById('contentContainer').innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-person-x"></i>
+                        <p>请先登录后查看个人中心</p>
+                    </div>
+                `;
+                document.getElementById('loadMoreBtn').style.display = 'none';
+                return;
+            }
+
+            currentUser = meRes.data || {};
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            localStorage.setItem('isLogin', 'true');
+            renderUserProfile(currentUser);
+
+            const url = new URL(window.location.href);
+            const tab = (url.searchParams.get('tab') || '').toLowerCase();
+            if (tab === 'notes' || tab === 'favorites' || tab === 'evaluations') {
+                currentSection = tab;
+            }
+            await switchSection(currentSection);
+        }
+
+        function goLogin() {
+            window.location.href = '/login';
+        }
+
+        function goEditProfile() {
+            window.location.href = 'edit_profile.html';
+        }
+
+        function maskPhone(phone) {
+            if (!phone || phone.length !== 11) {
+                return '未填写手机号';
+            }
+            return `${phone.slice(0, 3)}****${phone.slice(7)}`;
+        }
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderUserProfile(user) {
+            document.getElementById('notLoginState').style.display = 'none';
+            document.getElementById('loginState').style.display = 'flex';
+            const displayName = user.nickname || user.username || '未命名用户';
+            const cachedAvatar = localStorage.getItem('user_avatar_local') || '';
+            document.getElementById('userName').textContent = displayName;
+            document.getElementById('userPhone').textContent = maskPhone(user.phone || '');
+            document.getElementById('userRole').textContent = user.role || '用户';
+            document.getElementById('userAvatar').src = cachedAvatar || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FF7F24&color=fff`;
+        }
+
+        async function switchSection(section) {
+            currentSection = section;
+            document.querySelectorAll('.grid-item').forEach(node => node.classList.remove('active'));
+            const activeNode = document.getElementById(`icon-${section}`);
+            if (activeNode) {
+                activeNode.classList.add('active');
+            }
+
+            document.getElementById('listTitle').textContent = titleMap[section] || '我的内容';
+
+            const container = document.getElementById('contentContainer');
+            container.innerHTML = `
+                <div class="text-center py-4 text-secondary">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>加载中...
+                </div>
+            `;
+
+            let res;
+            if (section === 'evaluations') {
+                res = await fetchApi(API.MY_EVALUATIONS);
+            } else if (section === 'notes') {
+                res = await fetchApi(API.MY_NOTES);
+            } else {
+                res = await fetchApi(API.FAVORITES);
+            }
+
+            currentItems = (res.code === 200 && Array.isArray(res.data)) ? res.data : [];
+            currentRenderedCount = PAGE_SIZE;
+            renderList();
+        }
+
+        function renderList() {
+            const container = document.getElementById('contentContainer');
+            const btn = document.getElementById('loadMoreBtn');
+            const list = currentItems.slice(0, currentRenderedCount);
+
+            document.getElementById('listCount').textContent = `${currentItems.length} 条`;
+
+            if (list.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>暂无相关内容</p>
+                    </div>
+                `;
+                btn.style.display = 'none';
+                return;
+            }
+
+            let html = '<ul class="content-list">';
+            list.forEach(item => {
+                if (currentSection === 'evaluations') {
+                    const dishNames = (item.dishes || []).map(d => d.dish_name).filter(Boolean).join(' / ') || '暂无菜品信息';
+                    const title = `${item.canteen_name || ''} - ${item.window_name || ''}`;
+                    html += `
+                        <li class="list-item" id="item-${item.id}">
+                            <div class="item-main">
+                                <div class="item-title">${escapeHtml(title)}</div>
+                                <div class="item-meta">
+                                    <span class="item-score">${Number(item.comprehensive_score || 0).toFixed(1)}分</span>
+                                    <span>${escapeHtml(item.create_time || '')}</span>
+                                    <span class="item-status status-success">已发布</span>
+                                </div>
+                                <div class="small text-secondary mt-1">${escapeHtml(dishNames)}</div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="action-btn" onclick="addFavorite('evaluation', ${item.id}, '${escapeHtml(title)}')" title="收藏"><i class="bi bi-heart"></i></button>
+                                <button class="action-btn" onclick="deleteItem('evaluations', ${item.id})" title="删除"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </li>
+                    `;
+                    return;
+                }
+
+                if (currentSection === 'notes') {
+                    html += `
+                        <li class="list-item" id="item-${item.id}">
+                            <div class="item-main">
+                                <div class="item-title">${escapeHtml(item.title)}</div>
+                                <div class="item-meta">
+                                    <span class="item-status status-success">${escapeHtml(item.status || '已发布')}</span>
+                                    <span>${escapeHtml(item.create_time || '')}</span>
+                                    <span><i class="bi bi-heart-fill text-danger small"></i> ${Number(item.like_count || 0)}</span>
+                                </div>
+                                <div class="small text-secondary mt-1 text-truncate">${escapeHtml(item.content || '')}</div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="action-btn" onclick="goEditNote(${item.id})" title="编辑"><i class="bi bi-pencil"></i></button>
+                                <button class="action-btn" onclick="addFavorite('note', ${item.id}, '${escapeHtml(item.title)}')" title="收藏"><i class="bi bi-heart"></i></button>
+                                <button class="action-btn" onclick="deleteItem('notes', ${item.id})" title="删除"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </li>
+                    `;
+                    return;
+                }
+
+                html += `
+                    <li class="list-item" id="item-${item.id}">
+                        <div class="item-main">
+                            <div class="item-title">${escapeHtml(item.title)}</div>
+                            <div class="item-meta">
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary">${escapeHtml(item.fav_type || 'favorite')}</span>
+                                <span>收藏于 ${escapeHtml(item.created_time || '')}</span>
+                            </div>
+                        </div>
+                        <div class="item-actions">
+                            <button class="action-btn" onclick="deleteItem('favorites', ${item.id})" title="取消收藏"><i class="bi bi-heart-fill text-danger"></i></button>
+                        </div>
+                    </li>
+                `;
+            });
+            html += '</ul>';
+
+            container.innerHTML = html;
+            btn.style.display = currentItems.length > currentRenderedCount ? 'block' : 'none';
+            btn.innerHTML = '点击加载更多 <i class="bi bi-chevron-down ms-1"></i>';
+            btn.style.cursor = 'pointer';
+            btn.onclick = loadMore;
+        }
+
+        function goEditNote(noteId) {
+            window.location.href = `note_publish.html?edit=${noteId}`;
+        }
+
+        async function addFavorite(favType, refId, title) {
+            const res = await fetchApi(API.FAVORITES, {
+                method: 'POST',
+                body: JSON.stringify({ fav_type: favType, ref_id: refId, title: title })
+            });
+            alert(res.msg || (res.code === 200 ? '收藏成功' : '收藏失败'));
+            if (currentSection === 'favorites') {
+                await switchSection('favorites');
+            }
+        }
+
+        async function deleteItem(type, id) {
+            if (!confirm('确定要删除这条记录吗？此操作不可恢复。')) {
+                return;
+            }
+
+            let res = null;
+            if (type === 'evaluations') {
+                res = await fetchApi(`${API.MY_EVALUATIONS}/${id}`, { method: 'DELETE' });
+            } else if (type === 'notes') {
+                res = await fetchApi(`${API.MY_NOTES}/${id}`, { method: 'DELETE' });
+            } else if (type === 'favorites') {
+                res = await fetchApi(`${API.FAVORITES}/${id}`, { method: 'DELETE' });
+            }
+
+            if (res && res.code === 200) {
+                await switchSection(currentSection);
+            } else {
+                alert((res && res.msg) || '删除失败');
+            }
+        }
+
+        function loadMore() {
+            currentRenderedCount += PAGE_SIZE;
+            if (currentRenderedCount > currentItems.length) {
+                currentRenderedCount = currentItems.length;
+            }
+            renderList();
+            if (currentRenderedCount >= currentItems.length) {
+                const btn = document.getElementById('loadMoreBtn');
+                btn.style.display = 'block';
+                btn.innerHTML = '已显示全部内容';
+                btn.onclick = null;
+                btn.style.cursor = 'default';
+            }
+        }
+
+        async function logout() {
+            if (!confirm('确定要退出登录吗？')) {
+                return;
+            }
+            await fetchApi(API.LOGOUT || '/api/logout', { method: 'POST' });
+            localStorage.removeItem('isLogin');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+    </script>
+    <script src="../../static/js/common.js"></script>
+</body>
+</html>

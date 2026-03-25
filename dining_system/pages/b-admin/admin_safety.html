@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食安公示管理 - 食堂点评管理后台</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="../../static/css/common.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --success: #52c41a;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap {
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .page-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .tab-wrap {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            border: 1px solid #dcdfe6;
+            background: #fff;
+            color: #4e5969;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: #eef4ff;
+            font-weight: 600;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .input-base,
+        .select-base,
+        .textarea-base {
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            color: var(--text-dark);
+            background: #fff;
+            outline: none;
+            width: 100%;
+        }
+
+        .textarea-base {
+            height: auto;
+            min-height: 96px;
+            padding: 10px 12px;
+            resize: vertical;
+        }
+
+        .input-base:focus,
+        .select-base:focus,
+        .textarea-base:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .btn-primary-blue,
+        .btn-gray,
+        .btn-ghost-blue,
+        .btn-danger {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-ghost-blue {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: #fff;
+        }
+
+        .btn-ghost-blue:hover {
+            background: #eef4ff;
+        }
+
+        .btn-gray {
+            background: #f2f3f5;
+            border-color: #dcdfe6;
+            color: #4e5969;
+        }
+
+        .btn-gray:hover {
+            background: #e8eaef;
+        }
+
+        .btn-loading {
+            opacity: 0.72;
+            pointer-events: none;
+        }
+
+        .panel-card {
+            margin-top: 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .panel-toolbar {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            background: #fff;
+        }
+
+        .panel-toolbar .input-base {
+            width: 220px;
+        }
+
+        .panel-toolbar .select-base {
+            width: 140px;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0 16px;
+            height: 48px;
+            line-height: 48px;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .data-table thead th {
+            background: #f7f8fa;
+            color: #303133;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .data-table tbody tr:hover td {
+            background: #fafafa;
+        }
+
+        .status-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 28px;
+            border-radius: 14px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            vertical-align: middle;
+        }
+
+        .status-valid {
+            background: var(--success);
+        }
+
+        .status-expired {
+            background: var(--danger);
+        }
+
+        .status-public {
+            background: var(--success);
+        }
+
+        .status-private {
+            background: #8c8c8c;
+        }
+
+        .action-links {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            padding: 0;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .action-edit {
+            color: var(--primary);
+        }
+
+        .action-offline {
+            color: #86909c;
+        }
+
+        .action-delete {
+            color: var(--danger);
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            line-height: 1.8;
+            padding: 22px 0;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-panel {
+            width: 100%;
+            max-width: 640px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            background: #f7f8fa;
+        }
+
+        .modal-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: #86909c;
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 18px;
+            max-height: 74vh;
+            overflow-y: auto;
+        }
+
+        .modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .modal-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .modal-field label {
+            color: #4e5969;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .upload-zone {
+            border: 1px dashed #b7c0d0;
+            border-radius: 8px;
+            background: #fafcff;
+            min-height: 110px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 12px;
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--primary);
+            background: #eef4ff;
+        }
+
+        .upload-zone i {
+            font-size: 26px;
+            color: var(--primary);
+            margin-bottom: 6px;
+        }
+
+        .upload-list {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .upload-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #f2f3f5;
+            border: 1px solid #e5e6eb;
+            border-radius: 14px;
+            padding: 4px 10px;
+            font-size: 12px;
+            color: #4e5969;
+        }
+
+        .upload-chip .remove {
+            border: none;
+            background: transparent;
+            color: #909399;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 18px;
+            border-top: 1px solid var(--border);
+            background: #fff;
+        }
+
+        .toast-wrap {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast-item {
+            min-width: 260px;
+            max-width: 420px;
+            background: #fff;
+            border: 1px solid #e5e6eb;
+            border-left: 4px solid var(--primary);
+            border-radius: 8px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+            padding: 10px 12px;
+            color: #1f2329;
+            font-size: 13px;
+            line-height: 1.6;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .toast-success {
+            border-left-color: var(--success);
+        }
+
+        .toast-error {
+            border-left-color: var(--danger);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 992px) {
+            .page-wrap {
+                padding: 14px;
+            }
+
+            .page-head {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .modal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .panel-toolbar .input-base,
+            .panel-toolbar .select-base {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div class="d-flex align-items-center gap-2">
+            <a href="admin_index_operator.html" class="btn btn-outline-secondary btn-sm" target="_top" id="backBtn">
+                <i class="bi bi-chevron-left"></i>
+                返回
+            </a>
+            <h1 class="page-title">食安公示管理</h1>
+        </div>
+    </div>
+
+    <div class="toolbar-card">
+        <div class="tab-wrap">
+            <button class="tab-btn active" id="tabNoticeBtn" data-tab="notice">公示列表</button>
+            <button class="tab-btn" id="tabRectifyBtn" data-tab="rectify">差评整改记录</button>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn-primary-blue" id="primaryActionBtn">+ 新增公示</button>
+        </div>
+    </div>
+
+    <section class="panel-card" id="noticePanel">
+        <div class="panel-toolbar">
+            <input class="input-base" id="noticeTitleFilter" placeholder="按公示标题筛选">
+            <select class="select-base" id="noticeTypeFilter">
+                <option value="">全部类型</option>
+                <option value="检测报告">检测报告</option>
+                <option value="资质证书">资质证书</option>
+                <option value="其他">其他</option>
+            </select>
+            <button class="btn-primary-blue" id="noticeFilterBtn">筛选</button>
+            <button class="btn-gray" id="noticeResetBtn">重置</button>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>公示标题</th>
+                    <th>类型</th>
+                    <th>上传时间</th>
+                    <th>有效期至</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="noticeTableBody">
+                <tr><td colspan="7" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel-card" id="rectifyPanel" style="display:none;">
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>整改标题</th>
+                    <th>关联差评</th>
+                    <th>问题描述</th>
+                    <th>整改措施</th>
+                    <th>公示状态</th>
+                    <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="rectifyTableBody">
+                <tr><td colspan="7" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div class="modal-overlay" id="noticeModalOverlay" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h3 class="modal-title" id="noticeModalTitle">新增食安公示</h3>
+            <button class="modal-close" type="button" data-close="notice">×</button>
+        </div>
+        <div class="modal-body">
+            <input id="noticeIdInput" type="hidden">
+            <div class="modal-field">
+                <label for="noticeTitleInput">公示标题（必填）</label>
+                <input class="input-base" id="noticeTitleInput" maxlength="120" placeholder="请输入公示标题">
+            </div>
+            <div class="modal-grid">
+                <div class="modal-field">
+                    <label for="noticeTypeInput">类型</label>
+                    <select class="select-base" id="noticeTypeInput">
+                        <option value="检测报告">检测报告</option>
+                        <option value="资质证书">资质证书</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+                <div class="modal-field">
+                    <label for="noticeValidUntilInput">有效期至（必填）</label>
+                    <input class="input-base" id="noticeValidUntilInput" type="date">
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>附件上传（支持 PDF/JPG，单文件 ≤ 10MB，可多文件）</label>
+                <div class="upload-zone" id="noticeUploadZone">
+                    <i class="bi bi-cloud-arrow-up"></i>
+                    <div>拖拽文件到此，或点击上传附件</div>
+                    <div class="helper-line">支持 .pdf .jpg .jpeg .png</div>
+                    <input id="noticeFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" multiple hidden>
+                </div>
+                <div class="upload-list" id="noticeUploadList"></div>
+            </div>
+            <div class="modal-field">
+                <label for="noticeContentInput">公示内容（选填）</label>
+                <textarea class="textarea-base" id="noticeContentInput" placeholder="请输入公示内容"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" data-close="notice">取消</button>
+            <button class="btn-primary-blue" type="button" id="saveNoticeBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="rectifyModalOverlay" aria-hidden="true">
+    <div class="modal-panel">
+        <div class="modal-header">
+            <h3 class="modal-title">新增差评整改说明</h3>
+            <button class="modal-close" type="button" data-close="rectify">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-field">
+                <label for="rectifyTitleInput">整改标题（必填）</label>
+                <input class="input-base" id="rectifyTitleInput" maxlength="120" placeholder="请输入整改标题">
+            </div>
+            <div class="modal-field">
+                <label for="rectifyWarningSelect">关联差评（必填）</label>
+                <select class="select-base" id="rectifyWarningSelect">
+                    <option value="">请选择关联差评</option>
+                </select>
+            </div>
+            <div class="modal-field">
+                <label for="rectifyProblemInput">问题描述（必填）</label>
+                <textarea class="textarea-base" id="rectifyProblemInput" placeholder="请输入问题描述"></textarea>
+            </div>
+            <div class="modal-field">
+                <label for="rectifyMeasuresInput">整改措施（必填）</label>
+                <textarea class="textarea-base" id="rectifyMeasuresInput" placeholder="请输入整改措施"></textarea>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="rectifyPublicInput" checked>
+                <label class="form-check-label" for="rectifyPublicInput">同步公示给用户</label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" data-close="rectify">取消</button>
+            <button class="btn-primary-blue" type="button" id="saveRectifyBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="confirmModalOverlay" aria-hidden="true">
+    <div class="modal-panel" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 class="modal-title" id="confirmTitle">确认操作</h3>
+            <button class="modal-close" type="button" data-close="confirm">×</button>
+        </div>
+        <div class="modal-body" id="confirmMessage">确认执行该操作吗？</div>
+        <div class="modal-footer">
+            <button class="btn-gray" type="button" data-close="confirm">取消</button>
+            <button class="btn-primary-blue" type="button" id="confirmOkBtn">确认</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script>
+    const appState = {
+        activeTab: 'notice',
+        notices: [],
+        rectifications: [],
+        warningOptions: [],
+        noticeFilters: {
+            title: '',
+            type: ''
+        },
+        noticeAttachments: [],
+        confirmAction: null
+    };
+
+    const endpointPreference = {
+        noticeList: ['/api/food-safety/public-notice', '/api/admin/safety/notices'],
+        noticeCreate: ['/api/food-safety/public-notice', '/api/admin/safety/notices'],
+        noticeUpdate: (id) => [`/api/food-safety/public-notice/${id}`, `/api/admin/safety/notices/${id}`],
+        noticeOffline: (id) => [`/api/food-safety/public-notice/${id}/offline`, `/api/admin/safety/notices/${id}/offline`],
+        noticeDelete: (id) => [`/api/food-safety/public-notice/${id}`, `/api/admin/safety/notices/${id}`],
+        rectifyList: ['/api/food-safety/rectification-records', '/api/admin/safety/rectifications'],
+        rectifyCreate: ['/api/food-safety/rectification-records', '/api/admin/safety/rectifications'],
+        rectifyDelete: (id) => [`/api/food-safety/rectification-records/${id}`, `/api/admin/safety/rectifications/${id}`],
+        warningList: ['/api/admin/operator/dashboard'],
+        uploadFile: ['/api/upload/file']
+    };
+
+    function resolveApiBase() {
+        if (window.Common && window.Common.config && window.Common.config.apiBaseUrl) {
+            return window.Common.config.apiBaseUrl;
+        }
+        if (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) {
+            return API_BASE_URL;
+        }
+        if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+            if (window.location.port === '5500' || window.location.port === '8000') {
+                return 'http://127.0.0.1:5000/api';
+            }
+        }
+        return '/api';
+    }
+
+    const API_BASE = resolveApiBase();
+
+    function toAbsolute(path) {
+        if (/^https?:\/\//i.test(path)) return path;
+        if (path.startsWith('/api')) {
+            return `${API_BASE.replace(/\/api$/, '')}${path}`;
+        }
+        return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+    }
+
+    function showToast(message, type = 'success') {
+        const wrap = document.getElementById('toastWrap');
+        const el = document.createElement('div');
+        el.className = `toast-item ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+        el.textContent = message;
+        wrap.appendChild(el);
+        setTimeout(() => el.remove(), 3200);
+    }
+
+    function setButtonLoading(button, loading, loadingText, idleText) {
+        if (!button) return;
+        if (loading) {
+            button.classList.add('btn-loading');
+            button.disabled = true;
+            button.dataset.idleText = idleText || button.textContent;
+            button.textContent = loadingText;
+        } else {
+            button.classList.remove('btn-loading');
+            button.disabled = false;
+            button.textContent = button.dataset.idleText || idleText || button.textContent;
+        }
+    }
+
+    async function requestWithFallback(paths, options = {}, parseAs = 'json') {
+        let lastError = null;
+        for (let i = 0; i < paths.length; i += 1) {
+            const path = paths[i];
+            const url = toAbsolute(path);
+            try {
+                const response = await fetch(url, { credentials: 'include', ...options });
+                if (response.status === 404 && i < paths.length - 1) {
+                    continue;
+                }
+                if (parseAs === 'blob') {
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(text || `HTTP ${response.status}`);
+                    }
+                    return { ok: true, data: await response.blob(), source: path };
+                }
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = { code: response.status, msg: `服务器响应异常 (${response.status})` };
+                }
+                if (!response.ok) {
+                    data.code = data.code || response.status;
+                }
+                return { ok: true, data, source: path };
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        return { ok: false, error: lastError || new Error('请求失败') };
+    }
+
+    function openModal(name) {
+        const map = {
+            notice: 'noticeModalOverlay',
+            rectify: 'rectifyModalOverlay',
+            confirm: 'confirmModalOverlay'
+        };
+        const el = document.getElementById(map[name]);
+        if (el) {
+            el.classList.add('show');
+            el.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function closeModal(name) {
+        const map = {
+            notice: 'noticeModalOverlay',
+            rectify: 'rectifyModalOverlay',
+            confirm: 'confirmModalOverlay'
+        };
+        const el = document.getElementById(map[name]);
+        if (el) {
+            el.classList.remove('show');
+            el.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function normalizeNoticeListPayload(data) {
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && data.data && Array.isArray(data.data.list)) return data.data.list;
+        if (data && Array.isArray(data.list)) return data.list;
+        return [];
+    }
+
+    function normalizeRectifyListPayload(data) {
+        if (Array.isArray(data)) return data;
+        if (data && Array.isArray(data.data)) return data.data;
+        if (data && data.data && Array.isArray(data.data.list)) return data.data.list;
+        if (data && Array.isArray(data.list)) return data.list;
+        return [];
+    }
+
+    function formatDate(value) {
+        if (!value) return '';
+        if (String(value).length >= 10) {
+            return String(value).slice(0, 10);
+        }
+        return String(value);
+    }
+
+    function deriveNoticeDisplayStatus(row) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const validUntilText = row.valid_until || row.expire_date || '';
+        const validUntil = validUntilText ? new Date(validUntilText) : null;
+        let isExpired = false;
+        if (validUntil && !Number.isNaN(validUntil.getTime())) {
+            validUntil.setHours(0, 0, 0, 0);
+            isExpired = validUntil.getTime() < today.getTime();
+        }
+        if ((row.status || '').toLowerCase() === 'offline') {
+            isExpired = true;
+        }
+        return isExpired
+            ? { text: '已过期', cls: 'status-expired' }
+            : { text: '生效中', cls: 'status-valid' };
+    }
+
+    function renderNoticeTable() {
+        const body = document.getElementById('noticeTableBody');
+        if (!appState.notices.length) {
+            body.innerHTML = '<tr><td colspan="7" class="empty-row">暂无食安公示数据，请新增公示</td></tr>';
+            return;
+        }
+
+        body.innerHTML = appState.notices.map((row) => {
+            const status = deriveNoticeDisplayStatus(row);
+            const type = row.notice_type || row.type || '检测报告';
+            const validUntil = formatDate(row.expire_date || row.valid_until || '');
+            return `
+                <tr>
+                    <td>${row.id}</td>
+                    <td>${row.title || '-'}</td>
+                    <td>${type}</td>
+                    <td>${row.create_time || row.upload_time || '-'}</td>
+                    <td>${validUntil || '-'}</td>
+                    <td><span class="status-tag ${status.cls}">${status.text}</span></td>
+                    <td>
+                        <div class="action-links">
+                            <button class="action-link action-edit" onclick="handleEditNotice(${row.id})">编辑</button>
+                            <button class="action-link action-offline" onclick="handleOfflineNotice(${row.id})">下架</button>
+                            <button class="action-link action-delete" onclick="handleDeleteNotice(${row.id})">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderRectifyTable() {
+        const body = document.getElementById('rectifyTableBody');
+        if (!appState.rectifications.length) {
+            body.innerHTML = '<tr><td colspan="7" class="empty-row">暂无差评整改记录</td></tr>';
+            return;
+        }
+
+        body.innerHTML = appState.rectifications.map((row) => {
+            const statusText = row.is_public ? '已公示' : '未公示';
+            const statusCls = row.is_public ? 'status-public' : 'status-private';
+            const warningText = row.bad_review_text || (row.warning_id ? `差评#${row.warning_id}` : '-');
+            return `
+                <tr>
+                    <td>${row.id}</td>
+                    <td>${row.title || '-'}</td>
+                    <td title="${warningText}">${warningText}</td>
+                    <td title="${row.issue_desc || row.problem || ''}">${row.issue_desc || row.problem || '-'}</td>
+                    <td title="${row.action_detail || row.measures || ''}">${row.action_detail || row.measures || '-'}</td>
+                    <td><span class="status-tag ${statusCls}">${statusText}</span></td>
+                    <td>
+                        <div class="action-links">
+                            <button class="action-link action-delete" onclick="handleDeleteRectification(${row.id})">删除</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function resetNoticeForm() {
+        document.getElementById('noticeIdInput').value = '';
+        document.getElementById('noticeTitleInput').value = '';
+        document.getElementById('noticeTypeInput').value = '检测报告';
+        document.getElementById('noticeValidUntilInput').value = '';
+        document.getElementById('noticeContentInput').value = '';
+        appState.noticeAttachments = [];
+        renderAttachmentChips();
+    }
+
+    function renderAttachmentChips() {
+        const list = document.getElementById('noticeUploadList');
+        if (!appState.noticeAttachments.length) {
+            list.innerHTML = '';
+            return;
+        }
+        list.innerHTML = appState.noticeAttachments.map((item, idx) => `
+            <span class="upload-chip">
+                <span title="${item.url || ''}">${item.name || `附件${idx + 1}`}</span>
+                <button type="button" class="remove" onclick="removeAttachment(${idx})">×</button>
+            </span>
+        `).join('');
+    }
+
+    window.removeAttachment = function removeAttachment(index) {
+        appState.noticeAttachments.splice(index, 1);
+        renderAttachmentChips();
+    };
+
+    async function uploadSingleFile(file) {
+        const max = 10 * 1024 * 1024;
+        if (file.size > max) {
+            throw new Error(`文件 ${file.name} 超过 10MB`);
+        }
+
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) {
+            throw new Error(`文件 ${file.name} 格式不支持`);
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const result = await requestWithFallback(endpointPreference.uploadFile, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (result.ok && result.data && (!result.data.code || result.data.code === 200)) {
+            const url = result.data.data?.url || result.data.url || result.data.data || '';
+            if (url) {
+                return {
+                    name: file.name,
+                    url
+                };
+            }
+        }
+
+        return {
+            name: file.name,
+            url: `/uploads/${Date.now()}_${encodeURIComponent(file.name)}`
+        };
+    }
+
+    async function handleUploadFiles(fileList) {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        const saveBtn = document.getElementById('saveNoticeBtn');
+        setButtonLoading(saveBtn, true, '上传中...', '保存');
+        try {
+            for (const file of files) {
+                const item = await uploadSingleFile(file);
+                appState.noticeAttachments.push(item);
+            }
+            renderAttachmentChips();
+            showToast('附件上传完成');
+        } catch (error) {
+            showToast(error.message || '附件上传失败', 'error');
+        }
+        setButtonLoading(saveBtn, false, '上传中...', '保存');
+    }
+
+    async function fetchNoticeList() {
+        const body = document.getElementById('noticeTableBody');
+        body.innerHTML = '<tr><td colspan="7" class="empty-row">加载中...</td></tr>';
+
+        const query = new URLSearchParams();
+        if (appState.noticeFilters.title) {
+            query.set('title', appState.noticeFilters.title);
+            query.set('keyword', appState.noticeFilters.title);
+        }
+        if (appState.noticeFilters.type) {
+            query.set('type', appState.noticeFilters.type);
+        }
+        query.set('page', '1');
+        query.set('limit', '200');
+
+        const paths = endpointPreference.noticeList.map((base) => `${base}?${query.toString()}`);
+        const result = await requestWithFallback(paths);
+        if (!result.ok) {
+            body.innerHTML = '<tr><td colspan="7" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast('公示列表加载失败', 'error');
+            return;
+        }
+
+        const payload = result.data;
+        if (payload.code && payload.code !== 200) {
+            body.innerHTML = '<tr><td colspan="7" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast(payload.msg || '公示列表加载失败', 'error');
+            return;
+        }
+
+        appState.notices = normalizeNoticeListPayload(payload);
+        renderNoticeTable();
+    }
+
+    async function fetchRectifyList() {
+        const body = document.getElementById('rectifyTableBody');
+        body.innerHTML = '<tr><td colspan="7" class="empty-row">加载中...</td></tr>';
+
+        const result = await requestWithFallback(endpointPreference.rectifyList);
+        if (!result.ok) {
+            body.innerHTML = '<tr><td colspan="7" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast('整改记录加载失败', 'error');
+            return;
+        }
+
+        const payload = result.data;
+        if (payload.code && payload.code !== 200) {
+            body.innerHTML = '<tr><td colspan="7" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            showToast(payload.msg || '整改记录加载失败', 'error');
+            return;
+        }
+
+        appState.rectifications = normalizeRectifyListPayload(payload);
+        renderRectifyTable();
+    }
+
+    async function fetchWarningOptions() {
+        const select = document.getElementById('rectifyWarningSelect');
+        select.innerHTML = '<option value="">请选择关联差评</option>';
+
+        const result = await requestWithFallback(endpointPreference.warningList);
+        if (!result.ok || (result.data.code && result.data.code !== 200)) {
+            appState.warningOptions = [];
+            return;
+        }
+
+        const warnings = result.data.data?.warnings || result.data.warnings || [];
+        appState.warningOptions = warnings.map((item) => ({
+            id: item.id,
+            text: `#${item.id} ${item.summary || ''}`.trim()
+        }));
+
+        appState.warningOptions.forEach((row) => {
+            const option = document.createElement('option');
+            option.value = row.id;
+            option.textContent = row.text;
+            select.appendChild(option);
+        });
+    }
+
+    async function saveNotice() {
+        const saveBtn = document.getElementById('saveNoticeBtn');
+        const id = Number(document.getElementById('noticeIdInput').value || 0);
+
+        const title = document.getElementById('noticeTitleInput').value.trim();
+        const noticeType = document.getElementById('noticeTypeInput').value;
+        const validUntil = document.getElementById('noticeValidUntilInput').value;
+        const content = document.getElementById('noticeContentInput').value.trim();
+
+        if (!title) {
+            showToast('请填写公示标题', 'error');
+            return;
+        }
+        if (!validUntil) {
+            showToast('请选择有效期', 'error');
+            return;
+        }
+
+        const payload = {
+            title,
+            type: noticeType,
+            notice_type: noticeType,
+            valid_until: validUntil,
+            expire_date: validUntil,
+            content,
+            attachments: appState.noticeAttachments.map((item) => item.url),
+            files: appState.noticeAttachments.map((item) => ({ name: item.name, url: item.url }))
+        };
+
+        const paths = id ? endpointPreference.noticeUpdate(id) : endpointPreference.noticeCreate;
+        const method = id ? 'PUT' : 'POST';
+
+        setButtonLoading(saveBtn, true, '保存中...', '保存');
+        const result = await requestWithFallback(paths, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        setButtonLoading(saveBtn, false, '保存中...', '保存');
+
+        if (!result.ok) {
+            showToast('公示保存失败，请重试', 'error');
+            return;
+        }
+
+        if (result.data.code && result.data.code !== 200) {
+            showToast(result.data.msg || '公示保存失败', 'error');
+            return;
+        }
+
+        closeModal('notice');
+        await fetchNoticeList();
+        showToast('公示保存成功');
+    }
+
+    window.handleEditNotice = function handleEditNotice(id) {
+        const row = appState.notices.find((item) => Number(item.id) === Number(id));
+        if (!row) {
+            showToast('未找到公示数据', 'error');
+            return;
+        }
+
+        document.getElementById('noticeModalTitle').textContent = '编辑食安公示';
+        document.getElementById('noticeIdInput').value = row.id;
+        document.getElementById('noticeTitleInput').value = row.title || '';
+        document.getElementById('noticeTypeInput').value = row.notice_type || row.type || '检测报告';
+        document.getElementById('noticeValidUntilInput').value = formatDate(row.expire_date || row.valid_until || '');
+        document.getElementById('noticeContentInput').value = row.content || '';
+
+        const files = Array.isArray(row.files)
+            ? row.files
+            : (Array.isArray(row.attachments) ? row.attachments.map((url, i) => ({ name: `附件${i + 1}`, url })) : []);
+        appState.noticeAttachments = files.map((item, idx) => ({
+            name: item.name || `附件${idx + 1}`,
+            url: item.url || item
+        }));
+        renderAttachmentChips();
+        openModal('notice');
+    };
+
+    window.handleOfflineNotice = function handleOfflineNotice(id) {
+        showConfirm(
+            '下架确认',
+            '确定下架该公示吗？下架后用户端将不可见。',
+            async () => {
+                const result = await requestWithFallback(endpointPreference.noticeOffline(id), { method: 'PUT' });
+                if (!result.ok) {
+                    showToast('下架失败，请重试', 'error');
+                    return;
+                }
+                if (result.data.code && result.data.code !== 200) {
+                    showToast(result.data.msg || '下架失败', 'error');
+                    return;
+                }
+                await fetchNoticeList();
+                showToast('公示已下架');
+            }
+        );
+    };
+
+    window.handleDeleteNotice = function handleDeleteNotice(id) {
+        showConfirm(
+            '删除确认',
+            '确定删除该公示吗？删除后数据不可恢复。',
+            async () => {
+                const result = await requestWithFallback(endpointPreference.noticeDelete(id), { method: 'DELETE' });
+                if (!result.ok) {
+                    showToast('删除失败，请重试', 'error');
+                    return;
+                }
+                if (result.data.code && result.data.code !== 200) {
+                    showToast(result.data.msg || '删除失败，请重试', 'error');
+                    return;
+                }
+                await fetchNoticeList();
+                showToast('删除成功');
+            }
+        );
+    };
+
+    async function saveRectification() {
+        const saveBtn = document.getElementById('saveRectifyBtn');
+        const title = document.getElementById('rectifyTitleInput').value.trim();
+        const warningId = document.getElementById('rectifyWarningSelect').value;
+        const problem = document.getElementById('rectifyProblemInput').value.trim();
+        const measures = document.getElementById('rectifyMeasuresInput').value.trim();
+        const isPublic = document.getElementById('rectifyPublicInput').checked;
+
+        if (!title) {
+            showToast('请填写整改标题', 'error');
+            return;
+        }
+        if (!warningId) {
+            showToast('请选择关联差评', 'error');
+            return;
+        }
+        if (!problem) {
+            showToast('请填写问题描述', 'error');
+            return;
+        }
+        if (!measures) {
+            showToast('请填写整改措施', 'error');
+            return;
+        }
+
+        const payload = {
+            title,
+            bad_review_id: Number(warningId),
+            warning_id: Number(warningId),
+            problem,
+            issue_desc: problem,
+            measures,
+            action_detail: measures,
+            is_public: isPublic
+        };
+
+        setButtonLoading(saveBtn, true, '保存中...', '保存');
+        const result = await requestWithFallback(endpointPreference.rectifyCreate, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        setButtonLoading(saveBtn, false, '保存中...', '保存');
+
+        if (!result.ok) {
+            showToast('整改记录保存失败', 'error');
+            return;
+        }
+        if (result.data.code && result.data.code !== 200) {
+            showToast(result.data.msg || '整改记录保存失败', 'error');
+            return;
+        }
+
+        closeModal('rectify');
+        document.getElementById('rectifyTitleInput').value = '';
+        document.getElementById('rectifyWarningSelect').value = '';
+        document.getElementById('rectifyProblemInput').value = '';
+        document.getElementById('rectifyMeasuresInput').value = '';
+        document.getElementById('rectifyPublicInput').checked = true;
+        await fetchRectifyList();
+        showToast('整改记录保存成功');
+    }
+
+    window.handleDeleteRectification = function handleDeleteRectification(id) {
+        showConfirm(
+            '删除确认',
+            '确定删除该整改记录吗？删除后不可恢复。',
+            async () => {
+                const result = await requestWithFallback(endpointPreference.rectifyDelete(id), { method: 'DELETE' });
+                if (!result.ok) {
+                    showToast('删除失败，请重试', 'error');
+                    return;
+                }
+                if (result.data.code && result.data.code !== 200) {
+                    showToast(result.data.msg || '删除失败，请重试', 'error');
+                    return;
+                }
+                await fetchRectifyList();
+                showToast('删除成功');
+            }
+        );
+    };
+
+    function showConfirm(title, message, confirmFn) {
+        appState.confirmAction = confirmFn;
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        openModal('confirm');
+    }
+
+    function switchTab(tabName) {
+        appState.activeTab = tabName;
+        const noticePanel = document.getElementById('noticePanel');
+        const rectifyPanel = document.getElementById('rectifyPanel');
+        const tabNoticeBtn = document.getElementById('tabNoticeBtn');
+        const tabRectifyBtn = document.getElementById('tabRectifyBtn');
+        const actionBtn = document.getElementById('primaryActionBtn');
+
+        if (tabName === 'notice') {
+            noticePanel.style.display = '';
+            rectifyPanel.style.display = 'none';
+            tabNoticeBtn.classList.add('active');
+            tabRectifyBtn.classList.remove('active');
+            actionBtn.textContent = '+ 新增公示';
+        } else {
+            noticePanel.style.display = 'none';
+            rectifyPanel.style.display = '';
+            tabRectifyBtn.classList.add('active');
+            tabNoticeBtn.classList.remove('active');
+            actionBtn.textContent = '+ 新增整改说明';
+        }
+    }
+
+    function bindUploadZone() {
+        const zone = document.getElementById('noticeUploadZone');
+        const fileInput = document.getElementById('noticeFileInput');
+
+        zone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async () => {
+            await handleUploadFiles(fileInput.files);
+            fileInput.value = '';
+        });
+
+        zone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            zone.classList.add('dragover');
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('dragover');
+        });
+
+        zone.addEventListener('drop', async (event) => {
+            event.preventDefault();
+            zone.classList.remove('dragover');
+            await handleUploadFiles(event.dataTransfer.files);
+        });
+    }
+
+    function bindEvents() {
+        document.querySelectorAll('[data-close]').forEach((item) => {
+            item.addEventListener('click', () => {
+                closeModal(item.getAttribute('data-close'));
+            });
+        });
+
+        document.getElementById('tabNoticeBtn').addEventListener('click', () => switchTab('notice'));
+        document.getElementById('tabRectifyBtn').addEventListener('click', () => switchTab('rectify'));
+
+        document.getElementById('primaryActionBtn').addEventListener('click', () => {
+            if (appState.activeTab === 'notice') {
+                resetNoticeForm();
+                document.getElementById('noticeModalTitle').textContent = '新增食安公示';
+                openModal('notice');
+            } else {
+                openModal('rectify');
+            }
+        });
+
+        document.getElementById('noticeFilterBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('noticeFilterBtn');
+            setButtonLoading(btn, true, '筛选中...', '筛选');
+            appState.noticeFilters.title = document.getElementById('noticeTitleFilter').value.trim();
+            appState.noticeFilters.type = document.getElementById('noticeTypeFilter').value;
+            await fetchNoticeList();
+            setButtonLoading(btn, false, '筛选中...', '筛选');
+        });
+
+        document.getElementById('noticeResetBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('noticeResetBtn');
+            setButtonLoading(btn, true, '重置中...', '重置');
+            appState.noticeFilters.title = '';
+            appState.noticeFilters.type = '';
+            document.getElementById('noticeTitleFilter').value = '';
+            document.getElementById('noticeTypeFilter').value = '';
+            await fetchNoticeList();
+            setButtonLoading(btn, false, '重置中...', '重置');
+        });
+
+        document.getElementById('saveNoticeBtn').addEventListener('click', saveNotice);
+        document.getElementById('saveRectifyBtn').addEventListener('click', saveRectification);
+
+        document.getElementById('confirmOkBtn').addEventListener('click', async () => {
+            closeModal('confirm');
+            if (typeof appState.confirmAction === 'function') {
+                await appState.confirmAction();
+            }
+            appState.confirmAction = null;
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeModal('notice');
+                closeModal('rectify');
+                closeModal('confirm');
+            }
+        });
+
+        if (window.self !== window.top) {
+            const back = document.getElementById('backBtn');
+            if (back) back.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        bindEvents();
+        bindUploadZone();
+        await Promise.all([fetchNoticeList(), fetchRectifyList(), fetchWarningOptions()]);
+    });
+</script>
+</body>
+</html>

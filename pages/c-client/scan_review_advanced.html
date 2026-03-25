@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校园食堂扫码评价</title>
+    <!-- 引入 Bootstrap 5 CDN -->
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #E8F4F8;
+        }
+        
+        .page-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #E8F4F8;
+            padding: 0 15px;
+            min-height: 100vh;
+            padding-bottom: 50px;
+        }
+
+        /* 顶部标题 */
+        .header-title {
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px 0;
+            margin-bottom: 25px;
+        }
+
+        /* 模块通用间距 */
+        .section-gap {
+            margin-bottom: 25px;
+        }
+
+        /* 评分大类标题 */
+        .category-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #82C3EC;
+            margin-bottom: 15px;
+            margin-top: 20px;
+        }
+        
+        /* 第一个大类不需要上边距 */
+        .category-title:first-child {
+            margin-top: 0;
+        }
+
+        /* 评分子项 */
+        .rating-item {
+            margin-bottom: 10px;
+        }
+        
+        .rating-label {
+            font-size: 16px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .rating-score {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 自定义滑块 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #e9ecef;
+            outline: none;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #82C3EC;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 环境评价切换按钮 */
+        .toggle-btn {
+            font-size: 14px;
+            color: #0d6efd;
+            background: none;
+            border: none;
+            padding: 0;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        /* 标签区 */
+        .tag-category-header {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .tags-wrapper {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tag-item {
+            font-size: 14px;
+            padding: 8px 5px;
+            text-align: center;
+            border-radius: 8px;
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            line-height: 1.2;
+        }
+        
+        /* 选中态样式类 - 由JS动态添加 */
+        .tag-item.active {
+            border-color: transparent !important;
+            box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+            font-weight: bold;
+        }
+
+        /* 提交按钮 */
+        .submit-btn {
+            width: 100%;
+            background-color: #90EE90;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            color: #333;
+            padding: 10px 0;
+            margin: 20px 0;
+        }
+        
+        .submit-btn:disabled {
+            background-color: #cccccc;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .error-msg {
+            color: #dc3545;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* 成功弹窗 */
+        .success-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #d4edda;
+            color: #155724;
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            z-index: 9999;
+            text-align: center;
+            font-size: 18px;
+            border: 1px solid #c3e6cb;
+            min-width: 200px;
+        }
+
+    </style>
+    <link href="../../static/css/common.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="page-container">
+    <!-- 1. 顶部标题 -->
+    <div class="header-title" id="windowTitle">加载中...</div>
+
+    <!-- 2. 评分区域 -->
+    <div class="section-gap" id="ratingContainer">
+        
+        <!-- 第一类：食品评价 -->
+        <div class="category-title">食品评价</div>
+        <div class="rating-group" data-category="food">
+            <!-- 动态生成 -->
+        </div>
+
+        <!-- 第二类：服务评价 -->
+        <div class="category-title">服务评价</div>
+        <div class="rating-group" data-category="service">
+            <!-- 动态生成 -->
+        </div>
+
+        <!-- 第三类：环境评价 -->
+        <div class="category-title">
+            环境评价
+            <button class="toggle-btn" id="envToggleBtn">展开详情</button>
+        </div>
+        <div class="rating-group" id="envRatingArea">
+            <!-- 默认显示简略 -->
+            <div class="rating-item" id="envSummaryItem">
+                <div class="rating-label">
+                    <span>整体环境</span>
+                    <span class="rating-score" id="score_env_summary">未评分</span>
+                </div>
+                <input type="range" id="range_env_summary" min="0" max="10" step="1" value="0" data-required="true">
+            </div>
+            
+            <!-- 详细模式（默认隐藏） -->
+            <div id="envDetailItems" style="display: none;">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+
+        <!-- 第四类：食安评价 -->
+        <div class="category-title">食安评价</div>
+        <div class="rating-group" data-category="safety">
+            <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 3. 标签区域 -->
+    <div class="section-gap" id="tagsArea">
+        <!-- 动态生成 -->
+    </div>
+
+    <!-- 4. 提交按钮 -->
+    <div class="section-gap" style="text-align: center;">
+        <button class="submit-btn" id="submitBtn">提交评价</button>
+        <div class="error-msg" id="errorMsg">请完成所有必评维度评分</div>
+    </div>
+</div>
+
+<div class="success-toast" id="successToast">
+    <div>✅ 评价提交成功</div>
+</div>
+
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script>
+    // 配置数据
+    const config = {
+        windowMap: {
+            '1': '北区食堂1号窗口',
+            '2': '北区食堂2号窗口'
+        },
+        ratings: {
+            food: [
+                {id: 'food_color', name: '食品-色'},
+                {id: 'food_smell', name: '食品-香'},
+                {id: 'food_taste', name: '食品-味'},
+                {id: 'food_shape', name: '食品-形'}
+            ],
+            service: [
+                {id: 'service_dress', name: '服务-着装'},
+                {id: 'service_attitude', name: '服务-态度'},
+                {id: 'service_response', name: '服务-响应'}
+            ],
+            safety: [
+                {id: 'safety_compliance', name: '食安-合规度'}
+            ],
+            env_detail: [
+                {id: 'env_clean', name: '环境-整洁度'},
+                {id: 'env_air', name: '环境-通风性'},
+                {id: 'env_comfort', name: '环境-舒适度'}
+            ]
+        },
+        tags: [
+            {
+                category: '食品类标签',
+                items: [
+                    {text: '极吸引人', level: 'pos_high', desc: '极级'},
+                    {text: '较吸引人', level: 'pos_mid', desc: '较级'},
+                    {text: '一般(正)', level: 'pos_low', desc: '一般'},
+                    {text: '极不吸引人', level: 'neg_high', desc: '极级'},
+                    {text: '较不吸引人', level: 'neg_mid', desc: '较级'},
+                    {text: '一般(负)', level: 'neg_low', desc: '一般'},
+                    {text: '口感绝佳', level: 'supp', desc: '补充'},
+                    {text: '口感较差', level: 'supp', desc: '补充'}
+                ]
+            },
+            {
+                category: '服务类标签',
+                items: [
+                    {text: '极热情', level: 'pos_high'},
+                    {text: '较热情', level: 'pos_mid'},
+                    {text: '一般(正)', level: 'pos_low'},
+                    {text: '极冷漠', level: 'neg_high'},
+                    {text: '较冷漠', level: 'neg_mid'},
+                    {text: '一般(负)', level: 'neg_low'},
+                    {text: '耐心周到', level: 'supp'},
+                    {text: '敷衍了事', level: 'supp'}
+                ]
+            },
+            {
+                category: '环境类标签',
+                items: [
+                    {text: '极舒适', level: 'pos_high'},
+                    {text: '较舒适', level: 'pos_mid'},
+                    {text: '一般(正)', level: 'pos_low'},
+                    {text: '极杂乱', level: 'neg_high'},
+                    {text: '较杂乱', level: 'neg_mid'},
+                    {text: '一般(负)', level: 'neg_low'},
+                    {text: '清爽宜人', level: 'supp'},
+                    {text: '闷热压抑', level: 'supp'}
+                ]
+            }
+        ],
+        colors: {
+            pos_high: {bg: '#2E8B57', text: '#fff'},
+            pos_mid: {bg: '#90EE90', text: '#333'},
+            pos_low: {bg: '#F0FFF0', text: '#333'},
+            neg_high: {bg: '#DC143C', text: '#fff'},
+            neg_mid: {bg: '#FFEEEE', text: '#333'},
+            neg_low: {bg: '#FFF0F0', text: '#333'},
+            supp: {bg: '#fff', text: '#333', border: '#dee2e6'} // 补充标签默认样式
+        }
+    };
+
+    let isEnvDetail = false;
+    let currentWindowId = 'unknown';
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+        initHeader();
+        renderRatings();
+        renderTags();
+        initEnvToggle();
+        initSubmit();
+        
+        // 初始检查一次
+        checkFormStatus();
+    });
+
+    function initHeader() {
+        const params = new URLSearchParams(window.location.search);
+        const wid = params.get('window_id');
+        currentWindowId = wid || 'unknown';
+        
+        const title = config.windowMap[wid] || (wid ? `未知窗口(${wid})` : '校园食堂窗口');
+        document.getElementById('windowTitle').textContent = `${title}评价`;
+    }
+
+    function renderRatings() {
+        // 渲染通用评分项
+        ['food', 'service', 'safety'].forEach(cat => {
+            const container = document.querySelector(`.rating-group[data-category="${cat}"]`);
+            config.ratings[cat].forEach(item => {
+                container.appendChild(createRatingItem(item.id, item.name));
+            });
+        });
+
+        // 渲染环境详细项
+        const envDetailContainer = document.getElementById('envDetailItems');
+        config.ratings.env_detail.forEach(item => {
+            envDetailContainer.appendChild(createRatingItem(item.id, item.name, false)); // 初始不required，因为隐藏
+        });
+    }
+
+    function createRatingItem(id, name, isRequired = true) {
+        const div = document.createElement('div');
+        div.className = 'rating-item';
+        div.innerHTML = `
+            <div class="rating-label">
+                <span>${name}</span>
+                <span class="rating-score" id="score_${id}">未评分</span>
+            </div>
+            <input type="range" id="range_${id}" min="0" max="10" step="1" value="0">
+        `;
+        
+        const input = div.querySelector('input');
+        if(isRequired) input.dataset.required = "true";
+        
+        // 绑定事件
+        input.addEventListener('input', function() {
+            handleSliderChange(this, id);
+        });
+        
+        // 初始化颜色
+        updateSliderStyle(input);
+        
+        return div;
+    }
+
+    function handleSliderChange(input, id) {
+        const val = input.value;
+        const scoreSpan = document.getElementById(`score_${id}`);
+        scoreSpan.textContent = val == 0 ? '未评分' : `当前评分：${val}分`;
+        updateSliderStyle(input);
+        checkFormStatus();
+    }
+
+    function updateSliderStyle(input) {
+        const val = input.value;
+        const percentage = (val / 10) * 100;
+        const color = val == 0 ? '#e9ecef' : '#82C3EC';
+        // 0分时全灰，否则左侧蓝右侧灰
+        if (val == 0) {
+            input.style.background = '#e9ecef';
+        } else {
+            input.style.background = `linear-gradient(to right, #82C3EC ${percentage}%, #e9ecef ${percentage}%)`;
+        }
+    }
+
+    function initEnvToggle() {
+        const btn = document.getElementById('envToggleBtn');
+        const summaryItem = document.getElementById('envSummaryItem');
+        const detailItems = document.getElementById('envDetailItems');
+        const summaryInput = document.getElementById('range_env_summary');
+        
+        btn.addEventListener('click', () => {
+            isEnvDetail = !isEnvDetail;
+            
+            if (isEnvDetail) {
+                // 切换到详细
+                summaryItem.style.display = 'none';
+                detailItems.style.display = 'block';
+                btn.textContent = '收起详情';
+                
+                // 调整校验规则
+                summaryInput.dataset.required = "false";
+                detailItems.querySelectorAll('input').forEach(el => el.dataset.required = "true");
+            } else {
+                // 切换到简略
+                summaryItem.style.display = 'block';
+                detailItems.style.display = 'none';
+                btn.textContent = '展开详情';
+                
+                // 调整校验规则
+                summaryInput.dataset.required = "true";
+                detailItems.querySelectorAll('input').forEach(el => el.dataset.required = "false");
+            }
+            
+            checkFormStatus();
+        });
+    }
+
+    function renderTags() {
+        const container = document.getElementById('tagsArea');
+        
+        config.tags.forEach(cat => {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = `<div class="tag-category-header">${cat.category}</div>`;
+            
+            const grid = document.createElement('div');
+            grid.className = 'tags-wrapper';
+            
+            cat.items.forEach(tag => {
+                const el = document.createElement('div');
+                el.className = 'tag-item';
+                el.textContent = tag.text;
+                
+                el.onclick = () => toggleTag(el, tag.level);
+                
+                grid.appendChild(el);
+            });
+            
+            wrapper.appendChild(grid);
+            container.appendChild(wrapper);
+        });
+    }
+
+    function toggleTag(el, level) {
+        const isActive = el.classList.contains('active');
+        
+        if (isActive) {
+            el.classList.remove('active');
+            el.style.backgroundColor = '#fff';
+            el.style.color = '#333';
+            el.style.borderColor = '#dee2e6';
+        } else {
+            el.classList.add('active');
+            const style = config.colors[level];
+            if (style) {
+                el.style.backgroundColor = style.bg;
+                el.style.color = style.text;
+                el.style.borderColor = style.bg;
+            } else {
+                // 补充标签默认样式
+                el.style.backgroundColor = '#f8f9fa';
+                el.style.borderColor = '#0d6efd';
+                el.style.color = '#0d6efd';
+            }
+        }
+    }
+
+    function checkFormStatus() {
+        const inputs = document.querySelectorAll('input[type=range][data-required="true"]');
+        let isValid = true;
+        
+        inputs.forEach(input => {
+            if (input.value == 0) isValid = false;
+        });
+
+        const btn = document.getElementById('submitBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        if (isValid) {
+            btn.disabled = false;
+            errorMsg.style.display = 'none';
+        } else {
+            btn.disabled = true;
+            errorMsg.style.display = 'block';
+        }
+        
+        return isValid;
+    }
+
+    function initSubmit() {
+        const btn = document.getElementById('submitBtn');
+        
+        btn.addEventListener('click', () => {
+            if (!checkFormStatus()) return;
+            
+            // 防重校验
+            const lastTime = localStorage.getItem(`last_submit_${currentWindowId}`);
+            if (lastTime && (Date.now() - lastTime < 5 * 60 * 1000)) {
+                const errorMsg = document.getElementById('errorMsg');
+                errorMsg.textContent = '您已提交过评价，请勿重复提交';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // 锁定按钮
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+            
+            // 收集数据
+            const formData = collectData();
+            console.log('提交数据(模拟):', formData); // 预留接口位置
+
+            // 模拟延迟
+            setTimeout(() => {
+                // 成功
+                const toast = document.getElementById('successToast');
+                toast.style.display = 'block';
+                localStorage.setItem(`last_submit_${currentWindowId}`, Date.now());
+                
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                    btn.textContent = '评价已完成';
+                }, 2000);
+            }, 1000);
+        });
+    }
+
+    function collectData() {
+        const scores = {};
+        document.querySelectorAll('input[type=range]').forEach(input => {
+            // 只收集可见或启用的
+            if (input.offsetParent !== null) { // 简单判断是否可见
+                const id = input.id.replace('range_', '');
+                scores[id] = parseInt(input.value);
+            }
+        });
+
+        const tags = [];
+        document.querySelectorAll('.tag-item.active').forEach(tag => {
+            tags.push(tag.textContent);
+        });
+
+        return {
+            window_id: currentWindowId,
+            mode: isEnvDetail ? 'detail' : 'summary',
+            scores: scores,
+            tags: tags,
+            timestamp: new Date().toISOString()
+        };
+    }
+
+</script>
+    <script src="../../static/js/common.js"></script>
+</body>
+</html>

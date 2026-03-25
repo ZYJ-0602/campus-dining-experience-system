@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校园食堂快速点评</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="css/evaluation.css" rel="stylesheet">
+</head>
+<body>
+
+    <div class="container py-3">
+        <h4 class="text-center mb-4" style="color: #FF7F24; font-weight: bold;">
+            <i class="bi bi-shop me-2"></i>校园食堂快速点评
+        </h4>
+
+        <!-- 1. 基础信息 -->
+        <div class="eval-card">
+            <div class="card-title"><i class="bi bi-person-badge"></i> 基础信息</div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">购买时间</label>
+                    <input type="datetime-local" class="form-control" id="purchaseTime">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">用户身份</label>
+                    <select class="form-select" id="userIdentity" onchange="onIdentityChange()">
+                        <option value="">请选择</option>
+                        <option value="teacher">教师</option>
+                        <option value="staff">员工</option>
+                        <option value="student">学生</option>
+                        <option value="visitor">外部游客</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- 学生扩展信息 (默认隐藏) -->
+            <div id="studentInfoSection" class="hidden-section mt-3 p-3 bg-light rounded">
+                <div class="row g-3">
+                    <div class="col-4">
+                        <label class="form-label">年级</label>
+                        <select class="form-select" id="studentGrade">
+                            <option value="">请选择</option>
+                            <option value="大一">大一</option>
+                            <option value="大二">大二</option>
+                            <option value="大三">大三</option>
+                            <option value="大四">大四</option>
+                            <option value="研究生">研究生</option>
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">年龄</label>
+                        <input type="number" class="form-control" id="studentAge" placeholder="岁">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label">就餐年限</label>
+                        <input type="number" class="form-control" id="diningYears" placeholder="年">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 菜品选择 -->
+        <div class="eval-card">
+            <div class="card-title"><i class="bi bi-list-check"></i> 选择菜品 (多选)</div>
+            <div class="dish-select-container" id="dishList">
+                <!-- JS动态加载 -->
+            </div>
+        </div>
+
+        <!-- 3. 食品维度 (动态生成) -->
+        <div id="foodRatingContainer"></div>
+
+        <!-- 4. 环境维度 -->
+        <div class="eval-card">
+            <div class="card-title"><i class="bi bi-house-door"></i> 环境评价</div>
+            <div class="row">
+                <div class="col-md-4 range-wrap">
+                    <div class="range-label"><span>整体舒适度</span><span class="score-value" id="val_env_comfort">0</span></div>
+                    <input type="range" class="custom-range" min="0" max="10" value="0" id="env_comfort" oninput="document.getElementById('val_env_comfort').innerText=this.value">
+                </div>
+                <div class="col-md-4 range-wrap">
+                    <div class="range-label"><span>空调温湿度</span><span class="score-value" id="val_env_temp">0</span></div>
+                    <input type="range" class="custom-range" min="0" max="10" value="0" id="env_temp" oninput="document.getElementById('val_env_temp').innerText=this.value">
+                </div>
+                <div class="col-md-4 range-wrap">
+                    <div class="range-label"><span>桌椅整洁</span><span class="score-value" id="val_env_layout">0</span></div>
+                    <input type="range" class="custom-range" min="0" max="10" value="0" id="env_layout" oninput="document.getElementById('val_env_layout').innerText=this.value">
+                </div>
+            </div>
+            <textarea class="form-control mt-2" id="env_comment" placeholder="环境备注（可选）"></textarea>
+        </div>
+
+        <!-- 5. 服务维度 -->
+        <div class="eval-card">
+            <div class="card-title"><i class="bi bi-emoji-smile"></i> 服务评价</div>
+            <div class="mb-3">
+                <label class="form-label d-block text-muted small">服务人员类型 (多选)</label>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="svc_personnel" value="打饭人员">
+                    <label class="form-check-label">打饭人员</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="svc_personnel" value="前台人员">
+                    <label class="form-check-label">前台人员</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="svc_personnel" value="保洁阿姨">
+                    <label class="form-check-label">保洁阿姨</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 range-wrap">
+                    <div class="range-label"><span>着装规范</span><span class="score-value" id="val_svc_attire">0</span></div>
+                    <input type="range" class="custom-range" min="0" max="10" value="0" id="svc_attire" oninput="document.getElementById('val_svc_attire').innerText=this.value">
+                </div>
+                <div class="col-md-4 range-wrap">
+                    <div class="range-label"><span>服务态度</span><span class="score-value" id="val_svc_attitude">0</span></div>
+                    <input type="range" class="custom-range" min="0" max="10" value="0" id="svc_attitude" oninput="document.getElementById('val_svc_attitude').innerText=this.value">
+                </div>
+                <div class="col-md-4 range-wrap">
+                    <div class="range-label"><span>个人卫生</span><span class="score-value" id="val_svc_hygiene">0</span></div>
+                    <input type="range" class="custom-range" min="0" max="10" value="0" id="svc_hygiene" oninput="document.getElementById('val_svc_hygiene').innerText=this.value">
+                </div>
+            </div>
+            <textarea class="form-control mt-2" id="svc_comment" placeholder="服务备注（可选）"></textarea>
+        </div>
+
+    </div>
+
+    <!-- 提交按钮 -->
+    <div class="submit-bar">
+        <button class="btn-primary-custom" id="submitBtn" onclick="submitForm()">提交评价</button>
+    </div>
+
+    <script src="js/evaluation.js"></script>
+</body>
+</html>

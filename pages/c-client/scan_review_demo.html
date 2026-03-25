@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校园食堂扫码评价</title>
+    <!-- 引入 Bootstrap 5 CDN -->
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #E8F4F8;
+        }
+        
+        /* 页面容器适配 */
+        .page-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #E8F4F8; /* 确保背景一致 */
+            padding-left: 15px;
+            padding-right: 15px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 顶部标题区 */
+        .header-title {
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding-top: 15px;
+            padding-bottom: 15px;
+            margin-bottom: 25px; /* 模块间距 */
+        }
+
+        /* 模块间距通用类 */
+        .section-gap {
+            margin-bottom: 25px;
+        }
+
+        /* 评分项样式 */
+        .rating-item {
+            margin-bottom: 15px; /* 内部行间距，题目要求每个评分项单独一行 */
+        }
+        
+        .rating-label {
+            font-size: 16px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .rating-score {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 自定义滑块样式 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #e9ecef; /* 默认底色 */
+            outline: none;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        /* 滑块滑块头 */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #82C3EC;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        input[type=range]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #82C3EC;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* 标签区样式 */
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tag-item {
+            font-size: 14px;
+            padding: 5px 12px;
+            border-radius: 8px;
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s;
+            /* 确保每行3-4个，这里设置 flex-basis 或 max-width 稍微灵活一点 */
+            flex: 0 0 auto; 
+        }
+
+        .tag-item.active {
+            background-color: #FFEEEE;
+            color: #FF0000;
+            border-color: #FFEEEE;
+        }
+
+        /* 提交按钮 */
+        .submit-btn {
+            width: 100%;
+            background-color: #90EE90;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            color: #333; /* 为了保持对比度，用深色文字，或者根据设计稿淡绿色通常配深色或白色 */
+            padding: 10px 0;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .submit-btn:disabled {
+            background-color: #cccccc;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        /* 提示信息 */
+        .error-msg {
+            color: #dc3545;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 10px;
+            display: none; /* 默认隐藏 */
+        }
+
+        /* 成功提示弹框 */
+        .success-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #d4edda;
+            color: #155724;
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            z-index: 9999;
+            text-align: center;
+            font-size: 18px;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .success-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+    </style>
+    <link href="../../static/css/common.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="page-container">
+    <!-- 1. 顶部标题区 -->
+    <div class="header-title" id="windowTitle">
+        加载中...
+    </div>
+
+    <!-- 2. 中间核心区域 - 评分项 -->
+    <div class="section-gap">
+        <!-- 评分项模板 -->
+        <div class="rating-item">
+            <div class="rating-label">
+                <span>口味</span>
+                <span class="rating-score" id="score_taste">未评分</span>
+            </div>
+            <input type="range" class="custom-range" id="range_taste" min="0" max="10" step="1" value="0">
+        </div>
+
+        <div class="rating-item">
+            <div class="rating-label">
+                <span>服务</span>
+                <span class="rating-score" id="score_service">未评分</span>
+            </div>
+            <input type="range" class="custom-range" id="range_service" min="0" max="10" step="1" value="0">
+        </div>
+
+        <div class="rating-item">
+            <div class="rating-label">
+                <span>环境</span>
+                <span class="rating-score" id="score_env">未评分</span>
+            </div>
+            <input type="range" class="custom-range" id="range_env" min="0" max="10" step="1" value="0">
+        </div>
+
+        <div class="rating-item">
+            <div class="rating-label">
+                <span>食安</span>
+                <span class="rating-score" id="score_safety">未评分</span>
+            </div>
+            <input type="range" class="custom-range" id="range_safety" min="0" max="10" step="1" value="0">
+        </div>
+    </div>
+
+    <!-- 2. 中间核心区域 - 负面标签区 -->
+    <div class="section-gap">
+        <div class="tags-container" id="tagsContainer">
+            <!-- 标签由JS生成 -->
+        </div>
+    </div>
+
+    <!-- 3. 底部提交按钮 -->
+    <div class="section-gap" style="text-align: center;">
+        <button class="submit-btn" id="submitBtn">提交评价</button>
+        <div class="error-msg" id="errorMsg">请完成所有维度评分</div>
+    </div>
+</div>
+
+<!-- 成功提示框 -->
+<div class="success-toast" id="successToast">
+    <span class="success-icon">✅</span>评价提交成功
+</div>
+
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script>
+    // 模拟数据映射
+    const windowMap = {
+        '1': '北区食堂1号窗口',
+        '2': '北区食堂2号窗口',
+        '3': '南区食堂特色小炒',
+        '4': '清真食堂拉面窗口'
+    };
+
+    // 负面标签数据
+    const tags = [
+        '分量不足', '价格偏高', '出餐太慢', '食材不新鲜', 
+        '口味偏咸', '口味偏淡', '服务态度差', '环境脏乱', 
+        '餐具不干净', '无负面评价'
+    ];
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        initTitle();
+        initTags();
+        initSliders();
+        initSubmit();
+    });
+
+    // 1. 初始化标题
+    function initTitle() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const windowId = urlParams.get('window_id');
+        const titleEl = document.getElementById('windowTitle');
+        
+        if (windowId && windowMap[windowId]) {
+            titleEl.textContent = `${windowMap[windowId]}评价`;
+        } else if (windowId) {
+            titleEl.textContent = `未知窗口(ID:${windowId})评价`;
+        } else {
+            titleEl.textContent = '校园食堂窗口评价';
+        }
+        
+        // 保存当前window_id供提交使用
+        window.currentWindowId = windowId || 'unknown';
+    }
+
+    // 2. 初始化标签
+    function initTags() {
+        const container = document.getElementById('tagsContainer');
+        tags.forEach(tag => {
+            const el = document.createElement('div');
+            el.className = 'tag-item';
+            el.textContent = tag;
+            el.onclick = function() {
+                // 如果是"无负面评价"，互斥逻辑
+                if (tag === '无负面评价') {
+                    if (this.classList.contains('active')) {
+                        this.classList.remove('active');
+                    } else {
+                        // 清除其他所有选中
+                        document.querySelectorAll('.tag-item').forEach(item => item.classList.remove('active'));
+                        this.classList.add('active');
+                    }
+                } else {
+                    // 如果选中其他标签，取消"无负面评价"
+                    const noNegative = Array.from(document.querySelectorAll('.tag-item')).find(item => item.textContent === '无负面评价');
+                    if (noNegative) noNegative.classList.remove('active');
+                    this.classList.toggle('active');
+                }
+            };
+            container.appendChild(el);
+        });
+    }
+
+    // 3. 初始化滑块逻辑
+    function initSliders() {
+        const sliders = ['taste', 'service', 'env', 'safety'];
+        
+        sliders.forEach(key => {
+            const range = document.getElementById(`range_${key}`);
+            const scoreDisplay = document.getElementById(`score_${key}`);
+            
+            // 初始化背景色（0%）
+            updateSliderBackground(range);
+
+            range.addEventListener('input', function() {
+                const val = parseInt(this.value);
+                if (val === 0) {
+                    scoreDisplay.textContent = '未评分';
+                } else {
+                    scoreDisplay.textContent = `当前评分：${val}分`;
+                }
+                updateSliderBackground(this);
+                
+                // 只要有交互，就隐藏错误提示（提交时会再次检查）
+                document.getElementById('errorMsg').style.display = 'none';
+            });
+        });
+    }
+
+    // 更新滑块背景色（选中部分变蓝）
+    function updateSliderBackground(rangeInput) {
+        const val = rangeInput.value;
+        const max = rangeInput.max;
+        const min = rangeInput.min; // 这里其实min是0，但逻辑上要处理
+        
+        // 计算百分比: (val - min) / (max - min) * 100
+        // 但注意我们希望0的时候是全灰，1的时候有一点点蓝
+        let percentage = (val / max) * 100;
+        
+        if (val == 0) percentage = 0; // 0分全灰
+        
+        // 使用 CSS 变量或直接设置 style
+        // 颜色 #82C3EC
+        rangeInput.style.background = `linear-gradient(to right, #82C3EC ${percentage}%, #e9ecef ${percentage}%)`;
+    }
+
+    // 4. 提交逻辑
+    function initSubmit() {
+        const btn = document.getElementById('submitBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        
+        btn.addEventListener('click', function() {
+            // 检查评分是否完整
+            const scores = {
+                taste: parseInt(document.getElementById('range_taste').value),
+                service: parseInt(document.getElementById('range_service').value),
+                env: parseInt(document.getElementById('range_env').value),
+                safety: parseInt(document.getElementById('range_safety').value)
+            };
+            
+            // 检查是否有0分项
+            if (Object.values(scores).some(s => s === 0)) {
+                btn.disabled = true; // 题目要求: 任意评分项为0分：按钮灰色禁用
+                // 但为了能让用户再次点击触发提示（或者UI上一直置灰），题目说“任意评分项为0分：按钮灰色禁用”，
+                // 这通常意味着按钮本身就是 disabled 状态。
+                // 但题目又说“下方红色提示‘请完成所有维度评分’”，如果按钮disabled，用户可能点不了。
+                // 这里做一个逻辑修正：
+                // 如果完全按照题目“交互细节①：任意评分项为0分：按钮灰色禁用”，那么初始化时按钮就应该是disabled的。
+                // 此时用户无法点击，也无法触发“下方红色提示”。
+                // 通常的做法是：按钮看起来可用，点的时候提示；或者按钮一直置灰，提示一直显示。
+                // 结合上下文，我将实现为：点击时检查，如果0分，则显示错误提示，且按钮样式暂时变灰（或者保持可用但报错）。
+                // 为了严格符合“按钮灰色禁用”的要求，我将采用监听器实时控制按钮状态。
+            }
+            
+            // 实际上更好的做法是实时监听所有slider来控制btn的disabled状态
+            // 但为了响应点击反馈，我们这里做成点击触发校验逻辑
+        });
+
+        // 重新实现实时校验逻辑，覆盖上面的点击逻辑，以符合“按钮灰色禁用”的描述
+        // 题目要求：任意评分项为0分：按钮灰色禁用，下方红色提示...
+        // 这意味着错误提示可能需要一直显示，或者在尝试提交后显示。
+        // 为了体验更好，我会在初次尝试提交或滑动后进行判断。
+        
+        // 这里采用：默认按钮不禁用，点击时如果未完成，则禁用并提示。
+        // 但一旦禁用，用户就点不了了。所以必须在slider滑动时解除禁用。
+        
+        const sliders = document.querySelectorAll('input[type=range]');
+        sliders.forEach(s => {
+            s.addEventListener('input', checkFormStatus);
+        });
+        
+        // 初始化检查
+        // checkFormStatus(); 
+    }
+
+    function checkFormStatus() {
+        const btn = document.getElementById('submitBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        const sliders = Array.from(document.querySelectorAll('input[type=range]'));
+        const hasZero = sliders.some(s => s.value == 0);
+        
+        if (!hasZero) {
+            btn.disabled = false;
+            errorMsg.style.display = 'none';
+        } else {
+            // 如果已经在报错状态，保持报错
+            // 如果按钮是禁用的，说明之前校验过
+            // 这里逻辑有点死锁：如果disabled了，用户怎么知道缺了啥？(只能看滑块)
+            // 题目要求 ①：任意评分项为0分：按钮灰色禁用，下方红色提示...
+            // 这意味着只要有0分，按钮就是灰的，且提示显示。
+            btn.disabled = true;
+            errorMsg.style.display = 'block';
+        }
+    }
+    
+    // 覆盖之前的 initSubmit，采用点击触发 + 实时解锁的混合模式
+    // 修正：题目要求是“任意评分项为0分：按钮灰色禁用”。如果一开始就是灰的，用户可能困惑。
+    // 通常设计是：初始可用 -> 点击 -> 发现有0 -> 变灰+提示 -> 用户修改 -> 变亮+隐藏提示。
+    
+    document.getElementById('submitBtn').addEventListener('click', function() {
+        const sliders = Array.from(document.querySelectorAll('input[type=range]'));
+        const hasZero = sliders.some(s => s.value == 0);
+        
+        if (hasZero) {
+            this.disabled = true;
+            document.getElementById('errorMsg').style.display = 'block';
+            return;
+        }
+
+        // 4. 防重复提交检查
+        const lastSubmitTime = localStorage.getItem('last_submit_' + window.currentWindowId);
+        if (lastSubmitTime && (Date.now() - parseInt(lastSubmitTime) < 5 * 60 * 1000)) {
+            document.getElementById('errorMsg').textContent = '您已提交过评价，请勿重复提交';
+            document.getElementById('errorMsg').style.display = 'block';
+            // 此时按钮可以不禁用，或者禁用
+            return;
+        }
+
+        // 5. 提交过程
+        const btn = this;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '提交中...';
+        
+        // 收集数据（此处对接后端接口）
+        const data = {
+            window_id: window.currentWindowId,
+            scores: sliders.map(s => parseInt(s.value)),
+            tags: Array.from(document.querySelectorAll('.tag-item.active')).map(t => t.textContent)
+        };
+        console.log('提交数据:', data);
+
+        // 模拟网络请求 1.5秒
+        setTimeout(() => {
+            // 提交成功逻辑
+            document.getElementById('successToast').style.display = 'block';
+            
+            // 记录时间戳
+            localStorage.setItem('last_submit_' + window.currentWindowId, Date.now());
+            
+            // 2秒后消失
+            setTimeout(() => {
+                document.getElementById('successToast').style.display = 'none';
+                // 恢复按钮（可选，或者跳转）
+                btn.textContent = '评价已完成';
+                // 实际场景可能跳转或清空，这里保持状态
+            }, 2000);
+        }, 1500);
+    });
+
+</script>
+    <script src="../../static/js/common.js"></script>
+</body>
+</html>

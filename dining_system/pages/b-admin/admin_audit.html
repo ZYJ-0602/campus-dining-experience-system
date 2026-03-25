@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>内容审核 - 食堂点评管理后台</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --success: #52c41a;
+            --warning: #fa8c16;
+            --muted: #86909c;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #4e5969;
+            --text-dark: #1f2329;
+            --shadow: 0 8px 18px rgba(31, 35, 41, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap {
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .toolbar-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .filter-select,
+        .rule-select,
+        .word-input,
+        .reject-textarea {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text-dark);
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .filter-select,
+        .rule-select,
+        .word-input {
+            height: 38px;
+            padding: 0 12px;
+        }
+
+        .filter-select:focus,
+        .rule-select:focus,
+        .word-input:focus,
+        .reject-textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .btn-primary,
+        .btn-ghost,
+        .btn-danger,
+        .btn-gray,
+        .btn-text {
+            border-radius: 8px;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            line-height: 1;
+            font-size: 14px;
+            padding: 8px 14px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-ghost {
+            color: var(--primary);
+            border-color: var(--primary);
+            background: #fff;
+        }
+
+        .btn-ghost:hover {
+            background: #eef4ff;
+        }
+
+        .btn-danger {
+            color: #fff;
+            border-color: #cf1322;
+            background: #cf1322;
+        }
+
+        .btn-danger:hover {
+            background: #a8071a;
+            border-color: #a8071a;
+        }
+
+        .btn-gray {
+            color: var(--text);
+            border-color: #d9dce3;
+            background: #f7f8fa;
+        }
+
+        .btn-gray:hover {
+            background: #eef0f3;
+        }
+
+        .btn-text {
+            color: var(--primary);
+            background: transparent;
+            border-color: transparent;
+            padding: 0;
+        }
+
+        .btn-text:hover {
+            text-decoration: underline;
+        }
+
+        .layout-grid {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 360px;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .card-head {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .card-title {
+            margin: 0;
+            font-size: 16px;
+            color: var(--text-dark);
+            font-weight: 700;
+        }
+
+        .table-wrap {
+            overflow: auto;
+        }
+
+        .audit-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 820px;
+        }
+
+        .audit-table thead th {
+            background: #f7f8fa;
+            color: #4e5969;
+            font-weight: 700;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            padding: 12px 16px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .audit-table tbody td {
+            border-bottom: 1px solid var(--border);
+            padding: 12px 16px;
+            text-align: center;
+            color: var(--text-dark);
+            line-height: 48px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .audit-table tbody tr:hover {
+            background: #fafcff;
+        }
+
+        .title-cell {
+            max-width: 320px;
+            margin: 0 auto;
+            line-height: 1.5;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-tag {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 74px;
+            height: 28px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            border: 1px solid transparent;
+        }
+
+        .status-pending {
+            color: #d46b08;
+            background: #fff7e8;
+            border-color: #ffd591;
+        }
+
+        .status-passed {
+            color: #389e0d;
+            background: #f6ffed;
+            border-color: #b7eb8f;
+        }
+
+        .status-rejected {
+            color: #6b7785;
+            background: #f2f3f5;
+            border-color: #d9dce3;
+        }
+
+        .action-links {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .action-audit {
+            color: var(--primary);
+        }
+
+        .action-preview {
+            color: #0f8f77;
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+        }
+
+        .table-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-top: 1px solid var(--border);
+            color: #61666f;
+        }
+
+        .pager {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .pager-btn {
+            min-width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: #4e5969;
+            cursor: pointer;
+            font-size: 13px;
+            padding: 0 10px;
+        }
+
+        .pager-btn:hover:not(:disabled) {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .pager-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .pager-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .empty-row {
+            text-align: center !important;
+            color: #8a919f !important;
+            line-height: 1.6 !important;
+            padding: 24px 8px !important;
+        }
+
+        .sensitive-body {
+            padding: 14px 16px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .word-input-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+        }
+
+        .word-list {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fbfcff;
+            min-height: 220px;
+            max-height: 420px;
+            overflow: auto;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 8px;
+        }
+
+        .word-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 30px;
+            border-radius: 15px;
+            padding: 0 10px;
+            background: #eef4ff;
+            color: #1f4aa8;
+            border: 1px solid #cfe0ff;
+            font-size: 13px;
+        }
+
+        .word-chip button {
+            border: none;
+            background: transparent;
+            color: #1f4aa8;
+            cursor: pointer;
+            line-height: 1;
+            font-size: 14px;
+            padding: 0;
+        }
+
+        .word-empty {
+            width: 100%;
+            text-align: center;
+            color: #8a919f;
+            padding: 24px 8px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 22, 36, 0.46);
+            backdrop-filter: blur(2px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            padding: 18px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-panel {
+            width: min(860px, calc(100vw - 24px));
+            max-height: calc(100vh - 36px);
+            background: #fff;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 40px rgba(15, 22, 36, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: #8a919f;
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .modal-body {
+            padding: 16px;
+            overflow: auto;
+            display: grid;
+            gap: 12px;
+        }
+
+        .detail-meta {
+            color: #667085;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .detail-content {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #f9fbff;
+            padding: 12px;
+            color: #1f2329;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+            min-height: 130px;
+        }
+
+        .reject-textarea {
+            width: 100%;
+            min-height: 90px;
+            padding: 10px 12px;
+            resize: vertical;
+        }
+
+        .modal-foot {
+            padding: 14px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            min-width: 220px;
+            max-width: 420px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            padding: 10px 12px;
+            background: #fff;
+            box-shadow: 0 12px 28px rgba(15, 22, 36, 0.15);
+            z-index: 1300;
+            display: none;
+            font-size: 14px;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .toast-success {
+            border-color: #b7eb8f;
+            color: #2b7a0b;
+            background: #f6ffed;
+        }
+
+        .toast-error {
+            border-color: #ffccc7;
+            color: #a8071a;
+            background: #fff2f0;
+        }
+
+        @media (max-width: 1280px) {
+            .layout-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .audit-table {
+                min-width: 760px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .page-wrap {
+                padding: 12px;
+            }
+
+            .toolbar-card,
+            .toolbar-left,
+            .toolbar-right {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .toolbar-right {
+                width: 100%;
+            }
+
+            .table-footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .pager {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .word-input-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="toolbar-card">
+        <div class="toolbar-left">
+            <label for="statusFilter">审核状态：</label>
+            <select id="statusFilter" class="filter-select">
+                <option value="0">待审核</option>
+                <option value="1">已通过</option>
+                <option value="2">已驳回</option>
+                <option value="">全部状态</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <h1 class="toolbar-title">内容审核</h1>
+            <button class="btn-ghost" type="button" id="refreshBtn">刷新</button>
+        </div>
+    </div>
+
+    <div class="layout-grid">
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">笔记审核列表</h2>
+                <span>按发布时间倒序</span>
+            </div>
+            <div class="table-wrap">
+                <table class="audit-table">
+                    <thead>
+                    <tr>
+                        <th style="width:72px;">ID</th>
+                        <th>笔记标题</th>
+                        <th style="width:160px;">作者</th>
+                        <th style="width:180px;">发布时间</th>
+                        <th style="width:120px;">审核状态</th>
+                        <th style="width:150px;">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="auditTableBody"></tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <div>共 <span id="totalNotes">0</span> 条记录</div>
+                <div class="pager" id="pagination"></div>
+            </div>
+        </section>
+
+        <aside class="card">
+            <div class="card-head">
+                <h2 class="card-title">敏感词库管理</h2>
+                <button class="btn-primary" type="button" id="saveRuleBtn">保存规则</button>
+            </div>
+            <div class="sensitive-body">
+                <div>
+                    <label for="ruleSelect">处理规则</label>
+                    <select id="ruleSelect" class="rule-select" style="width:100%; margin-top: 6px;">
+                        <option value="block">拦截发布</option>
+                        <option value="replace">替换为 *</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="wordInput">新增敏感词</label>
+                    <div class="word-input-row" style="margin-top: 6px;">
+                        <input id="wordInput" class="word-input" type="text" maxlength="60" placeholder="输入敏感词，按回车或点击添加">
+                        <button class="btn-primary" type="button" id="addWordBtn">添加</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="margin-bottom: 8px;">当前敏感词</div>
+                    <div id="wordList" class="word-list"></div>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<div id="auditModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auditModalTitle">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-head">
+            <h3 class="modal-title" id="auditModalTitle">笔记审核</h3>
+            <button class="modal-close" type="button" id="closeAuditModalBtn" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+            <h4 id="auditTitle" style="margin:0; color: var(--text-dark);"></h4>
+            <div class="detail-meta" id="auditMeta"></div>
+            <div class="detail-content" id="auditContent"></div>
+            <div id="rejectArea" style="display:none;">
+                <div style="margin-bottom: 6px; color: #a8071a;">驳回原因（可选）</div>
+                <textarea id="rejectReason" class="reject-textarea" maxlength="300" placeholder="请输入驳回理由，便于复审"></textarea>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-gray" type="button" id="cancelAuditBtn">取消</button>
+            <button class="btn-gray" type="button" id="showRejectBtn">驳回</button>
+            <button class="btn-danger" type="button" id="confirmRejectBtn" style="display:none;">确认驳回</button>
+            <button class="btn-primary" type="button" id="passBtn">通过</button>
+        </div>
+    </div>
+</div>
+
+<div id="previewModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-head">
+            <h3 class="modal-title" id="previewModalTitle">笔记预览</h3>
+            <button class="modal-close" type="button" id="closePreviewModalBtn" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+            <h4 id="previewTitle" style="margin:0; color: var(--text-dark);"></h4>
+            <div class="detail-meta" id="previewMeta"></div>
+            <div class="detail-content" id="previewContent"></div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-gray" type="button" id="closePreviewBtn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="../c-client/js/api.js"></script>
+<script>
+    const API_AUDIT_NOTES = `${API_BASE_URL}/admin/audit/notes`;
+    const API_SENSITIVE_WORDS = `${API_BASE_URL}/admin/sensitive_words`;
+    const API_SENSITIVE_WORDS_ADD = `${API_BASE_URL}/admin/sensitive_words/add`;
+    const API_SENSITIVE_RULE = `${API_BASE_URL}/admin/sensitive_rule`;
+    const API_SENSITIVE_CONFIG = `${API_BASE_URL}/admin/sensitive_config`;
+
+    let allNotes = [];
+    let currentPage = 1;
+    const pageSize = 10;
+    let totalNotes = 0;
+
+    let currentAuditNoteId = null;
+    let sensitiveWords = [];
+
+    function isSuccessResponse(res) {
+        const code = Number(res && res.code);
+        return code === 200 || code === 0;
+    }
+
+    function readResponseData(res) {
+        if (!res || typeof res !== 'object') return {};
+        const data = res.data;
+        return data && typeof data === 'object' ? data : {};
+    }
+
+    function statusLabel(code) {
+        if (Number(code) === 0) return '待审核';
+        if (Number(code) === 2) return '已驳回';
+        return '已通过';
+    }
+
+    function statusClass(code) {
+        if (Number(code) === 0) return 'status-pending';
+        if (Number(code) === 2) return 'status-rejected';
+        return 'status-passed';
+    }
+
+    function showToast(msg, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.className = `toast show ${type === 'error' ? 'toast-error' : 'toast-success'}`;
+        clearTimeout(showToast._timer);
+        showToast._timer = setTimeout(() => {
+            toast.classList.remove('show');
+        }, 2200);
+    }
+
+    async function ensureAdminSession() {
+        try {
+            const res = await fetchApi(`${API_BASE_URL}/auth/me`, { method: 'GET' });
+            if (!isSuccessResponse(res)) {
+                window.top.location.href = 'admin_login.html';
+                return false;
+            }
+            const data = readResponseData(res);
+            const roleRaw = String(data.role || '').trim().toLowerCase();
+            if (roleRaw !== 'admin' && roleRaw !== '管理员' && roleRaw !== '1') {
+                alert('当前账号不是管理员，请使用管理员账号登录。');
+                window.top.location.href = 'admin_login.html';
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('Auth check failed:', error);
+            window.top.location.href = 'admin_login.html';
+            return false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        bindEvents();
+        const pass = await ensureAdminSession();
+        if (!pass) return;
+        await Promise.all([loadNotes(), loadSensitiveConfig()]);
+    });
+
+    function bindEvents() {
+        document.getElementById('statusFilter').addEventListener('change', () => {
+            currentPage = 1;
+            loadNotes();
+        });
+
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            loadNotes();
+        });
+
+        document.getElementById('addWordBtn').addEventListener('click', addSensitiveWord);
+        document.getElementById('wordInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addSensitiveWord();
+            }
+        });
+
+        document.getElementById('saveRuleBtn').addEventListener('click', saveSensitiveConfig);
+
+        document.getElementById('closeAuditModalBtn').addEventListener('click', closeAuditModal);
+        document.getElementById('cancelAuditBtn').addEventListener('click', closeAuditModal);
+        document.getElementById('showRejectBtn').addEventListener('click', () => {
+            document.getElementById('rejectArea').style.display = 'block';
+            document.getElementById('confirmRejectBtn').style.display = 'inline-flex';
+        });
+        document.getElementById('confirmRejectBtn').addEventListener('click', () => submitAudit('reject'));
+        document.getElementById('passBtn').addEventListener('click', () => submitAudit('pass'));
+
+        document.getElementById('closePreviewModalBtn').addEventListener('click', closePreviewModal);
+        document.getElementById('closePreviewBtn').addEventListener('click', closePreviewModal);
+
+        document.getElementById('auditModalOverlay').addEventListener('click', closeAuditModal);
+        document.getElementById('previewModalOverlay').addEventListener('click', closePreviewModal);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAuditModal();
+                closePreviewModal();
+            }
+        });
+    }
+
+    async function loadNotes() {
+        const tbody = document.getElementById('auditTableBody');
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">正在加载审核数据...</td></tr>';
+
+        try {
+            const status = document.getElementById('statusFilter').value;
+            const params = new URLSearchParams({ page: currentPage, limit: pageSize });
+            if (status !== '') params.append('status', status);
+
+            const res = await fetchApi(`${API_AUDIT_NOTES}?${params.toString()}`);
+            if (!isSuccessResponse(res)) {
+                tbody.innerHTML = `<tr><td colspan="6" class="empty-row">${res.msg || '加载失败'}</td></tr>`;
+                showToast(res.msg || '审核数据加载失败', 'error');
+                return;
+            }
+
+            const data = readResponseData(res);
+            allNotes = Array.isArray(data.list) ? data.list : [];
+            totalNotes = Number(data.total) || allNotes.length;
+            currentPage = Number(data.page) || currentPage;
+
+            renderTable();
+            renderPagination();
+            document.getElementById('totalNotes').textContent = totalNotes;
+        } catch (error) {
+            console.error(error);
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-row">网络错误，请稍后重试</td></tr>';
+            showToast('网络错误，审核数据加载失败', 'error');
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('auditTableBody');
+        if (!allNotes.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-row">暂无符合条件的审核数据</td></tr>';
+            return;
+        }
+
+        let html = '';
+        allNotes.forEach((note) => {
+            const safeTitle = String(note.title || '-').replace(/"/g, '&quot;');
+            html += `
+                <tr>
+                    <td>${note.id || '-'}</td>
+                    <td><div class="title-cell" title="${safeTitle}">${note.title || '-'}</div></td>
+                    <td>${note.user_nickname || '未知用户'}</td>
+                    <td>${note.create_time || '-'}</td>
+                    <td><span class="status-tag ${statusClass(note.status)}">${statusLabel(note.status)}</span></td>
+                    <td>
+                        <div class="action-links">
+                            <button class="action-link action-audit" type="button" onclick="openAuditModal(${Number(note.id || 0)})">审核</button>
+                            <button class="action-link action-preview" type="button" onclick="openPreviewModal(${Number(note.id || 0)})">预览</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = html;
+    }
+
+    function renderPagination() {
+        const totalPages = Math.max(1, Math.ceil(totalNotes / pageSize));
+        const el = document.getElementById('pagination');
+
+        if (totalNotes === 0) {
+            el.innerHTML = '';
+            return;
+        }
+
+        let html = `
+            <button class="pager-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>
+        `;
+
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                html += `<button class="pager-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+            } else if (i === currentPage - 3 || i === currentPage + 3) {
+                html += '<button class="pager-btn" disabled>...</button>';
+            }
+        }
+
+        html += `<button class="pager-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`;
+        el.innerHTML = html;
+    }
+
+    function changePage(page) {
+        const totalPages = Math.max(1, Math.ceil(totalNotes / pageSize));
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        loadNotes();
+    }
+
+    async function getNoteDetail(noteId) {
+        const endpoints = [
+            `${API_AUDIT_NOTES}/${noteId}/detail`,
+            `${API_AUDIT_NOTES}/${noteId}`,
+        ];
+
+        for (const endpoint of endpoints) {
+            const res = await fetchApi(endpoint, { method: 'GET' });
+            if (isSuccessResponse(res)) return readResponseData(res);
+        }
+
+        throw new Error('加载笔记详情失败');
+    }
+
+    async function openAuditModal(noteId) {
+        if (!noteId) return;
+        try {
+            const note = await getNoteDetail(noteId);
+            currentAuditNoteId = Number(note.id || noteId);
+            document.getElementById('auditTitle').textContent = note.title || '-';
+            document.getElementById('auditMeta').innerHTML = `
+                <span>作者：${note.user_nickname || '未知用户'}</span>
+                <span>发布时间：${note.create_time || '-'}</span>
+                <span>状态：${statusLabel(note.status)}</span>
+            `;
+            document.getElementById('auditContent').textContent = note.content || '-';
+            document.getElementById('rejectReason').value = '';
+            document.getElementById('rejectArea').style.display = 'none';
+            document.getElementById('confirmRejectBtn').style.display = 'none';
+            document.getElementById('auditModalOverlay').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        } catch (error) {
+            console.error(error);
+            showToast('加载笔记详情失败', 'error');
+        }
+    }
+
+    function closeAuditModal() {
+        document.getElementById('auditModalOverlay').classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    async function openPreviewModal(noteId) {
+        if (!noteId) return;
+        try {
+            const note = await getNoteDetail(noteId);
+            document.getElementById('previewTitle').textContent = note.title || '-';
+            document.getElementById('previewMeta').innerHTML = `
+                <span>作者：${note.user_nickname || '未知用户'}</span>
+                <span>发布时间：${note.create_time || '-'}</span>
+                <span>状态：${statusLabel(note.status)}</span>
+            `;
+            document.getElementById('previewContent').textContent = note.content || '-';
+            document.getElementById('previewModalOverlay').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        } catch (error) {
+            console.error(error);
+            showToast('加载预览失败', 'error');
+        }
+    }
+
+    function closePreviewModal() {
+        document.getElementById('previewModalOverlay').classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    async function submitAudit(action) {
+        if (!currentAuditNoteId) return;
+
+        try {
+            let res;
+            if (action === 'pass') {
+                res = await fetchApi(`${API_AUDIT_NOTES}/${currentAuditNoteId}/pass`, { method: 'POST' });
+                if (!isSuccessResponse(res)) {
+                    res = await fetchApi(`${API_AUDIT_NOTES}/${currentAuditNoteId}`, {
+                        method: 'POST',
+                        body: JSON.stringify({ status: 1 }),
+                    });
+                }
+            } else {
+                const reason = document.getElementById('rejectReason').value.trim();
+                res = await fetchApi(`${API_AUDIT_NOTES}/${currentAuditNoteId}/reject`, {
+                    method: 'POST',
+                    body: JSON.stringify({ reason }),
+                });
+                if (!isSuccessResponse(res)) {
+                    res = await fetchApi(`${API_AUDIT_NOTES}/${currentAuditNoteId}`, {
+                        method: 'POST',
+                        body: JSON.stringify({ status: 2, reason }),
+                    });
+                }
+            }
+
+            if (!isSuccessResponse(res)) {
+                showToast(res.msg || '审核失败', 'error');
+                return;
+            }
+
+            showToast(action === 'pass' ? '审核通过成功' : '驳回成功');
+            closeAuditModal();
+            await loadNotes();
+        } catch (error) {
+            console.error(error);
+            showToast('审核操作失败', 'error');
+        }
+    }
+
+    async function loadSensitiveConfig() {
+        try {
+            const res = await fetchApi(API_SENSITIVE_WORDS, { method: 'GET' });
+            if (!isSuccessResponse(res)) {
+                showToast(res.msg || '敏感词加载失败', 'error');
+                renderSensitiveWords();
+                return;
+            }
+            const data = readResponseData(res);
+            sensitiveWords = Array.isArray(data.list) ? data.list : [];
+            const rule = String(data.rule || 'block');
+            document.getElementById('ruleSelect').value = (rule === 'replace') ? 'replace' : 'block';
+            renderSensitiveWords();
+        } catch (error) {
+            console.error(error);
+            showToast('敏感词加载失败', 'error');
+            renderSensitiveWords();
+        }
+    }
+
+    function renderSensitiveWords() {
+        const box = document.getElementById('wordList');
+        if (!sensitiveWords.length) {
+            box.innerHTML = '<div class="word-empty">暂无敏感词</div>';
+            return;
+        }
+
+        let html = '';
+        sensitiveWords.forEach((item) => {
+            html += `
+                <span class="word-chip">
+                    <span>${item.word}</span>
+                    <button type="button" onclick="deleteSensitiveWord(${Number(item.id || 0)})">×</button>
+                </span>
+            `;
+        });
+        box.innerHTML = html;
+    }
+
+    async function addSensitiveWord() {
+        const input = document.getElementById('wordInput');
+        const value = input.value.trim();
+        if (!value) {
+            showToast('请输入敏感词', 'error');
+            return;
+        }
+
+        try {
+            let res = await fetchApi(API_SENSITIVE_WORDS_ADD, {
+                method: 'POST',
+                body: JSON.stringify({ word: value }),
+            });
+            if (!isSuccessResponse(res)) {
+                res = await fetchApi(API_SENSITIVE_WORDS, {
+                    method: 'POST',
+                    body: JSON.stringify({ word: value }),
+                });
+            }
+
+            if (!isSuccessResponse(res)) {
+                showToast(res.msg || '添加失败', 'error');
+                return;
+            }
+
+            input.value = '';
+            showToast('敏感词添加成功');
+            await loadSensitiveConfig();
+        } catch (error) {
+            console.error(error);
+            showToast('添加失败，请稍后重试', 'error');
+        }
+    }
+
+    async function deleteSensitiveWord(wordId) {
+        if (!wordId) return;
+        try {
+            const res = await fetchApi(`${API_SENSITIVE_WORDS}/${wordId}`, { method: 'DELETE' });
+            if (!isSuccessResponse(res)) {
+                showToast(res.msg || '删除失败', 'error');
+                return;
+            }
+            showToast('敏感词删除成功');
+            await loadSensitiveConfig();
+        } catch (error) {
+            console.error(error);
+            showToast('删除失败，请稍后重试', 'error');
+        }
+    }
+
+    async function saveSensitiveConfig() {
+        const rule = document.getElementById('ruleSelect').value;
+        try {
+            let res = await fetchApi(API_SENSITIVE_CONFIG, {
+                method: 'POST',
+                body: JSON.stringify({ rule }),
+            });
+            if (!isSuccessResponse(res)) {
+                res = await fetchApi(API_SENSITIVE_RULE, {
+                    method: 'POST',
+                    body: JSON.stringify({ rule }),
+                });
+            }
+
+            if (!isSuccessResponse(res)) {
+                showToast(res.msg || '保存失败', 'error');
+                return;
+            }
+
+            showToast('敏感词规则保存成功');
+        } catch (error) {
+            console.error(error);
+            showToast('保存失败，请稍后重试', 'error');
+        }
+    }
+</script>
+</body>
+</html>

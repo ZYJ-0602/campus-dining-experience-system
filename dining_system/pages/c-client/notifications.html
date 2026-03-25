@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>消息通知 - 校园食堂点评系统</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f9f9f9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding-bottom: 16px;
+        }
+
+        .header-nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            height: 52px;
+            background: linear-gradient(135deg, #ff9933 0%, #ffb366 100%);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
+        }
+
+        .back-btn {
+            color: #fff;
+            font-size: 22px;
+            text-decoration: none;
+        }
+
+        .page-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .container-wrap {
+            padding: 12px 12px 0;
+        }
+
+        .notice-list {
+            background: transparent;
+        }
+
+        .notice-item {
+            padding: 14px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            gap: 10px;
+        }
+
+        .notice-item:first-child {
+            padding-top: 2px;
+        }
+
+        .notice-item:last-child {
+            border-bottom: none;
+        }
+
+        .notice-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .icon-system { background: rgba(255, 153, 51, 0.15); color: #ff9933; }
+        .icon-reply { background: rgba(78, 155, 255, 0.15); color: #4e9bff; }
+        .icon-feedback { background: rgba(40, 167, 69, 0.15); color: #28a745; }
+
+        .notice-main { flex: 1; min-width: 0; }
+
+        .notice-title {
+            font-size: 14px;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .notice-content {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 4px;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .notice-time {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px 0;
+        }
+
+        .empty-state i {
+            font-size: 38px;
+            display: block;
+            margin-bottom: 10px;
+            color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-nav">
+        <a href="user_center.html" class="back-btn" aria-label="返回"><i class="bi bi-chevron-left"></i></a>
+        <h1 class="page-title">消息通知</h1>
+        <span style="width:22px;"></span>
+    </div>
+
+    <div class="container-wrap">
+        <div class="notice-list" id="noticeList">
+            <div class="notice-item">
+                <div class="notice-icon icon-system"><i class="bi bi-megaphone"></i></div>
+                <div class="notice-main">
+                    <div class="notice-title">系统通知</div>
+                    <div class="notice-content">欢迎使用校园食堂点评系统，持续提交真实评价将帮助我们改进服务质量。</div>
+                    <div class="notice-time">刚刚</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', initPage);
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function initPage() {
+            const meRes = await fetchApi(API.AUTH_ME);
+            if (meRes.code !== 200) {
+                alert('请先登录');
+                window.location.href = '/login';
+                return;
+            }
+
+            const list = [];
+
+            list.push({
+                icon: 'system',
+                title: '系统通知',
+                content: '你可在“我的评价”“我的笔记”“我的收藏”中快速查看个人数据。',
+                time: '今天'
+            });
+
+            const evalRes = await fetchApi(API.MY_EVALUATIONS);
+            if (evalRes.code === 200 && Array.isArray(evalRes.data) && evalRes.data.length > 0) {
+                const latest = evalRes.data[0];
+                list.push({
+                    icon: 'reply',
+                    title: '评价回复提醒',
+                    content: `你最近一次评价：${latest.canteen_name || ''} - ${latest.window_name || ''}，综合分 ${Number(latest.comprehensive_score || 0).toFixed(1)}。`,
+                    time: latest.create_time || '最近'
+                });
+            }
+
+            const fbRes = await fetchApi(API.FEEDBACK);
+            if (fbRes.code === 200 && Array.isArray(fbRes.data) && fbRes.data.length > 0) {
+                fbRes.data.slice(0, 3).forEach(item => {
+                    list.push({
+                        icon: 'feedback',
+                        title: '反馈处理结果',
+                        content: `你的反馈状态：${item.status}。内容摘要：${String(item.content || '').slice(0, 40)}`,
+                        time: item.created_time || '最近'
+                    });
+                });
+            }
+
+            renderList(list);
+        }
+
+        function renderList(data) {
+            const root = document.getElementById('noticeList');
+            if (!data.length) {
+                root.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>暂无消息通知</p>
+                    </div>
+                `;
+                return;
+            }
+
+            root.innerHTML = data.map(item => {
+                const iconClass = item.icon === 'feedback' ? 'icon-feedback' : (item.icon === 'reply' ? 'icon-reply' : 'icon-system');
+                const iconName = item.icon === 'feedback' ? 'bi-check2-circle' : (item.icon === 'reply' ? 'bi-chat-dots' : 'bi-megaphone');
+                return `
+                    <div class="notice-item">
+                        <div class="notice-icon ${iconClass}"><i class="bi ${iconName}"></i></div>
+                        <div class="notice-main">
+                            <div class="notice-title">${escapeHtml(item.title)}</div>
+                            <div class="notice-content">${escapeHtml(item.content)}</div>
+                            <div class="notice-time">${escapeHtml(item.time)}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>
