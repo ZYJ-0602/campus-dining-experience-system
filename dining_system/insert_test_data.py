@@ -1,6 +1,7 @@
 from app import app
 from extensions import db
 from models import User, Canteen, Window, Dish, EvaluationMain, EvaluationDish
+from seed_defaults import ensure_default_admin_operator_accounts
 from datetime import datetime
 from werkzeug.security import generate_password_hash
 
@@ -23,6 +24,9 @@ def insert_data():
         c2 = Canteen(name='第二食堂', address='校园南区', is_active=True)
         db.session.add_all([c1, c2])
         db.session.commit()
+
+        print("插入默认管理员和运营账号...")
+        ensure_default_admin_operator_accounts(preferred_operator_canteen_id=c1.id)
         
         # 3. 窗口
         print("插入窗口...")

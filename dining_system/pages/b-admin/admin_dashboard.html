@@ -30,6 +30,12 @@
             <h4 class="m-0 fw-bold">运营数据看板</h4>
         </div>
         <div>
+            <select class="form-select form-select-sm d-inline-block me-2" style="width: 180px;" id="campusSelect">
+                <option value="0">全部校区</option>
+            </select>
+            <select class="form-select form-select-sm d-inline-block me-2" style="width: 180px;" id="canteenSelect">
+                <option value="0">全部食堂</option>
+            </select>
             <span class="text-muted me-2 small" id="lastRefreshTime">最后刷新：-</span>
             <button class="btn btn-outline-primary btn-sm me-2" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
             <button class="btn btn-primary btn-sm" id="exportBtn"><i class="bi bi-download"></i> 导出报表</button>
@@ -42,6 +48,7 @@
                 <div>
                     <div class="text-muted mb-1">今日评价数</div>
                     <h3 class="m-0 fw-bold" id="todayEvalCount">0</h3>
+                    <div class="small text-muted mt-1" id="todayKpiHint">本月 0 条 · 环比 0.00% · 同比 0.00%</div>
                 </div>
                 <div class="stat-icon bg-primary-soft"><i class="bi bi-chat-square-text"></i></div>
             </div>
@@ -51,6 +58,7 @@
                 <div>
                     <div class="text-muted mb-1">本周平均分</div>
                     <h3 class="m-0 fw-bold" id="weekAvgScore">0.00</h3>
+                    <div class="small text-muted mt-1" id="weekKpiHint">本月均分 0.00 · 环比 0.00 · 同比 0.00</div>
                 </div>
                 <div class="stat-icon bg-success-soft"><i class="bi bi-star"></i></div>
             </div>
@@ -99,6 +107,55 @@
         <div id="rankChart" class="chart-container"></div>
     </div>
 
+    <div class="chart-card">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold m-0">推荐 A/B 实验指标（近7天）</h6>
+            <div>
+                <span class="text-muted small me-2" id="abMultiplierHint">探索系数 1.00</span>
+                <button class="btn btn-outline-success btn-sm me-2" id="abTuneBtn"><i class="bi bi-sliders"></i> 自动调参</button>
+                <button class="btn btn-outline-primary btn-sm me-2" id="abPolicyBtn"><i class="bi bi-gear"></i> 策略参数</button>
+                <button class="btn btn-outline-info btn-sm me-2" id="abSegmentBtn"><i class="bi bi-diagram-3"></i> 分层显著性</button>
+                <button class="btn btn-outline-secondary btn-sm me-2" id="abReportBtn"><i class="bi bi-file-earmark-arrow-down"></i> 导出实验报告</button>
+                <button class="btn btn-outline-danger btn-sm me-2" id="abGuardBtn"><i class="bi bi-shield-exclamation"></i> 保护检测</button>
+                <button class="btn btn-outline-warning btn-sm me-2" id="abRollbackBtn"><i class="bi bi-arrow-counterclockwise"></i> 回滚上一次</button>
+                <span class="text-muted small" id="abMetricsHint">曝光 0 · 点击 0 · CTR 0.00%</span>
+            </div>
+        </div>
+        <div class="small text-muted mb-2" id="abSignificanceHint">显著性检验：-</div>
+        <div id="abChart" class="chart-container" style="height: 280px;"></div>
+        <div class="table-responsive mt-2">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>实验组</th>
+                        <th>策略</th>
+                        <th>曝光</th>
+                        <th>点击</th>
+                        <th>CTR</th>
+                    </tr>
+                </thead>
+                <tbody id="abMetricsTableBody">
+                    <tr><td colspan="5" class="text-muted">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>触发方式</th>
+                        <th>变更</th>
+                        <th>原因</th>
+                    </tr>
+                </thead>
+                <tbody id="abTuneLogTableBody">
+                    <tr><td colspan="4" class="text-muted">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <div class="toast-container position-fixed top-0 end-0 p-3">
         <div id="tipToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="toast-header">
@@ -112,8 +169,25 @@
     <script>
         const API_DASHBOARD = '/api/operation/dashboard';
         const API_EXPORT = '/api/admin/operator/dashboard/export';
+        const API_RECOMMEND_AB_METRICS = '/api/admin/recommendation_ab_metrics';
+        const API_RECOMMEND_AB_TUNE = '/api/admin/recommendation_ab_tune';
+        const API_RECOMMEND_AB_TUNE_LOGS = '/api/admin/recommendation_ab_tune_logs';
+        const API_RECOMMEND_AB_TUNE_ROLLBACK = '/api/admin/recommendation_ab_tune_rollback';
+        const API_RECOMMEND_AB_POLICY = '/api/admin/recommendation_ab_policy';
+        const API_RECOMMEND_AB_SEGMENTS = '/api/admin/recommendation_ab_segments';
+        const API_RECOMMEND_AB_REPORT = '/api/admin/recommendation_ab_report';
+        const API_RECOMMEND_GUARD_CHECK = '/api/admin/recommendation_guard_check';
+        const API_RECOMMEND_COUNTERFACTUAL = '/api/admin/recommendation_counterfactual_eval';
+        const API_AUTH_ME = '/api/auth/me';
+        const API_CAMPUSES = '/api/admin/campuses';
+        const API_CANTEENS = '/api/canteens';
         let trendChart;
         let rankChart;
+        let abChart;
+        let dashboardTimer = null;
+        let currentRole = 'admin';
+        let selectedCampusId = 0;
+        let selectedCanteenId = 0;
 
         function showToast(message) {
             document.getElementById('toastText').innerText = message;
@@ -124,6 +198,20 @@
         function formatScore(value) {
             const num = Number(value || 0);
             return Number.isFinite(num) ? num.toFixed(2) : '0.00';
+        }
+
+        function formatPct(value) {
+            const num = Number(value || 0);
+            if (!Number.isFinite(num)) return '0.00%';
+            const sign = num > 0 ? '+' : '';
+            return `${sign}${num.toFixed(2)}%`;
+        }
+
+        function formatDelta(value) {
+            const num = Number(value || 0);
+            if (!Number.isFinite(num)) return '0.00';
+            const sign = num > 0 ? '+' : '';
+            return `${sign}${num.toFixed(2)}`;
         }
 
         function renderTrend(trendRows) {
@@ -219,6 +307,283 @@
             document.getElementById('warningList').innerHTML = '<div class="empty-box">加载失败，请稍后重试</div>';
         }
 
+        function renderAbMetrics(summary, exploreMultiplier) {
+            const rows = Array.isArray(summary) ? summary : [];
+            const body = document.getElementById('abMetricsTableBody');
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="5" class="text-muted">暂无实验数据</td></tr>';
+            } else {
+                body.innerHTML = rows.map((item) => `
+                    <tr>
+                        <td>${item.variant || '-'}</td>
+                        <td>${item.variant === 'A' ? 'baseline' : 'explore'}</td>
+                        <td>${Number(item.exposure || 0)}</td>
+                        <td>${Number(item.click || 0)}</td>
+                        <td>${Number(item.ctr || 0).toFixed(2)}%</td>
+                    </tr>
+                `).join('');
+            }
+
+            const exposureData = rows.map((item) => Number(item.exposure || 0));
+            const ctrData = rows.map((item) => Number(item.ctr || 0));
+            const variants = rows.map((item) => item.variant || '-');
+            const totalExposure = exposureData.reduce((sum, v) => sum + v, 0);
+            const totalClick = rows.map((item) => Number(item.click || 0)).reduce((sum, v) => sum + v, 0);
+            const totalCtr = totalExposure ? (totalClick * 100.0 / totalExposure) : 0;
+            document.getElementById('abMetricsHint').innerText = `曝光 ${totalExposure} · 点击 ${totalClick} · CTR ${totalCtr.toFixed(2)}%`;
+            document.getElementById('abMultiplierHint').innerText = `探索系数 ${(Number(exploreMultiplier || 1)).toFixed(2)}`;
+
+            if (!abChart) {
+                abChart = echarts.init(document.getElementById('abChart'));
+            }
+            abChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['曝光', 'CTR(%)'] },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: [{ type: 'category', data: variants }],
+                yAxis: [{ type: 'value', name: '曝光' }, { type: 'value', name: 'CTR(%)', min: 0, max: 100 }],
+                series: [
+                    { name: '曝光', type: 'bar', data: exposureData, itemStyle: { color: '#0d6efd' } },
+                    { name: 'CTR(%)', type: 'line', yAxisIndex: 1, data: ctrData, itemStyle: { color: '#198754' }, smooth: true }
+                ]
+            });
+        }
+
+        async function fetchRecommendationAbMetrics() {
+            try {
+                const params = new URLSearchParams({ days: '7' });
+                if (selectedCampusId) {
+                    params.set('campus_id', String(selectedCampusId));
+                }
+                const resp = await fetch(`${API_RECOMMEND_AB_METRICS}?${params.toString()}`, { credentials: 'include' });
+                const body = await resp.json();
+                if (body.code !== 200) {
+                    document.getElementById('abMetricsTableBody').innerHTML = '<tr><td colspan="5" class="text-muted">指标加载失败</td></tr>';
+                    return;
+                }
+                const payload = body.data || {};
+                renderAbMetrics(payload.summary || [], payload.explore_multiplier || 1);
+                renderAbSignificance(payload.significance || {});
+                renderGuardHint(payload.guard || {});
+                fetchRecommendationAbTuneLogs();
+                fetchCounterfactualBrief();
+            } catch (error) {
+                document.getElementById('abMetricsTableBody').innerHTML = '<tr><td colspan="5" class="text-muted">指标加载失败</td></tr>';
+            }
+        }
+
+        function renderAbSignificance(significance) {
+            const z = Number(significance.z_score || 0).toFixed(4);
+            const p = Number(significance.p_value || 1).toFixed(6);
+            const text = significance.significant ? '显著差异（p < 0.05）' : '差异不显著';
+            document.getElementById('abSignificanceHint').innerText = `显著性检验：z=${z}，p=${p}，结论：${text}`;
+        }
+
+        function renderGuardHint(guard) {
+            if (!guard || typeof guard !== 'object') return;
+            const info = `保护回滚：${guard.enabled ? '开启' : '关闭'} · 连续劣化 ${Number(guard.consecutive_degrade || 0)}/${Number(guard.consecutive_limit || 0)} · deltaCTR ${Number(guard.delta_ctr || 0).toFixed(2)}%`;
+            const current = document.getElementById('abSignificanceHint').innerText || '';
+            document.getElementById('abSignificanceHint').innerText = `${current} | ${info}`;
+        }
+
+        async function fetchCounterfactualBrief() {
+            try {
+                const params = new URLSearchParams({ days: '7', target_strategy: 'explore' });
+                if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+                const resp = await fetch(`${API_RECOMMEND_COUNTERFACTUAL}?${params.toString()}`, { credentials: 'include' });
+                const body = await resp.json();
+                if (body.code !== 200) return;
+                const data = body.data || {};
+                const extra = `反事实：IPS ${Number(data.ips || 0).toFixed(4)} · DR ${Number(data.dr || 0).toFixed(4)}`;
+                const current = document.getElementById('abMetricsHint').innerText || '';
+                document.getElementById('abMetricsHint').innerText = `${current} · ${extra}`;
+            } catch (error) {
+                // ignore
+            }
+        }
+
+        async function showRecommendationSegmentSummary() {
+            try {
+                const params = new URLSearchParams({ days: '7', segment_by: 'page' });
+                if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+                const resp = await fetch(`${API_RECOMMEND_AB_SEGMENTS}?${params.toString()}`, { credentials: 'include' });
+                const body = await resp.json();
+                if (body.code !== 200) {
+                    showToast(body.msg || '分层分析失败');
+                    return;
+                }
+                const rows = Array.isArray(body.data && body.data.list) ? body.data.list : [];
+                if (!rows.length) {
+                    showToast('暂无分层实验数据');
+                    return;
+                }
+                const top = rows.slice(0, 3).map((item) => {
+                    const s = item.significance || {};
+                    return `${item.segment}: p=${Number(s.p_value || 1).toFixed(4)}`;
+                });
+                showToast(`分层显著性Top3 | ${top.join(' | ')}`);
+            } catch (error) {
+                showToast('分层分析失败，请稍后重试');
+            }
+        }
+
+        function exportRecommendationReport() {
+            const params = new URLSearchParams({ days: '7', format: 'md' });
+            if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+            window.open(`${API_RECOMMEND_AB_REPORT}?${params.toString()}`, '_blank');
+        }
+
+        async function runRecommendationGuardCheck() {
+            const btn = document.getElementById('abGuardBtn');
+            if (btn) btn.disabled = true;
+            try {
+                const response = await fetch(API_RECOMMEND_GUARD_CHECK, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ campus_id: selectedCampusId || undefined, days: 7 })
+                });
+                const body = await response.json();
+                if (body.code !== 200) {
+                    showToast(body.msg || '保护检测失败');
+                    return;
+                }
+                const payload = body.data || {};
+                showToast(payload.message || (payload.triggered ? '已触发保护回滚' : '未触发保护回滚'));
+                await fetchRecommendationAbMetrics();
+            } catch (error) {
+                showToast('保护检测失败，请稍后重试');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function updateRecommendationAbPolicy() {
+            const minExposure = Number(prompt('最小曝光阈值（建议 20-200）', '30'));
+            if (!Number.isFinite(minExposure) || minExposure <= 0) return;
+            const ctrDeltaThreshold = Number(prompt('CTR差异阈值（百分点，建议 0.5-3）', '1.0'));
+            if (!Number.isFinite(ctrDeltaThreshold) || ctrDeltaThreshold <= 0) return;
+            const stepUp = Number(prompt('上调步长（建议 0.01-0.20）', '0.05'));
+            if (!Number.isFinite(stepUp) || stepUp <= 0) return;
+            const stepDown = Number(prompt('下调步长（建议 0.01-0.30）', '0.10'));
+            if (!Number.isFinite(stepDown) || stepDown <= 0) return;
+
+            try {
+                const response = await fetch(API_RECOMMEND_AB_POLICY, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        campus_id: selectedCampusId || undefined,
+                        min_exposure: minExposure,
+                        ctr_delta_threshold: ctrDeltaThreshold,
+                        step_up: stepUp,
+                        step_down: stepDown
+                    })
+                });
+                const body = await response.json();
+                if (body.code !== 200) {
+                    showToast(body.msg || '策略更新失败');
+                    return;
+                }
+                showToast('策略参数已更新');
+                await fetchRecommendationAbMetrics();
+            } catch (error) {
+                showToast('策略更新失败，请稍后重试');
+            }
+        }
+
+        function renderAbTuneLogs(list) {
+            const body = document.getElementById('abTuneLogTableBody');
+            const rows = Array.isArray(list) ? list : [];
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="4" class="text-muted">暂无调参日志</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map((item) => `
+                <tr>
+                    <td>${item.create_time || '-'}</td>
+                    <td>${item.trigger_type || '-'}</td>
+                    <td>${Number(item.before_multiplier || 1).toFixed(2)} → ${Number(item.after_multiplier || 1).toFixed(2)}</td>
+                    <td>${item.reason || '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function fetchRecommendationAbTuneLogs() {
+            try {
+                const params = new URLSearchParams({ limit: '10' });
+                if (selectedCampusId) {
+                    params.set('campus_id', String(selectedCampusId));
+                }
+                const resp = await fetch(`${API_RECOMMEND_AB_TUNE_LOGS}?${params.toString()}`, { credentials: 'include' });
+                const body = await resp.json();
+                if (body.code !== 200) {
+                    document.getElementById('abTuneLogTableBody').innerHTML = '<tr><td colspan="4" class="text-muted">日志加载失败</td></tr>';
+                    return;
+                }
+                renderAbTuneLogs((body.data && body.data.list) || []);
+            } catch (error) {
+                document.getElementById('abTuneLogTableBody').innerHTML = '<tr><td colspan="4" class="text-muted">日志加载失败</td></tr>';
+            }
+        }
+
+        async function autoTuneRecommendationAb() {
+            const btn = document.getElementById('abTuneBtn');
+            if (btn) btn.disabled = true;
+            try {
+                const response = await fetch(API_RECOMMEND_AB_TUNE, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        campus_id: selectedCampusId || undefined,
+                        days: 7,
+                        min_exposure: 30
+                    })
+                });
+                const body = await response.json();
+                if (body.code !== 200) {
+                    showToast(body.msg || '自动调参失败');
+                    return;
+                }
+                const payload = body.data || {};
+                showToast(`调参完成：${Number(payload.before_multiplier || 1).toFixed(2)} → ${Number(payload.after_multiplier || 1).toFixed(2)}`);
+                await fetchRecommendationAbMetrics();
+            } catch (error) {
+                showToast('自动调参失败，请稍后重试');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function rollbackRecommendationAb() {
+            const btn = document.getElementById('abRollbackBtn');
+            if (btn) btn.disabled = true;
+            try {
+                const response = await fetch(API_RECOMMEND_AB_TUNE_ROLLBACK, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        campus_id: selectedCampusId || undefined
+                    })
+                });
+                const body = await response.json();
+                if (body.code !== 200) {
+                    showToast(body.msg || '回滚失败');
+                    return;
+                }
+                const payload = body.data || {};
+                showToast(`回滚成功：探索系数恢复为 ${Number(payload.restored_multiplier || 1).toFixed(2)}`);
+                await fetchRecommendationAbMetrics();
+            } catch (error) {
+                showToast('回滚失败，请稍后重试');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
         function renderLoading() {
             document.getElementById('warningList').innerHTML = '<div class="empty-box">加载中...</div>';
         }
@@ -227,7 +592,11 @@
             document.getElementById('refreshBtn').disabled = true;
             renderLoading();
             try {
-                const response = await fetch(API_DASHBOARD);
+                const params = new URLSearchParams();
+                if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+                if (selectedCanteenId) params.set('canteen_id', String(selectedCanteenId));
+                const qs = params.toString() ? `?${params.toString()}` : '';
+                const response = await fetch(`${API_DASHBOARD}${qs}`, { credentials: 'include' });
                 const res = await response.json();
                 if (res.code !== 200) {
                     renderLoadFailed();
@@ -239,11 +608,20 @@
                 document.getElementById('weekAvgScore').innerText = formatScore(payload.week_avg_score);
                 document.getElementById('badReviewCount').innerText = payload.bad_review_count || 0;
                 document.getElementById('noteMentionCount').innerText = payload.note_mention_count || 0;
+                const monthCountMom = formatPct(payload.month_count_mom_pct);
+                const monthCountYoy = formatPct(payload.month_count_yoy_pct);
+                const monthAvgMom = formatDelta(payload.month_avg_mom_delta);
+                const monthAvgYoy = formatDelta(payload.month_avg_yoy_delta);
+                const todayCardHint = `本月 ${Number(payload.month_evaluation_count || 0)} 条 · 环比 ${monthCountMom} · 同比 ${monthCountYoy}`;
+                const weekCardHint = `本月均分 ${formatScore(payload.month_avg_score)} · 环比 ${monthAvgMom} · 同比 ${monthAvgYoy}`;
+                document.getElementById('todayKpiHint').innerText = todayCardHint;
+                document.getElementById('weekKpiHint').innerText = weekCardHint;
                 document.getElementById('lastRefreshTime').innerText = `最后刷新：${payload.last_refresh_time || '-'}`;
 
                 renderTrend(payload['30day_score_trend'] || []);
                 renderRank(payload.hot_dishes_top10 || []);
                 renderWarnings(payload.bad_review_list || []);
+                fetchRecommendationAbMetrics();
             } catch (error) {
                 renderLoadFailed();
                 showToast('加载失败，请稍后重试');
@@ -253,7 +631,65 @@
         }
 
         function exportDashboard() {
-            window.open(API_EXPORT, '_blank');
+            const params = new URLSearchParams();
+            if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+            if (selectedCanteenId) params.set('canteen_id', String(selectedCanteenId));
+            const qs = params.toString() ? `?${params.toString()}` : '';
+            window.open(`${API_EXPORT}${qs}`, '_blank');
+        }
+
+        async function initDashboardContext() {
+            const authResp = await fetch(API_AUTH_ME, { credentials: 'include' });
+            const authBody = await authResp.json();
+            if (authBody.code !== 200 || !authBody.data) {
+                window.top.location.href = 'admin_login.html';
+                return false;
+            }
+
+            currentRole = String(authBody.data.role || '').toLowerCase();
+            const campusSelect = document.getElementById('campusSelect');
+            const operatorCanteenId = Number(authBody.data.operator_canteen_id || 0);
+            const canteenSelect = document.getElementById('canteenSelect');
+
+            if (currentRole === 'operator') {
+                selectedCampusId = Number(authBody.data.campus_id || 1);
+                campusSelect.innerHTML = `<option value="${selectedCampusId}">${authBody.data.campus_name || '我的校区'}</option>`;
+                campusSelect.disabled = true;
+            } else {
+                const campusResp = await fetch(API_CAMPUSES, { credentials: 'include' });
+                const campusBody = await campusResp.json();
+                const campuses = Array.isArray(campusBody.data && campusBody.data.list) ? campusBody.data.list : [];
+                let campusHtml = '<option value="0">全部校区</option>';
+                campuses.forEach((item) => {
+                    campusHtml += `<option value="${item.id}">${item.name}</option>`;
+                });
+                campusSelect.innerHTML = campusHtml;
+                campusSelect.disabled = false;
+            }
+
+            if (currentRole === 'operator') {
+                selectedCanteenId = operatorCanteenId;
+                canteenSelect.innerHTML = `<option value="${operatorCanteenId}">${authBody.data.operator_canteen_name || '我的食堂'}</option>`;
+                canteenSelect.disabled = true;
+                return true;
+            }
+
+            await loadCanteensForSelectedCampus();
+            return true;
+        }
+
+        async function loadCanteensForSelectedCampus() {
+            const canteenResp = await fetch(`${API_CANTEENS}${selectedCampusId ? `?campus_id=${selectedCampusId}` : ''}`, { credentials: 'include' });
+            const canteenBody = await canteenResp.json();
+            const canteens = Array.isArray(canteenBody.data) ? canteenBody.data : [];
+            let html = '<option value="0">全部食堂</option>';
+            canteens.forEach((item) => {
+                html += `<option value="${item.id}">${item.name}</option>`;
+            });
+            const canteenSelect = document.getElementById('canteenSelect');
+            canteenSelect.innerHTML = html;
+            canteenSelect.disabled = false;
+            selectedCanteenId = 0;
         }
 
         if (window.self !== window.top) {
@@ -262,15 +698,34 @@
 
         document.getElementById('refreshBtn').addEventListener('click', fetchDashboard);
         document.getElementById('exportBtn').addEventListener('click', exportDashboard);
+        document.getElementById('abTuneBtn').addEventListener('click', autoTuneRecommendationAb);
+        document.getElementById('abPolicyBtn').addEventListener('click', updateRecommendationAbPolicy);
+        document.getElementById('abSegmentBtn').addEventListener('click', showRecommendationSegmentSummary);
+        document.getElementById('abReportBtn').addEventListener('click', exportRecommendationReport);
+        document.getElementById('abGuardBtn').addEventListener('click', runRecommendationGuardCheck);
+        document.getElementById('abRollbackBtn').addEventListener('click', rollbackRecommendationAb);
+        document.getElementById('campusSelect').addEventListener('change', async (event) => {
+            selectedCampusId = Number(event.target.value || 0);
+            await loadCanteensForSelectedCampus();
+            fetchDashboard();
+        });
+        document.getElementById('canteenSelect').addEventListener('change', (event) => {
+            selectedCanteenId = Number(event.target.value || 0);
+            fetchDashboard();
+        });
 
         window.addEventListener('resize', function () {
             if (trendChart) trendChart.resize();
             if (rankChart) rankChart.resize();
+            if (abChart) abChart.resize();
         });
 
         document.addEventListener('DOMContentLoaded', function () {
-            fetchDashboard();
-            setInterval(fetchDashboard, 5 * 60 * 1000);
+            initDashboardContext().then((ok) => {
+                if (!ok) return;
+                fetchDashboard();
+                dashboardTimer = setInterval(fetchDashboard, 5 * 60 * 1000);
+            });
         });
     </script>
     <script src="../../static/js/bootstrap.bundle.min.js"></script>

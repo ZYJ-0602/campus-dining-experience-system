@@ -529,6 +529,8 @@
                     <th>用户名</th>
                     <th>手机号</th>
                     <th>角色</th>
+                    <th>校区</th>
+                    <th>绑定食堂</th>
                     <th>注册时间</th>
                     <th>状态</th>
                     <th>操作</th>
@@ -579,6 +581,20 @@
                             <option value="3">食堂运营</option>
                         </select>
                     </div>
+                    <div class="form-item" id="operatorCanteenWrap" style="display:none;">
+                        <label class="form-label" for="formOperatorCanteen">绑定食堂<span class="required">*</span></label>
+                        <select class="form-select" id="formOperatorCanteen">
+                            <option value="">请选择食堂</option>
+                        </select>
+                        <div class="form-help">运营账号必须绑定一个食堂，后续仅可管理该食堂数据。</div>
+                    </div>
+                    <div class="form-item">
+                        <label class="form-label" for="formCampus">所属校区<span class="required">*</span></label>
+                        <select class="form-select" id="formCampus">
+                            <option value="1">默认校区</option>
+                        </select>
+                        <div class="form-help">用于跨校区统计与数据隔离。</div>
+                    </div>
                 </div>
             </form>
         </div>
@@ -604,6 +620,8 @@
     let editingUserId = null;
     let searchDebounce = null;
     const statusOverrides = new Map();
+    let canteenOptions = [];
+    let campusOptions = [];
 
     function isSuccessResponse(res) {
         const code = Number(res && res.code);
@@ -632,6 +650,13 @@
         return String(roleValue);
     }
 
+    function roleToId(roleValue) {
+        const raw = String(roleValue || '').trim().toLowerCase();
+        if (raw === 'admin' || raw === '管理员' || raw === '1') return '1';
+        if (raw === 'operator' || raw === '食堂运营' || raw === '3') return '3';
+        return '2';
+    }
+
     function normalizeUser(user) {
         return {
             ...user,
@@ -652,8 +677,80 @@
         updateBatchActions();
         const pass = await ensureAdminSession();
         if (!pass) return;
+        await loadCampuses();
+        await loadCanteens();
         await fetchUsers();
     });
+
+    async function loadCampuses() {
+        try {
+            const res = await fetchApi(`${API_BASE_URL}/admin/campuses`, { method: 'GET' });
+            if (!isSuccessResponse(res)) {
+                return;
+            }
+            const payload = readResponseData(res);
+            const list = Array.isArray(payload.list) ? payload.list : [];
+            campusOptions = list.map((item) => ({ id: Number(item.id), name: item.name || '' }));
+            renderCampusSelectOptions();
+        } catch (error) {
+            console.error('loadCampuses failed', error);
+        }
+    }
+
+    function renderCampusSelectOptions() {
+        const select = document.getElementById('formCampus');
+        const current = select.value;
+        let html = '';
+        campusOptions.forEach((item) => {
+            html += `<option value="${item.id}">${item.name}</option>`;
+        });
+        if (!html) {
+            html = '<option value="1">默认校区</option>';
+        }
+        select.innerHTML = html;
+        if (current) {
+            select.value = current;
+        }
+    }
+
+    async function loadCanteens() {
+        try {
+            const res = await fetchApi(API.CANTEENS, { method: 'GET' });
+            if (!isSuccessResponse(res)) {
+                return;
+            }
+            const data = Array.isArray(res.data) ? res.data : [];
+            canteenOptions = data.map((item) => ({ id: Number(item.id), name: item.name || '' }));
+            renderCanteenSelectOptions();
+        } catch (error) {
+            console.error('loadCanteens failed', error);
+        }
+    }
+
+    function renderCanteenSelectOptions() {
+        const select = document.getElementById('formOperatorCanteen');
+        const current = select.value;
+        let html = '<option value="">请选择食堂</option>';
+        canteenOptions.forEach((item) => {
+            html += `<option value="${item.id}">${item.name}</option>`;
+        });
+        select.innerHTML = html;
+        if (current) {
+            select.value = current;
+        }
+    }
+
+    function refreshOperatorCanteenVisibility() {
+        const roleId = Number(document.getElementById('formRole').value);
+        const wrap = document.getElementById('operatorCanteenWrap');
+        const select = document.getElementById('formOperatorCanteen');
+        const isOperator = roleId === 3;
+        wrap.style.display = isOperator ? 'grid' : 'none';
+        select.required = isOperator;
+        if (!isOperator) {
+            select.value = '';
+        }
+    }
 
     async function ensureAdminSession() {
         try {
@@ -719,6 +816,7 @@
         document.getElementById('closeUserModalBtn').addEventListener('click', closeUserModal);
         document.getElementById('cancelUserModalBtn').addEventListener('click', closeUserModal);
         document.getElementById('saveUserBtn').addEventListener('click', saveUser);
+        document.getElementById('formRole').addEventListener('change', refreshOperatorCanteenVisibility);
 
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
@@ -735,7 +833,7 @@
 
     async function fetchUsers() {
         const tbody = document.getElementById('userTableBody');
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-row">正在加载用户数据...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-row">正在加载用户数据...</td></tr>';
 
         try {
             const rows = await fetchAllUserRows(currentKeyword);
@@ -747,7 +845,7 @@
             applyFiltersAndRender();
         } catch (error) {
             console.error('fetchUsers error', error);
-            tbody.innerHTML = '<tr><td colspan="8" class="empty-row">加载失败，请刷新后重试</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="empty-row">加载失败，请刷新后重试</td></tr>';
         }
     }
 
@@ -835,7 +933,7 @@
         document.getElementById('totalUsers').textContent = totalUsers;
 
         if (!currentUsers.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty-row">暂无用户数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="empty-row">暂无用户数据</td></tr>';
             document.getElementById('selectAll').checked = false;
             updateBatchActions();
             return;
@@ -856,6 +954,8 @@
                     <td>${user.display_name}</td>
                     <td>${user.phone || '-'}</td>
                     <td>${user.role_name}</td>
+                    <td>${user.campus_name || '-'}</td>
+                    <td>${user.operator_canteen_name || '-'}</td>
                     <td>${user.create_time || '-'}</td>
                     <td>
                         <span class="status-tag ${statusClass}" title="${statusTitle}" onclick="changeStatus(${user.id}, '${nextAction}')">${status}</span>
@@ -1060,11 +1160,15 @@
         document.getElementById('passwordRequiredMark').style.display = 'inline';
         document.getElementById('passwordTip').textContent = '默认密码为 123456，长度至少 6 位。';
         document.getElementById('formPassword').required = true;
+        document.getElementById('formCampus').value = '1';
 
         const form = document.getElementById('userForm');
         form.reset();
         document.getElementById('formRole').value = '2';
+        document.getElementById('formOperatorCanteen').value = '';
+        document.getElementById('formCampus').value = '1';
         document.getElementById('formPassword').value = '123456';
+        refreshOperatorCanteenVisibility();
         showUserModal();
     }
 
@@ -1083,11 +1187,14 @@
             document.getElementById('formUsername').disabled = true;
             document.getElementById('formNickname').value = data.nickname || '';
             document.getElementById('formPhone').value = data.phone || '';
-            document.getElementById('formRole').value = String(data.role || 2);
+            document.getElementById('formRole').value = roleToId(data.role || data.role_name || 2);
+            document.getElementById('formOperatorCanteen').value = data.operator_canteen_id ? String(data.operator_canteen_id) : '';
+            document.getElementById('formCampus').value = data.campus_id ? String(data.campus_id) : '1';
             document.getElementById('passwordRequiredMark').style.display = 'none';
             document.getElementById('passwordTip').textContent = '留空则不修改密码，填写则更新为新密码。';
             document.getElementById('formPassword').value = '';
             document.getElementById('formPassword').required = false;
+            refreshOperatorCanteenVisibility();
             showUserModal();
         } catch (error) {
             console.error(error);
@@ -1117,11 +1224,24 @@
         const phone = document.getElementById('formPhone').value.trim();
         const password = document.getElementById('formPassword').value.trim();
         const roleId = Number(document.getElementById('formRole').value);
+        const operatorCanteenId = Number(document.getElementById('formOperatorCanteen').value || 0);
+        const campusId = Number(document.getElementById('formCampus').value || 0);
+
+        if (roleId === 3 && !operatorCanteenId) {
+            alert('食堂运营账号必须绑定食堂');
+            return;
+        }
+        if (!campusId) {
+            alert('请选择所属校区');
+            return;
+        }
 
         const payload = {
             phone,
             nickname: nickname || username,
             role_id: roleId,
+            campus_id: campusId,
+            operator_canteen_id: roleId === 3 ? operatorCanteenId : null,
         };
 
         try {

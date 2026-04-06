@@ -215,9 +215,22 @@
                         return;
                     }
 
-                    // 存储状态
-                    localStorage.setItem('isLogin', 'true');
-                    localStorage.setItem('user', JSON.stringify(user));
+                    // 以服务端会话为准同步身份，避免同浏览器多标签页缓存错乱
+                    let currentUser = user;
+                    try {
+                        const meRes = await fetchApi(`${getAdminApiBaseUrl()}/auth/me`, { method: 'GET' });
+                        if (meRes && meRes.code === 200 && meRes.data) {
+                            currentUser = meRes.data;
+                        }
+                    } catch (error) {
+                        console.warn('auth/me sync failed', error);
+                    }
+                    if (typeof persistAuthUser === 'function') {
+                        persistAuthUser(currentUser);
+                    } else {
+                        localStorage.setItem('isLogin', 'true');
+                        localStorage.setItem('user', JSON.stringify(currentUser));
+                    }
                     
                     // 根据角色跳转到不同的管理后台主页
                     if (selectedRoleId === 1) {

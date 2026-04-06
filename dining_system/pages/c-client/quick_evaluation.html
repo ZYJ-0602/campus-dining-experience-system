@@ -490,6 +490,10 @@
             <button class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow rounded-pill" id="submitBtn" onclick="submitEvaluation()">
                 <i class="bi bi-check2-circle me-2"></i>提交评价
             </button>
+            <button class="btn btn-outline-secondary mt-3" onclick="checkLastGuestSubmissionStatus()">
+                查询最近游客审核状态
+            </button>
+            <a class="btn btn-link mt-2" href="guest_status.html">进入游客状态查询页</a>
         </div>
     </div>
 
@@ -545,7 +549,7 @@
         let saveTimer = null;
 
         // 评分维度配置
-        const SCORE_CONFIGS = {
+        let SCORE_CONFIGS = {
             dish: [
                 { key: 'color', label: '色泽' },
                 { key: 'aroma', label: '香气' },
@@ -570,7 +574,39 @@
             ]
         };
 
+        function normalizeTemplateItems(items) {
+            const arr = Array.isArray(items) ? items : [];
+            return arr
+                .filter(item => item && item.item_key && item.item_label && item.enabled !== false)
+                .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+                .map(item => ({ key: item.item_key, label: item.item_label }));
+        }
+
+        async function loadTemplateConfig() {
+            try {
+                const res = await fetchApi('/api/evaluation/template/current', { method: 'GET' });
+                if (res.code !== 200 || !res.data || !res.data.items) {
+                    return;
+                }
+                const items = res.data.items;
+                const mapped = {
+                    dish: normalizeTemplateItems(items.food),
+                    service: normalizeTemplateItems(items.service),
+                    env: normalizeTemplateItems(items.env),
+                    safety: normalizeTemplateItems(items.safety),
+                };
+
+                if (mapped.dish.length) SCORE_CONFIGS.dish = mapped.dish;
+                if (mapped.service.length) SCORE_CONFIGS.service = mapped.service;
+                if (mapped.env.length) SCORE_CONFIGS.env = mapped.env;
+                if (mapped.safety.length) SCORE_CONFIGS.safety = mapped.safety;
+            } catch (error) {
+                console.warn('load template config failed', error);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', async function() {
+            await loadTemplateConfig();
             // 初始化评分组件结构
             renderScoreInputs('serviceScoreContainer', SCORE_CONFIGS.service, 'service-score');
             renderScoreInputs('envScoreContainer', SCORE_CONFIGS.env, 'env-score');
@@ -957,6 +993,7 @@
         window.submitEvaluation = async function() {
             const canteenId = document.getElementById('canteenSelect').value;
             const windowId = document.getElementById('windowSelect').value;
+            const identityType = document.getElementById('identitySelect').value;
             
             if (!canteenId || !windowId) {
                 alert('请选择食堂和窗口！');
@@ -990,7 +1027,7 @@
             const payload = {
                 canteen_id: parseInt(canteenId),
                 window_id: parseInt(windowId),
-                identity_type: document.getElementById('identitySelect').value,
+                identity_type: identityType,
                 grade: document.getElementById('gradeSelect').value,
                 dining_years: parseInt(document.getElementById('diningYears').value) || 0,
                 buy_time: new Date().toISOString().slice(0, 16), // 添加购买时间
@@ -999,6 +1036,7 @@
                 service_attitude: serviceScores.attitude,
                 service_speed: serviceScores.speed,
                 service_dress: serviceScores.dress,
+                service_scores: serviceScores,
                 service_comment: document.getElementById('serviceComment').value,
                 service_images: getPhotos('servicePhotoArea'),
                 
@@ -1006,12 +1044,14 @@
                 env_clean: envScores.clean,
                 env_air: envScores.air,
                 env_hygiene: envScores.hygiene,
+                env_scores: envScores,
                 env_comment: document.getElementById('envComment').value,
                 env_images: getPhotos('envPhotoArea'),
                 
                 // 食安评价 (扁平化)
                 safety_fresh: safetyScores.fresh,
                 safety_info: safetyScores.info,
+                safety_scores: safetyScores,
                 safety_comment: document.getElementById('safetyComment').value,
                 safety_images: getPhotos('safetyPhotoArea'),
                 
@@ -1028,11 +1068,25 @@
             btn.innerHTML = '提交中...';
             
             try {
+                let templateVersion = null;
+                try {
+                    const templateRes = await fetchApi('/api/evaluation/template/current', { method: 'GET' });
+                    if (templateRes && templateRes.code === 200 && templateRes.data) {
+                        templateVersion = Number(templateRes.data.id || 0) || null;
+                    }
+                } catch (e) {
+                    console.warn('load template version failed', e);
+                }
+                if (templateVersion) {
+                    payload.template_version = templateVersion;
+                }
+
+                const submitUrl = identityType === 'visitor' ? '/api/guest/evaluations' : '/api/evaluate';
                 // 注意：这里假设 API.SUBMIT_EVALUATION 是 /api/submit_evaluation
                 // 如果是 submit_comment (sqlite版)，则字段完全不同。
                 // 根据 app.py 分析，submit_evaluation 是主逻辑 (SQLAlchemy)，submit_comment 是 sqlite 简单版
                 // 我们主要对接 submit_evaluation
-                const res = await fetchApi('/api/evaluate', {
+                const res = await fetchApi(submitUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -1040,7 +1094,15 @@
                 
                 if (res.code === 200) {
                     localStorage.removeItem(STORAGE_KEY);
-                    alert('评价提交成功！');
+                    if (identityType === 'visitor') {
+                        const sid = res.data && res.data.id ? Number(res.data.id) : 0;
+                        if (sid) {
+                            localStorage.setItem('guest_last_submission_id', String(sid));
+                        }
+                        alert(`游客评价提交成功（记录ID: ${sid || '-'}），待管理员审核通过后生效！`);
+                    } else {
+                        alert('评价提交成功！');
+                    }
                     location.href = 'index.html';
                 } else {
                     alert(res.msg || '提交失败');
@@ -1061,6 +1123,25 @@
             });
             return scores;
         }
+
+        window.checkLastGuestSubmissionStatus = async function() {
+            const sid = Number(localStorage.getItem('guest_last_submission_id') || 0);
+            if (!sid) {
+                alert('暂无游客提交记录');
+                return;
+            }
+            const res = await fetchApi(`/api/guest/evaluations/${sid}/status`, { method: 'GET' });
+            if (res.code !== 200) {
+                alert(res.msg || '查询失败');
+                return;
+            }
+            const data = res.data || {};
+            const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
+            const statusText = statusMap[data.status] || data.status || '-';
+            const reasonText = data.reject_reason ? `\n驳回原因：${data.reject_reason}` : '';
+            const reviewedText = data.reviewed_time ? `\n审核时间：${data.reviewed_time}` : '';
+            alert(`记录ID: ${data.id || sid}\n当前状态：${statusText}${reviewedText}${reasonText}`);
+        };
 
         function collectDishData() {
             const dishes = [];
@@ -1088,14 +1169,7 @@
                 dishes.push({
                     dish_id: parseInt(select.value),
                     dish_name: select.options[select.selectedIndex].text.split(' (')[0],
-                    food_scores: {
-                        color: scores.color,
-                        aroma: scores.aroma,
-                        taste: scores.taste,
-                        shape: scores.shape,
-                        portion: scores.portion,
-                        price: scores.price
-                    },
+                    food_scores: scores,
                     remark: card.querySelector('.dish-remark').value,
                     images: images
                 });

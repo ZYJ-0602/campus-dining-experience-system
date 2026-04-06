@@ -45,9 +45,15 @@ function initCharts() {
     charts.peakTime = echarts.init(document.getElementById('peakTimeChart'));
 }
 
+function getCampusQuery() {
+    return window.publicCampusState && window.publicCampusState.campusId
+        ? `&campus_id=${encodeURIComponent(window.publicCampusState.campusId)}`
+        : '';
+}
+
 async function loadDashboard() {
     showLoading(true);
-    const q = `range=${encodeURIComponent(state.range)}`;
+    const q = `range=${encodeURIComponent(state.range)}${getCampusQuery()}`;
 
     try {
         const [dashboardRes, trendRes, topRes, peakRes] = await Promise.all([

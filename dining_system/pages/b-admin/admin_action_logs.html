@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>操作审计日志</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap { padding: 24px; min-height: 100vh; }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .page-desc {
+            margin-top: 6px;
+            color: #8e95a3;
+            font-size: 13px;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.8fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .form-control,
+        .form-select {
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .toolbar-actions {
+            display: inline-flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .btn-ghost-blue,
+        .btn-primary-blue,
+        .btn-outline-gray,
+        .btn-success-outline {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-ghost-blue {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-ghost-blue:hover { background: #eef4ff; }
+
+        .btn-outline-gray {
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-outline-gray:hover { background: #f8fafc; }
+
+        .btn-success-outline {
+            color: #389e0d;
+            border-color: #95de64;
+            background: #f6ffed;
+        }
+
+        .btn-success-outline:hover { background: #ecffe0; }
+
+        .table-card {
+            margin-top: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-responsive-wrap { overflow-x: auto; }
+
+        .audit-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .audit-table th,
+        .audit-table td {
+            padding: 12px 16px;
+            line-height: 48px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .audit-table thead th {
+            background: #f7f8fa;
+            font-weight: 700;
+            color: #303133;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .audit-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .audit-table tbody tr:hover td { background: #fafafa; }
+
+        .detail-box {
+            max-width: 420px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            padding: 28px 0;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 1200px) {
+            .toolbar-card {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .toolbar-actions {
+                grid-column: 1 / -1;
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">操作审计日志</h1>
+            <div class="page-desc">记录管理员关键操作，可按时间、动作、操作者筛选并导出。</div>
+        </div>
+        <button class="btn-outline-gray" type="button" onclick="loadLogs()"><i class="bi bi-arrow-clockwise"></i>刷新</button>
+    </div>
+
+    <div class="toolbar-card">
+        <input id="actionFilter" class="form-control" placeholder="动作编码，例如 template_create">
+        <input id="actorFilter" class="form-control" placeholder="操作者ID">
+        <input id="startTimeFilter" type="datetime-local" class="form-control">
+        <input id="endTimeFilter" type="datetime-local" class="form-control">
+        <div class="toolbar-actions">
+            <button class="btn-primary-blue" type="button" onclick="onSearch()"><i class="bi bi-search"></i>查询</button>
+            <button class="btn-success-outline" type="button" onclick="exportLogs()"><i class="bi bi-download"></i>导出CSV</button>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-responsive-wrap">
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">ID</th>
+                        <th style="width: 180px;">时间</th>
+                        <th style="width: 180px;">操作者</th>
+                        <th style="width: 100px;">角色</th>
+                        <th style="width: 150px;">动作</th>
+                        <th style="width: 170px;">目标</th>
+                        <th>详情</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="7" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="../c-client/js/api.js"></script>
+<script>
+let page = 1;
+let limit = 20;
+
+async function ensureAdmin() {
+    const me = await fetchApi(API.AUTH_ME, { method: 'GET' });
+    if (me.code !== 200) {
+        window.top.location.href = 'admin_login.html';
+        return false;
+    }
+    if (String(me.data.role || '').toLowerCase() !== 'admin') {
+        alert('仅系统管理员可查看审计日志');
+        window.top.location.href = 'admin_index_sys.html';
+        return false;
+    }
+    return true;
+}
+
+function onSearch() {
+    page = 1;
+    loadLogs();
+}
+
+function toDetailText(detail) {
+    if (detail === null || detail === undefined) return '-';
+    if (typeof detail === 'string') return detail || '-';
+    try {
+        return JSON.stringify(detail);
+    } catch (error) {
+        return String(detail);
+    }
+}
+
+async function loadLogs() {
+    const action = (document.getElementById('actionFilter').value || '').trim();
+    const actorId = (document.getElementById('actorFilter').value || '').trim();
+    const startTime = (document.getElementById('startTimeFilter').value || '').trim();
+    const endTime = (document.getElementById('endTimeFilter').value || '').trim();
+    const qs = new URLSearchParams({ page, limit });
+    if (action) qs.set('action', action);
+    if (actorId) qs.set('actor_id', actorId);
+    if (startTime) qs.set('start_time', startTime);
+    if (endTime) qs.set('end_time', endTime);
+
+    const res = await fetchApi(`${API_BASE_URL}/admin/action_logs?${qs.toString()}`, { method: 'GET' });
+    const tbody = document.getElementById('tbody');
+    if (res.code !== 200) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-row">${res.msg || '加载失败'}</td></tr>`;
+        return;
+    }
+
+    const list = (res.data && Array.isArray(res.data.list)) ? res.data.list : [];
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">暂无数据</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = list.map((item) => {
+        const detailText = toDetailText(item.detail);
+        return `<tr>
+            <td>${item.id}</td>
+            <td>${item.create_time || '-'}</td>
+            <td>${item.actor_name || '-'} (#${item.actor_id || 0})</td>
+            <td>${item.actor_role || '-'}</td>
+            <td>${item.action || '-'}</td>
+            <td>${item.target_type || '-'}:${item.target_id || 0}</td>
+            <td><span class="detail-box" title="${detailText.replace(/"/g, '&quot;')}">${detailText}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+function exportLogs() {
+    const action = (document.getElementById('actionFilter').value || '').trim();
+    const actorId = (document.getElementById('actorFilter').value || '').trim();
+    const startTime = (document.getElementById('startTimeFilter').value || '').trim();
+    const endTime = (document.getElementById('endTimeFilter').value || '').trim();
+    const qs = new URLSearchParams();
+    if (action) qs.set('action', action);
+    if (actorId) qs.set('actor_id', actorId);
+    if (startTime) qs.set('start_time', startTime);
+    if (endTime) qs.set('end_time', endTime);
+    window.open(`${API_BASE_URL}/admin/action_logs/export?${qs.toString()}`, '_blank');
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const ok = await ensureAdmin();
+    if (!ok) return;
+    await loadLogs();
+});
+</script>
+</body>
+</html>

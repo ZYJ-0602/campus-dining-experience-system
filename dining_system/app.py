@@ -1,4 +1,6 @@
 from functools import wraps
+from concurrent.futures import ThreadPoolExecutor
+from difflib import SequenceMatcher
 import csv
 import io
 import os
@@ -9,6 +11,8 @@ import ssl
 from datetime import datetime, timedelta, date
 import math
 import json
+import re
+import hashlib
 import urllib.request
 import urllib.error
 from email.message import EmailMessage
@@ -22,7 +26,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 basedir = os.path.abspath(os.path.dirname(__file__))
 pages_dir = os.path.join(basedir, 'pages')
 from extensions import db
-from models import User, Canteen, Window, Dish, EvaluationMain, EvaluationDish, SubmitGuard, Favorite, Feedback, Note, SensitiveWord, SensitiveRule, SystemConfig, NotificationConfig, BackupRecord, NotificationDispatchLog, NotificationMessage, OperatorWarning, SafetyNotice, RectificationRecord
+from models import User, Campus, Canteen, Window, Dish, EvaluationMain, EvaluationDish, SubmitGuard, Favorite, Feedback, Note, SensitiveWord, SensitiveRule, SystemConfig, NotificationConfig, BackupRecord, NotificationDispatchLog, NotificationMessage, OperatorWarning, SafetyNotice, RectificationRecord, GuestEvaluationSubmission, EvaluationTemplateVersion, EvaluationTemplateItem, AdminActionLog, EvaluationRiskFlag, RectificationWorkOrder, WorkOrderActionLog, RecommendationEvent, RecommendationAbTuning, RecommendationAbTuningLog, RecommendationAbPolicy
+from seed_defaults import ensure_default_admin_operator_accounts
 
 app = Flask(
     __name__,
@@ -37,10 +42,14 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'campus-dining-dev-secr
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', '0') == '1'
+app.config['SESSION_COOKIE_NAME'] = os.getenv('SESSION_COOKIE_NAME', 'campus_dining_session')
+app.config['SESSION_COOKIE_PATH'] = os.getenv('SESSION_COOKIE_PATH', '/')
 app.config['PERMANENT_SESSION_LIFETIME'] = 60 * 60 * 24
 
 PUBLIC_PAGE_PATHS = {
     'b-admin/admin_login.html',
+    'c-client/quick_evaluation.html',
+    'c-client/guest_status.html',
 }
 
 # 允许跨域请求（开发环境可通过 ALLOWED_ORIGINS 覆盖）
@@ -65,6 +74,14 @@ SMS_GATEWAY_URL = os.getenv('SMS_GATEWAY_URL', '').strip()
 SMS_GATEWAY_TOKEN = os.getenv('SMS_GATEWAY_TOKEN', '').strip()
 SMS_GATEWAY_TIMEOUT = float(os.getenv('SMS_GATEWAY_TIMEOUT', '5'))
 SMS_SENDER = os.getenv('SMS_SENDER', 'campus-dining').strip()
+NOTIFY_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix='notify-worker')
+METRIC_DICTIONARY_VERSION = '2026.03.v1'
+SLA_FIRST_RESPONSE_HOURS = int(os.getenv('SLA_FIRST_RESPONSE_HOURS', '24'))
+SLA_ESCALATE_HOURS = int(os.getenv('SLA_ESCALATE_HOURS', '48'))
+WORK_ORDER_DEFAULT_SLA_HOURS = int(os.getenv('WORK_ORDER_DEFAULT_SLA_HOURS', '48'))
+PUBLIC_MIN_ACTIVE_DISHES = int(os.getenv('PUBLIC_MIN_ACTIVE_DISHES', '10'))
+PUBLIC_MIN_ORDERS = int(os.getenv('PUBLIC_MIN_ORDERS', '80'))
+PUBLIC_MIN_REVIEWS = int(os.getenv('PUBLIC_MIN_REVIEWS', '40'))
 
 
 @app.route('/')
@@ -108,6 +125,15 @@ def api_error(msg='error', code=400, http_status=400, data=None):
 
 
 def _serialize_user(user):
+    canteen_name = ''
+    operator_canteen_id = _safe_int(getattr(user, 'operator_canteen_id', None))
+    if operator_canteen_id:
+        canteen = db.session.get(Canteen, operator_canteen_id)
+        canteen_name = canteen.name if canteen else ''
+
+    campus_id = _safe_int(getattr(user, 'campus_id', 1), 1) or 1
+    campus = db.session.get(Campus, campus_id)
+
     return {
         'id': user.id,
         'username': user.username,
@@ -115,6 +141,21 @@ def _serialize_user(user):
         'phone': user.phone,
         'avatar': user.avatar,
         'role': user.role,
+        'operator_canteen_id': operator_canteen_id,
+        'operator_canteen_name': canteen_name,
+        'campus_id': campus_id,
+        'campus_name': campus.name if campus else '默认校区',
+    }
+
+
+def _serialize_campus(row):
+    return {
+        'id': int(row.id or 0),
+        'name': row.name or '',
+        'code': row.code or '',
+        'is_active': bool(row.is_active),
+        'sort_order': int(row.sort_order or 0),
+        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
     }
 
 
@@ -150,6 +191,25 @@ def _normalize_images(value):
         except (TypeError, ValueError):
             return []
     return []
+
+
+def _extract_images_from_text(text):
+    raw_text = str(text or '')
+    images = []
+    for pattern in (
+        r'!\[[^\]]*\]\((https?://[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)\)',
+        r'!\[[^\]]*\]\((/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)\)',
+        r'(https?://[^\s"\'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"\'<>]*)?)',
+        r'(/[^\s"\'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"\'<>]*)?)',
+    ):
+        matches = re.findall(pattern, raw_text, flags=re.IGNORECASE)
+        for match in matches:
+            if isinstance(match, tuple):
+                match = next((part for part in match if part), '')
+            match = str(match).strip()
+            if match and match not in images:
+                images.append(match)
+    return images
 
 
 def _safe_scores(score_obj):
@@ -228,14 +288,28 @@ def _public_parse_range(raw_value):
     return 'month', start, now
 
 
-def _public_seed_required():
-    active_dishes = Dish.query.filter(Dish.is_active.is_(True)).count()
-    order_count = EvaluationMain.query.count()
-    review_count = EvaluationDish.query.count()
-    return active_dishes == 0 or order_count == 0 or review_count == 0
+def _public_seed_required(campus_id=None):
+    campus_id = _safe_int(campus_id) or _current_campus_id()
+    active_dishes = (
+        Dish.query.join(Window, Window.id == Dish.window_id)
+        .join(Canteen, Canteen.id == Window.canteen_id)
+        .filter(Dish.is_active.is_(True), Canteen.campus_id == campus_id)
+        .count()
+    )
+    order_count = EvaluationMain.query.filter(EvaluationMain.campus_id == campus_id).count()
+    review_count = (
+        EvaluationDish.query.join(EvaluationMain, EvaluationMain.id == EvaluationDish.evaluation_id)
+        .filter(EvaluationMain.campus_id == campus_id)
+        .count()
+    )
+    return (
+        active_dishes < PUBLIC_MIN_ACTIVE_DISHES
+        or order_count < PUBLIC_MIN_ORDERS
+        or review_count < PUBLIC_MIN_REVIEWS
+    )
 
 
-def _public_get_or_create_seed_user():
+def _public_get_or_create_seed_user(campus_id=1):
     user = User.query.filter_by(username='public_seed_user').first()
     if user:
         return user
@@ -245,46 +319,52 @@ def _public_get_or_create_seed_user():
         password=generate_password_hash('123456'),
         role='student',
         nickname='公共数据种子用户',
+        campus_id=campus_id,
     )
     db.session.add(user)
     db.session.flush()
     return user
 
 
-def _public_ensure_base_canteens_windows():
+def _public_ensure_base_canteens_windows(campus_id=1):
     canteen_names = ['北区食堂', '南区食堂', '西区食堂']
     window_names = ['一号窗口', '二号窗口', '风味窗口', '面食窗口', '快餐窗口']
 
-    canteens = Canteen.query.all()
+    canteens = Canteen.query.filter(Canteen.campus_id == campus_id).all()
     if not canteens:
         for idx, name in enumerate(canteen_names, start=1):
-            db.session.add(Canteen(name=name, address=f'校园{idx}号生活区', is_active=True))
+            db.session.add(Canteen(name=name, address=f'校园{idx}号生活区', campus_id=campus_id, is_active=True))
         db.session.flush()
-        canteens = Canteen.query.all()
+        canteens = Canteen.query.filter(Canteen.campus_id == campus_id).all()
 
-    windows = Window.query.all()
+    windows = Window.query.join(Canteen, Canteen.id == Window.canteen_id).filter(Canteen.campus_id == campus_id).all()
     if not windows:
         for canteen in canteens:
             for idx in range(2):
                 db.session.add(Window(canteen_id=canteen.id, name=f'{canteen.name}{window_names[idx]}'))
         db.session.flush()
-        windows = Window.query.all()
+        windows = Window.query.join(Canteen, Canteen.id == Window.canteen_id).filter(Canteen.campus_id == campus_id).all()
 
     return canteens, windows
 
 
-def _public_ensure_dishes(windows):
+def _public_ensure_dishes(windows, campus_id=1):
     dish_pool = [
         '红烧肉', '番茄炒蛋', '宫保鸡丁', '鱼香肉丝', '麻婆豆腐',
         '糖醋里脊', '青椒肉丝', '香菇滑鸡', '清炒时蔬', '土豆炖牛腩',
         '蒜香排骨', '鸡蛋炒饭', '西红柿牛腩', '椒盐鸡柳', '香辣鸡腿堡',
     ]
 
-    dishes = Dish.query.filter(Dish.is_active.is_(True)).all()
+    dishes = (
+        Dish.query.join(Window, Window.id == Dish.window_id)
+        .join(Canteen, Canteen.id == Window.canteen_id)
+        .filter(Dish.is_active.is_(True), Canteen.campus_id == campus_id)
+        .all()
+    )
     if len(dishes) >= 15:
         return dishes
 
-    existing_names = {d.name for d in Dish.query.all()}
+    existing_names = {d.name for d in dishes}
     for idx, name in enumerate(dish_pool):
         if name in existing_names:
             continue
@@ -300,11 +380,16 @@ def _public_ensure_dishes(windows):
                 is_active=True,
             )
         )
-        if Dish.query.filter(Dish.is_active.is_(True)).count() + 1 >= 15:
+        if len(dishes) + 1 >= 15:
             break
 
     db.session.flush()
-    return Dish.query.filter(Dish.is_active.is_(True)).all()
+    return (
+        Dish.query.join(Window, Window.id == Dish.window_id)
+        .join(Canteen, Canteen.id == Window.canteen_id)
+        .filter(Dish.is_active.is_(True), Canteen.campus_id == campus_id)
+        .all()
+    )
 
 
 def _public_pick_peak_hour():
@@ -326,10 +411,10 @@ def _public_pick_peak_hour():
     return random.randint(11, 12)
 
 
-def _public_seed_dashboard_data():
-    user = _public_get_or_create_seed_user()
-    canteens, windows = _public_ensure_base_canteens_windows()
-    dishes = _public_ensure_dishes(windows)
+def _public_seed_dashboard_data(campus_id=1):
+    user = _public_get_or_create_seed_user(campus_id)
+    canteens, windows = _public_ensure_base_canteens_windows(campus_id)
+    dishes = _public_ensure_dishes(windows, campus_id)
 
     if not dishes:
         return False
@@ -365,6 +450,7 @@ def _public_seed_dashboard_data():
                 user_id=user.id,
                 canteen_id=dish.window.canteen_id if dish.window else canteens[0].id,
                 window_id=dish.window_id,
+                campus_id=campus_id,
                 buy_time=buy_time,
                 identity_type=random.choice(['student', 'teacher', 'visitor', 'operator']),
                 grade=random.choice(['大一', '大二', '大三', '大四']),
@@ -447,9 +533,10 @@ def _public_seed_dashboard_data():
     return True
 
 
-def _public_ensure_seed_data_if_needed():
-    if _public_seed_required():
-        return _public_seed_dashboard_data()
+def _public_ensure_seed_data_if_needed(campus_id=None):
+    campus_id = _safe_int(campus_id) or _current_campus_id()
+    if _public_seed_required(campus_id):
+        return _public_seed_dashboard_data(campus_id)
     return False
 
 
@@ -468,6 +555,24 @@ def _pick_comment_images(primary_comment, primary_images, legacy_score_obj):
 
 def _ensure_schema_columns():
     db.create_all()
+    campus_exists = db.session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='campus'")
+    ).fetchone()
+    if not campus_exists:
+        db.session.execute(
+            text(
+                '''
+                CREATE TABLE IF NOT EXISTS campus (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    code VARCHAR(50) NOT NULL UNIQUE,
+                    is_active BOOLEAN DEFAULT 1,
+                    sort_order INTEGER DEFAULT 0,
+                    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                '''
+            )
+        )
     existing = {
         row[1]
         for row in db.session.execute(text('PRAGMA table_info(evaluation_main)')).fetchall()
@@ -480,6 +585,8 @@ def _ensure_schema_columns():
         'env_images': 'ALTER TABLE evaluation_main ADD COLUMN env_images TEXT',
         'safety_comment': 'ALTER TABLE evaluation_main ADD COLUMN safety_comment TEXT',
         'safety_images': 'ALTER TABLE evaluation_main ADD COLUMN safety_images TEXT',
+        'template_version': 'ALTER TABLE evaluation_main ADD COLUMN template_version INTEGER',
+        'campus_id': 'ALTER TABLE evaluation_main ADD COLUMN campus_id INTEGER DEFAULT 1',
     }
 
     submit_guard_migration_sql = {
@@ -504,7 +611,65 @@ def _ensure_schema_columns():
         'nickname': 'ALTER TABLE user ADD COLUMN nickname VARCHAR(80)',
         'phone': 'ALTER TABLE user ADD COLUMN phone VARCHAR(20)',
         'avatar': 'ALTER TABLE user ADD COLUMN avatar VARCHAR(255)',
+        'operator_canteen_id': 'ALTER TABLE user ADD COLUMN operator_canteen_id INTEGER',
+        'campus_id': 'ALTER TABLE user ADD COLUMN campus_id INTEGER DEFAULT 1',
     }
+
+    note_existing = {
+        row[1]
+        for row in db.session.execute(text('PRAGMA table_info(note)')).fetchall()
+    }
+    note_migration_sql = {
+        'campus_id': 'ALTER TABLE note ADD COLUMN campus_id INTEGER DEFAULT 1',
+    }
+
+    canteen_existing_cols = {
+        row[1]
+        for row in db.session.execute(text('PRAGMA table_info(canteen)')).fetchall()
+    }
+    canteen_migration_sql = {
+        'campus_id': 'ALTER TABLE canteen ADD COLUMN campus_id INTEGER DEFAULT 1',
+    }
+
+    warning_exists = db.session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='operator_warning'")
+    ).fetchone()
+    warning_existing = set()
+    if warning_exists:
+        warning_existing = {
+            row[1]
+            for row in db.session.execute(text('PRAGMA table_info(operator_warning)')).fetchall()
+        }
+
+    rectification_exists = db.session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='rectification_record'")
+    ).fetchone()
+    rectification_existing = set()
+    if rectification_exists:
+        rectification_existing = {
+            row[1]
+            for row in db.session.execute(text('PRAGMA table_info(rectification_record)')).fetchall()
+        }
+
+    action_log_exists = db.session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='admin_action_log'")
+    ).fetchone()
+    if action_log_exists:
+        action_log_cols = {
+            row[1]
+            for row in db.session.execute(text('PRAGMA table_info(admin_action_log)')).fetchall()
+        }
+        action_log_migration_sql = {
+            'before_data': "ALTER TABLE admin_action_log ADD COLUMN before_data TEXT DEFAULT ''",
+            'after_data': "ALTER TABLE admin_action_log ADD COLUMN after_data TEXT DEFAULT ''",
+        }
+        changed_action_log = False
+        for col_name, sql in action_log_migration_sql.items():
+            if col_name not in action_log_cols:
+                db.session.execute(text(sql))
+                changed_action_log = True
+        if changed_action_log:
+            db.session.commit()
 
     changed = False
     for col_name, sql in migration_sql.items():
@@ -519,8 +684,34 @@ def _ensure_schema_columns():
         if col_name not in dish_existing:
             db.session.execute(text(sql))
             changed = True
+    for col_name, sql in note_migration_sql.items():
+        if col_name not in note_existing:
+            db.session.execute(text(sql))
+            changed = True
+    for col_name, sql in canteen_migration_sql.items():
+        if col_name not in canteen_existing_cols:
+            db.session.execute(text(sql))
+            changed = True
+    if warning_exists and 'campus_id' not in warning_existing:
+        db.session.execute(text('ALTER TABLE operator_warning ADD COLUMN campus_id INTEGER DEFAULT 1'))
+        changed = True
+    if rectification_exists and 'campus_id' not in rectification_existing:
+        db.session.execute(text('ALTER TABLE rectification_record ADD COLUMN campus_id INTEGER DEFAULT 1'))
+        changed = True
     if changed:
         db.session.commit()
+
+    db.session.execute(text('UPDATE user SET campus_id = 1 WHERE campus_id IS NULL OR campus_id = 0'))
+    db.session.execute(text('UPDATE canteen SET campus_id = 1 WHERE campus_id IS NULL OR campus_id = 0'))
+    db.session.execute(text('UPDATE note SET campus_id = 1 WHERE campus_id IS NULL OR campus_id = 0'))
+    db.session.execute(text('UPDATE evaluation_main SET campus_id = 1 WHERE campus_id IS NULL OR campus_id = 0'))
+    if warning_exists:
+        db.session.execute(text('UPDATE operator_warning SET campus_id = 1 WHERE campus_id IS NULL OR campus_id = 0'))
+    if rectification_exists:
+        db.session.execute(text('UPDATE rectification_record SET campus_id = 1 WHERE campus_id IS NULL OR campus_id = 0'))
+    db.session.commit()
+
+    _ensure_default_campuses()
 
     submit_guard_exists = db.session.execute(
         text("SELECT name FROM sqlite_master WHERE type='table' AND name='submit_guard'")
@@ -545,6 +736,26 @@ def _ensure_schema_columns():
             CREATE TABLE IF NOT EXISTS canteens (
                 id INTEGER PRIMARY KEY,
                 name VARCHAR(100) NOT NULL
+            )
+            '''
+        )
+    )
+    db.session.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS recommendation_event (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id VARCHAR(64) DEFAULT '',
+                event_type VARCHAR(20) DEFAULT 'exposure',
+                variant VARCHAR(10) DEFAULT 'A',
+                strategy VARCHAR(30) DEFAULT 'baseline',
+                user_id INTEGER,
+                campus_id INTEGER DEFAULT 1,
+                canteen_id INTEGER,
+                dish_id INTEGER NOT NULL,
+                position INTEGER DEFAULT 0,
+                page VARCHAR(30) DEFAULT 'unknown',
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             '''
         )
@@ -675,6 +886,8 @@ def _ensure_schema_columns():
     db.session.execute(text('DELETE FROM dishes'))
     db.session.execute(text('INSERT INTO dishes(id, window_id, name) SELECT id, window_id, name FROM dish'))
     db.session.commit()
+
+    _ensure_default_template()
 
     _ensure_canteen_detail_seed_data()
 
@@ -981,6 +1194,470 @@ def admin_login_required(func):
     return wrapper
 
 
+def _current_user():
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    return db.session.get(User, user_id)
+
+
+def _current_campus_id(default=1):
+    session_campus_id = _safe_int(session.get('campus_id'))
+    if session_campus_id:
+        return session_campus_id
+    user = _current_user()
+    if not user:
+        return default
+    return _safe_int(getattr(user, 'campus_id', default), default) or default
+
+
+def _resolve_campus_scope(requested_campus_id=None):
+    user = _current_user()
+    if not user:
+        return _safe_int(requested_campus_id) or _current_campus_id(), None
+
+    if user.role == 'admin':
+        campus_id = _safe_int(requested_campus_id)
+        return campus_id or None, None
+
+    campus_id = _current_campus_id()
+    if requested_campus_id and _safe_int(requested_campus_id) != campus_id:
+        return None, api_error('无权访问其他校区数据', code=403, http_status=403)
+    return campus_id, None
+
+
+def _ensure_default_campuses():
+    defaults = [
+        {'name': '默认校区', 'code': 'campus-1', 'sort_order': 1},
+        {'name': '南区校区', 'code': 'campus-2', 'sort_order': 2},
+        {'name': '北区校区', 'code': 'campus-3', 'sort_order': 3},
+    ]
+    changed = False
+    for item in defaults:
+        row = Campus.query.filter((Campus.code == item['code']) | (Campus.name == item['name'])).first()
+        if not row:
+            db.session.add(
+                Campus(
+                    name=item['name'],
+                    code=item['code'],
+                    is_active=True,
+                    sort_order=item['sort_order'],
+                )
+            )
+            changed = True
+    if changed:
+        db.session.commit()
+
+
+def _active_campus_name(campus_id=None):
+    campus = db.session.get(Campus, _safe_int(campus_id, _current_campus_id()) or _current_campus_id())
+    return campus.name if campus else '默认校区'
+
+
+@app.route('/api/admin/campuses', methods=['GET'])
+@admin_login_required
+def admin_get_campuses():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    _ensure_default_campuses()
+    rows = Campus.query.order_by(Campus.sort_order.asc(), Campus.id.asc()).all()
+    return api_success({'list': [_serialize_campus(row) for row in rows]}, msg='查询成功')
+
+
+@app.route('/api/public/campuses', methods=['GET'])
+def public_get_campuses():
+    _ensure_default_campuses()
+    rows = Campus.query.filter(Campus.is_active.is_(True)).order_by(Campus.sort_order.asc(), Campus.id.asc()).all()
+    return api_success(
+        {
+            'list': [_serialize_campus(row) for row in rows],
+            'current_campus_id': _current_campus_id(),
+            'current_campus_name': _active_campus_name(),
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/campuses', methods=['POST'])
+@admin_login_required
+def admin_create_campus():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    code = (data.get('code') or '').strip()
+    if not name:
+        return api_error('校区名称不能为空')
+    if not code:
+        return api_error('校区编码不能为空')
+    if Campus.query.filter((Campus.name == name) | (Campus.code == code)).first():
+        return api_error('校区名称或编码已存在')
+
+    row = Campus(
+        name=name[:100],
+        code=code[:50],
+        is_active=_to_bool(data.get('is_active'), True),
+        sort_order=_safe_int(data.get('sort_order'), 0) or 0,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return api_success(_serialize_campus(row), msg='创建成功')
+
+
+@app.route('/api/admin/campuses/<int:campus_id>', methods=['PUT'])
+@admin_login_required
+def admin_update_campus(campus_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    row = db.session.get(Campus, campus_id)
+    if not row:
+        return api_error('校区不存在', code=404, http_status=404)
+
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not name:
+            return api_error('校区名称不能为空')
+        duplicate = Campus.query.filter(Campus.name == name, Campus.id != campus_id).first()
+        if duplicate:
+            return api_error('校区名称已存在')
+        row.name = name[:100]
+    if 'code' in data:
+        code = (data.get('code') or '').strip()
+        if not code:
+            return api_error('校区编码不能为空')
+        duplicate = Campus.query.filter(Campus.code == code, Campus.id != campus_id).first()
+        if duplicate:
+            return api_error('校区编码已存在')
+        row.code = code[:50]
+    if 'is_active' in data:
+        row.is_active = _to_bool(data.get('is_active'), row.is_active)
+    if 'sort_order' in data:
+        row.sort_order = _safe_int(data.get('sort_order'), row.sort_order) or 0
+
+    db.session.commit()
+    return api_success(_serialize_campus(row), msg='更新成功')
+
+
+@app.route('/api/admin/campuses/<int:campus_id>', methods=['DELETE'])
+@admin_login_required
+def admin_delete_campus(campus_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    row = db.session.get(Campus, campus_id)
+    if not row:
+        return api_error('校区不存在', code=404, http_status=404)
+    if campus_id == 1:
+        return api_error('默认校区不允许删除')
+
+    used = (
+        db.session.query(User.id)
+        .filter(User.campus_id == campus_id)
+        .first()
+    )
+    if used:
+        return api_error('该校区下还有用户，不能删除')
+
+    db.session.delete(row)
+    db.session.commit()
+    return api_success(msg='删除成功')
+
+
+def _resolve_canteen_scope(requested_canteen_id=None):
+    user = _current_user()
+    if not user:
+        return requested_canteen_id, None
+
+    if user.role != 'operator':
+        return requested_canteen_id, None
+
+    bound_canteen_id = _safe_int(getattr(user, 'operator_canteen_id', None))
+    if not bound_canteen_id:
+        return None, api_error('当前运营账号未绑定食堂，请联系管理员配置', code=403, http_status=403)
+
+    if requested_canteen_id and requested_canteen_id != bound_canteen_id:
+        return None, api_error('无权访问其他食堂数据', code=403, http_status=403)
+
+    return bound_canteen_id, None
+
+
+def _risk_level_by_score(score):
+    score_value = _safe_int(score, 0) or 0
+    if score_value >= 85:
+        return 'critical'
+    if score_value >= 70:
+        return 'high'
+    if score_value >= 45:
+        return 'medium'
+    return 'low'
+
+
+def _calc_eval_risk(evaluation):
+    if not evaluation:
+        return 0, []
+
+    score = 0
+    reasons = []
+    current_time = evaluation.create_time or datetime.now()
+
+    recent_rows = (
+        EvaluationMain.query.filter(EvaluationMain.user_id == evaluation.user_id)
+        .order_by(EvaluationMain.create_time.desc(), EvaluationMain.id.desc())
+        .limit(12)
+        .all()
+    )
+
+    within_10m = [
+        row for row in recent_rows
+        if row.create_time and abs((current_time - row.create_time).total_seconds()) <= 10 * 60
+    ]
+    if len(within_10m) >= 3:
+        score += 35
+        reasons.append({'rule': 'freq_10m', 'weight': 35, 'detail': f'10分钟内提交{len(within_10m)}次'})
+
+    if len(recent_rows) >= 2 and recent_rows[1].create_time:
+        diff_seconds = abs((current_time - recent_rows[1].create_time).total_seconds())
+        if diff_seconds <= 120:
+            score += 20
+            reasons.append({'rule': 'short_interval', 'weight': 20, 'detail': f'与上一条间隔{int(diff_seconds)}秒'})
+
+    current_remark = (evaluation.remark or '').strip()
+    if current_remark:
+        max_similarity = 0.0
+        for row in recent_rows[1:6]:
+            prev_remark = (row.remark or '').strip()
+            if not prev_remark:
+                continue
+            sim = SequenceMatcher(None, current_remark, prev_remark).ratio()
+            max_similarity = max(max_similarity, sim)
+        if max_similarity >= 0.85:
+            score += 25
+            reasons.append({'rule': 'text_similarity', 'weight': 25, 'detail': f'文本相似度{max_similarity:.2f}'})
+
+    last5_scores = [float(row.comprehensive_score or 0) for row in recent_rows[:5] if row.comprehensive_score is not None]
+    if len(last5_scores) >= 5:
+        extreme_count = sum(1 for value in last5_scores if value <= 2.5 or value >= 9.0)
+        ratio = extreme_count / len(last5_scores)
+        if ratio >= 0.8:
+            score += 20
+            reasons.append({'rule': 'extreme_score_bias', 'weight': 20, 'detail': f'近5次极端评分占比{ratio:.0%}'})
+
+    if evaluation.buy_time and (evaluation.buy_time.hour < 6 or evaluation.buy_time.hour >= 23):
+        score += 10
+        reasons.append({'rule': 'off_hours', 'weight': 10, 'detail': '非典型时段提交'})
+
+    return min(100, score), reasons
+
+
+def _upsert_eval_risk_flag(evaluation):
+    if not evaluation:
+        return None
+    risk_score, reasons = _calc_eval_risk(evaluation)
+    row = EvaluationRiskFlag.query.filter_by(evaluation_id=evaluation.id).first()
+    if not row:
+        row = EvaluationRiskFlag(
+            campus_id=_safe_int(getattr(evaluation, 'campus_id', 1), 1) or 1,
+            evaluation_id=evaluation.id,
+            user_id=evaluation.user_id,
+            canteen_id=evaluation.canteen_id,
+            window_id=evaluation.window_id,
+        )
+        db.session.add(row)
+    row.risk_score = risk_score
+    row.risk_level = _risk_level_by_score(risk_score)
+    row.rule_hits = reasons
+    row.update_time = datetime.now()
+    return row
+
+
+def _serialize_risk_flag(row):
+    evaluation = db.session.get(EvaluationMain, row.evaluation_id) if row.evaluation_id else None
+    user = db.session.get(User, row.user_id) if row.user_id else None
+    canteen = db.session.get(Canteen, row.canteen_id) if row.canteen_id else None
+    window = db.session.get(Window, row.window_id) if row.window_id else None
+    reviewer = db.session.get(User, row.reviewer_id) if row.reviewer_id else None
+    return {
+        'id': row.id,
+        'evaluation_id': int(row.evaluation_id or 0),
+        'campus_id': int(row.campus_id or 1),
+        'risk_score': int(row.risk_score or 0),
+        'risk_level': row.risk_level or 'low',
+        'status': row.status or 'pending',
+        'rule_hits': row.rule_hits if isinstance(row.rule_hits, list) else [],
+        'user_id': int(row.user_id or 0),
+        'username': (user.nickname if user else '') or (user.username if user else '用户'),
+        'canteen_id': int(row.canteen_id or 0),
+        'canteen_name': canteen.name if canteen else '-',
+        'window_id': int(row.window_id or 0),
+        'window_name': window.name if window else '-',
+        'remark': (evaluation.remark if evaluation else '') or '',
+        'comprehensive_score': float((evaluation.comprehensive_score if evaluation else 0) or 0),
+        'reviewer': reviewer.username if reviewer else '',
+        'review_note': row.review_note or '',
+        'reviewed_time': row.reviewed_time.strftime('%Y-%m-%d %H:%M:%S') if row.reviewed_time else '',
+        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+    }
+
+
+def _serialize_work_order(row):
+    canteen = db.session.get(Canteen, row.canteen_id) if row.canteen_id else None
+    window = db.session.get(Window, row.window_id) if row.window_id else None
+    assignee = db.session.get(User, row.assignee_id) if row.assignee_id else None
+    creator = db.session.get(User, row.created_by) if row.created_by else None
+    return {
+        'id': row.id,
+        'campus_id': int(row.campus_id or 1),
+        'source_type': row.source_type,
+        'source_id': int(row.source_id or 0),
+        'canteen_id': int(row.canteen_id or 0),
+        'canteen_name': canteen.name if canteen else '-',
+        'window_id': int(row.window_id or 0),
+        'window_name': window.name if window else '-',
+        'title': row.title or '',
+        'issue_desc': row.issue_desc or '',
+        'priority': row.priority or 'medium',
+        'status': row.status or 'pending',
+        'assignee_id': int(row.assignee_id or 0),
+        'assignee_name': (assignee.nickname if assignee else '') or (assignee.username if assignee else ''),
+        'created_by': int(row.created_by or 0),
+        'creator_name': (creator.nickname if creator else '') or (creator.username if creator else ''),
+        'is_overdue': bool(row.is_overdue),
+        'due_time': row.due_time.strftime('%Y-%m-%d %H:%M:%S') if row.due_time else '',
+        'started_time': row.started_time.strftime('%Y-%m-%d %H:%M:%S') if row.started_time else '',
+        'review_time': row.review_time.strftime('%Y-%m-%d %H:%M:%S') if row.review_time else '',
+        'completed_time': row.completed_time.strftime('%Y-%m-%d %H:%M:%S') if row.completed_time else '',
+        'archived_time': row.archived_time.strftime('%Y-%m-%d %H:%M:%S') if row.archived_time else '',
+        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+    }
+
+
+def _append_work_order_log(row, action, from_status, to_status, note=''):
+    actor = _current_user()
+    db.session.add(
+        WorkOrderActionLog(
+            work_order_id=row.id,
+            campus_id=_safe_int(row.campus_id, 1) or 1,
+            actor_id=actor.id if actor else None,
+            action=action,
+            from_status=(from_status or '')[:20],
+            to_status=(to_status or '')[:20],
+            note=(note or '')[:1000],
+        )
+    )
+
+
+def _scan_work_order_sla(scoped_canteen_id=None):
+    now = datetime.now()
+    query = RectificationWorkOrder.query.filter(RectificationWorkOrder.status.in_(['pending', 'processing', 'review']))
+    query = query.filter(RectificationWorkOrder.campus_id == _current_campus_id())
+    if scoped_canteen_id:
+        query = query.filter(RectificationWorkOrder.canteen_id == scoped_canteen_id)
+
+    touched = 0
+    for row in query.all():
+        is_overdue = bool(row.due_time and row.due_time < now and row.status not in ('completed', 'archived'))
+        if row.is_overdue != is_overdue:
+            row.is_overdue = is_overdue
+            row.update_time = now
+            touched += 1
+        if is_overdue and row.priority in ('low', 'medium'):
+            row.priority = 'high'
+            touched += 1
+    if touched:
+        db.session.commit()
+    return touched
+
+
+def _ensure_resource_canteen_access(resource_canteen_id):
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(resource_canteen_id)
+    if scope_error:
+        return scope_error
+    if scoped_canteen_id and resource_canteen_id and scoped_canteen_id != resource_canteen_id:
+        return api_error('无权操作其他食堂数据', code=403, http_status=403)
+    return None
+
+
+def _ensure_admin_only():
+    user = _current_user()
+    if not user or user.role != 'admin':
+        return api_error('仅系统管理员可执行该操作', code=403, http_status=403)
+    return None
+
+
+def _to_json_text(payload):
+    if payload is None:
+        return ''
+    try:
+        return json.dumps(payload, ensure_ascii=False)
+    except Exception:
+        return json.dumps({'raw': str(payload)}, ensure_ascii=False)
+
+
+def _audit_log(action, target_type='', target_id=0, detail=None, before_data=None, after_data=None):
+    actor = _current_user()
+    if not actor:
+        return
+
+    db.session.add(
+        AdminActionLog(
+            actor_id=actor.id,
+            actor_role=(actor.role or '')[:20],
+            action=(action or '')[:60],
+            target_type=(target_type or '')[:40],
+            target_id=_safe_int(target_id, 0) or 0,
+            before_data=_to_json_text(before_data)[:4000],
+            after_data=_to_json_text(after_data)[:4000],
+            detail=_to_json_text(detail)[:4000],
+        )
+    )
+
+
+def _serialize_action_log(row):
+    actor = db.session.get(User, row.actor_id) if row.actor_id else None
+    detail_obj = row.detail or ''
+    if row.detail:
+        try:
+            detail_obj = json.loads(row.detail)
+        except Exception:
+            detail_obj = row.detail
+
+    before_obj = row.before_data or ''
+    if row.before_data:
+        try:
+            before_obj = json.loads(row.before_data)
+        except Exception:
+            before_obj = row.before_data
+
+    after_obj = row.after_data or ''
+    if row.after_data:
+        try:
+            after_obj = json.loads(row.after_data)
+        except Exception:
+            after_obj = row.after_data
+
+    return {
+        'id': row.id,
+        'actor_id': int(row.actor_id or 0),
+        'actor_name': actor.username if actor else '',
+        'actor_role': row.actor_role or '',
+        'action': row.action or '',
+        'target_type': row.target_type or '',
+        'target_id': int(row.target_id or 0),
+        'before_data': before_obj,
+        'after_data': after_obj,
+        'detail': detail_obj,
+        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+    }
+
+
 def _role_code_to_name(role_code):
     mapping = {
         'admin': '管理员',
@@ -1244,6 +1921,83 @@ def _serialize_settings_payload():
     }
 
 
+def _metric_dictionary_payload(scope='all'):
+    definitions = [
+        {
+            'metric_key': 'today_evaluation_count',
+            'metric_name': '今日评价数',
+            'scope': 'operation',
+            'formula': '当天 create_time 计数',
+            'time_window': 'day',
+            'dimensions': ['canteen_id'],
+            'empty_value': 0,
+        },
+        {
+            'metric_key': 'week_avg_score',
+            'metric_name': '本周平均分',
+            'scope': 'operation',
+            'formula': '近7天 comprehensive_score 均值',
+            'time_window': 'rolling_7d',
+            'dimensions': ['canteen_id'],
+            'empty_value': 0.0,
+        },
+        {
+            'metric_key': 'month_evaluation_count',
+            'metric_name': '本月评价数',
+            'scope': 'operation',
+            'formula': '本月内 create_time 计数',
+            'time_window': 'month',
+            'dimensions': ['canteen_id'],
+            'empty_value': 0,
+        },
+        {
+            'metric_key': 'month_count_mom_pct',
+            'metric_name': '本月评价数环比',
+            'scope': 'operation',
+            'formula': '(本月累计-上月同期)/上月同期*100%',
+            'time_window': 'month_vs_prev_same_period',
+            'dimensions': ['canteen_id'],
+            'empty_value': 0.0,
+        },
+        {
+            'metric_key': 'month_count_yoy_pct',
+            'metric_name': '本月评价数同比',
+            'scope': 'operation',
+            'formula': '(本月累计-去年同月同期)/去年同月同期*100%',
+            'time_window': 'month_vs_last_year_same_period',
+            'dimensions': ['canteen_id'],
+            'empty_value': 0.0,
+        },
+        {
+            'metric_key': 'avg_score',
+            'metric_name': '综合平均分',
+            'scope': 'public',
+            'formula': '时间范围内 comprehensive_score 均值(>0)',
+            'time_window': 'range_param',
+            'dimensions': ['range', 'canteen_id'],
+            'empty_value': 0.0,
+        },
+        {
+            'metric_key': 'bad_review_count',
+            'metric_name': '低分评价数',
+            'scope': 'public',
+            'formula': 'comprehensive_score <= 2 的计数',
+            'time_window': 'range_param',
+            'dimensions': ['range', 'canteen_id'],
+            'empty_value': 0,
+        },
+    ]
+
+    if scope in ('operation', 'public'):
+        definitions = [item for item in definitions if item['scope'] == scope]
+
+    return {
+        'version': METRIC_DICTIONARY_VERSION,
+        'scope': scope,
+        'definitions': definitions,
+    }
+
+
 def _notification_window_seconds(freq):
     if freq == 'hourly':
         return 3600
@@ -1323,6 +2077,30 @@ def _dispatch_event_notifications(event_type, ref_id, target_role, channels, tit
                 app.logger.info('notify_sms_ok target_role=%s event=%s', target_role, event_type)
 
 
+def _dispatch_event_notifications_async(event_type, ref_id, target_role, channels, title, content):
+    with app.app_context():
+        try:
+            _dispatch_event_notifications(event_type, ref_id, target_role, channels, title, content)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            app.logger.warning('notify_async_failed event=%s ref_id=%s err=%s', event_type, ref_id, exc)
+
+
+def _enqueue_event_notifications(event_type, ref_id, target_role, channels, title, content):
+    if not channels:
+        return
+    NOTIFY_EXECUTOR.submit(
+        _dispatch_event_notifications_async,
+        event_type,
+        int(ref_id or 0),
+        target_role,
+        list(channels),
+        title,
+        content,
+    )
+
+
 def _trigger_bad_review_notifications(evaluation_id):
     evaluation = db.session.get(EvaluationMain, evaluation_id)
     if not evaluation:
@@ -1349,8 +2127,7 @@ def _trigger_bad_review_notifications(evaluation_id):
     window_name = evaluation.window.name if evaluation.window else '未知窗口'
     title = f'差评预警：{canteen_name}-{window_name}'
     content = f'检测到低分评价（综合分 {score:.1f}），请运营人员尽快处理。评价ID：{evaluation.id}'
-    _dispatch_event_notifications('bad_review', evaluation.id, 'operator', channels, title, content)
-    db.session.commit()
+    _enqueue_event_notifications('bad_review', evaluation.id, 'operator', channels, title, content)
 
 
 def _trigger_pending_audit_notifications(note_id):
@@ -1373,8 +2150,46 @@ def _trigger_pending_audit_notifications(note_id):
     author_name = (author.nickname if author else '') or (author.username if author else '未知用户')
     title = f'新笔记待审核：{note.title}'
     content = f'用户 {author_name} 发布了待审核笔记，笔记ID：{note.id}。'
-    _dispatch_event_notifications('pending_audit', note.id, 'admin', channels, title, content)
-    db.session.commit()
+    _enqueue_event_notifications('pending_audit', note.id, 'admin', channels, title, content)
+
+
+def _warning_elapsed_hours(row, now=None):
+    now_value = now or datetime.now()
+    if not row or not row.create_time:
+        return 0.0
+    return max(0.0, (now_value - row.create_time).total_seconds() / 3600.0)
+
+
+def _sla_level_by_elapsed_hours(hours_value):
+    if hours_value >= float(SLA_ESCALATE_HOURS):
+        return 'escalated'
+    if hours_value >= float(SLA_FIRST_RESPONSE_HOURS):
+        return 'overdue'
+    return 'normal'
+
+
+def _scan_warning_sla_and_notify(scoped_canteen_id=None):
+    pending_query = OperatorWarning.query.filter(OperatorWarning.status == 'pending')
+    if scoped_canteen_id:
+        pending_query = pending_query.filter(OperatorWarning.canteen_id == scoped_canteen_id)
+    rows = pending_query.all()
+
+    now = datetime.now()
+    for row in rows:
+        elapsed = _warning_elapsed_hours(row, now=now)
+        level = _sla_level_by_elapsed_hours(elapsed)
+        if level == 'normal':
+            continue
+
+        channels = ['site']
+        if level == 'overdue':
+            title = 'SLA提醒：差评预警超时未处理'
+            content = f'预警ID {row.id} 已超过 {SLA_FIRST_RESPONSE_HOURS} 小时未处理，请尽快响应。'
+            _enqueue_event_notifications('warning_sla_overdue', row.id, 'operator', channels, title, content)
+        else:
+            title = 'SLA升级：差评预警严重超时'
+            content = f'预警ID {row.id} 已超过 {SLA_ESCALATE_HOURS} 小时未处理，已升级管理员关注。'
+            _enqueue_event_notifications('warning_sla_escalated', row.id, 'admin', channels, title, content)
 
 
 def _parse_date_text(text_value):
@@ -1385,6 +2200,18 @@ def _parse_date_text(text_value):
         return datetime.strptime(text_raw, '%Y-%m-%d').date()
     except ValueError:
         return None
+
+
+def _parse_datetime_text(text_value):
+    text_raw = (text_value or '').strip()
+    if not text_raw:
+        return None
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M'):
+        try:
+            return datetime.strptime(text_raw, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def _avg_dict_numeric(score_obj):
@@ -1428,6 +2255,301 @@ def _safe_tag_list(value):
     return []
 
 
+def _template_default_items():
+    return [
+        {'category': 'food', 'item_key': 'taste', 'item_label': '口味', 'sort_order': 10},
+        {'category': 'food', 'item_key': 'color', 'item_label': '色泽', 'sort_order': 20},
+        {'category': 'food', 'item_key': 'appearance', 'item_label': '品相', 'sort_order': 30},
+        {'category': 'food', 'item_key': 'price', 'item_label': '价格合理', 'sort_order': 40},
+        {'category': 'food', 'item_key': 'portion', 'item_label': '分量', 'sort_order': 50},
+        {'category': 'food', 'item_key': 'speed', 'item_label': '出餐速度', 'sort_order': 60},
+        {'category': 'service', 'item_key': 'attitude', 'item_label': '服务态度', 'sort_order': 10},
+        {'category': 'service', 'item_key': 'speed', 'item_label': '响应速度', 'sort_order': 20},
+        {'category': 'service', 'item_key': 'dress', 'item_label': '着装规范', 'sort_order': 30},
+        {'category': 'env', 'item_key': 'clean', 'item_label': '桌面卫生', 'sort_order': 10},
+        {'category': 'env', 'item_key': 'air', 'item_label': '通风空调', 'sort_order': 20},
+        {'category': 'env', 'item_key': 'hygiene', 'item_label': '整体环境', 'sort_order': 30},
+        {'category': 'safety', 'item_key': 'fresh', 'item_label': '食材新鲜', 'sort_order': 10},
+        {'category': 'safety', 'item_key': 'info', 'item_label': '信息公示', 'sort_order': 20},
+    ]
+
+
+def _serialize_template(version_row):
+    if not version_row:
+        return {}
+    items = (
+        EvaluationTemplateItem.query.filter_by(version_id=version_row.id)
+        .order_by(EvaluationTemplateItem.category.asc(), EvaluationTemplateItem.sort_order.asc(), EvaluationTemplateItem.id.asc())
+        .all()
+    )
+    grouped = {'food': [], 'service': [], 'env': [], 'safety': []}
+    for item in items:
+        grouped.setdefault(item.category, []).append(
+            {
+                'id': item.id,
+                'category': item.category,
+                'item_key': item.item_key,
+                'item_label': item.item_label,
+                'sort_order': int(item.sort_order or 0),
+                'score_min': int(item.score_min or 1),
+                'score_max': int(item.score_max or 10),
+                'enabled': bool(item.enabled),
+            }
+        )
+    return {
+        'id': version_row.id,
+        'version_no': int(version_row.version_no or 1),
+        'name': version_row.name,
+        'status': version_row.status,
+        'create_time': version_row.create_time.strftime('%Y-%m-%d %H:%M:%S') if version_row.create_time else '-',
+        'publish_time': version_row.publish_time.strftime('%Y-%m-%d %H:%M:%S') if version_row.publish_time else '',
+        'items': grouped,
+    }
+
+
+def _ensure_default_template():
+    active = EvaluationTemplateVersion.query.filter_by(status='active').order_by(EvaluationTemplateVersion.version_no.desc()).first()
+    if active:
+        return active
+
+    last_version = EvaluationTemplateVersion.query.order_by(EvaluationTemplateVersion.version_no.desc()).first()
+    if last_version:
+        last_version.status = 'active'
+        last_version.publish_time = datetime.now()
+        db.session.commit()
+        return last_version
+
+    row = EvaluationTemplateVersion(version_no=1, name='默认模板 v1', status='active', publish_time=datetime.now())
+    db.session.add(row)
+    db.session.flush()
+    for item in _template_default_items():
+        db.session.add(
+            EvaluationTemplateItem(
+                version_id=row.id,
+                category=item['category'],
+                item_key=item['item_key'],
+                item_label=item['item_label'],
+                sort_order=item['sort_order'],
+                score_min=1,
+                score_max=10,
+                enabled=True,
+            )
+        )
+    db.session.commit()
+    return row
+
+
+def _active_template_id():
+    row = _ensure_default_template()
+    return row.id if row else None
+
+
+def _guest_guard_blocked(ip_address, seconds=45):
+    if not ip_address:
+        return False
+    threshold = datetime.now() - timedelta(seconds=seconds)
+    recent = (
+        GuestEvaluationSubmission.query.filter(
+            GuestEvaluationSubmission.submit_ip == ip_address,
+            GuestEvaluationSubmission.create_time >= threshold,
+        )
+        .order_by(GuestEvaluationSubmission.id.desc())
+        .first()
+    )
+    return recent is not None
+
+
+def _get_or_create_guest_shadow_user():
+    user = User.query.filter_by(username='guest_shadow_user').first()
+    if user:
+        return user
+    user = User(
+        username='guest_shadow_user',
+        password=generate_password_hash('guest-shadow-unsafe'),
+        role='student',
+        nickname='游客评价用户',
+        campus_id=1,
+    )
+    db.session.add(user)
+    db.session.flush()
+    return user
+
+
+def _create_evaluation_from_payload(payload, user_id, enforce_repeat_guard=True):
+    data = payload if isinstance(payload, dict) else {}
+    canteen_id = _safe_int(data.get('canteen_id'))
+    window_id = _safe_int(data.get('window_id'))
+    buy_time_str = data.get('buy_time')
+    identity_type = (data.get('identity_type') or '').strip() or 'student'
+
+    if not buy_time_str:
+        buy_time_str = datetime.now().strftime('%Y-%m-%dT%H:%M')
+
+    if not all([canteen_id, window_id, buy_time_str]):
+        return None, api_error('缺少必填字段')
+
+    dishes = data.get('dishes', [])
+    if (not dishes) and _safe_int(data.get('dish_id')):
+        dishes = [
+            {
+                'dish_id': _safe_int(data.get('dish_id')),
+                'dish_name': data.get('dish_name') or '',
+                'food_scores': _safe_scores(data.get('food_scores', {})),
+                'remark': data.get('remark') or '',
+                'images': _normalize_images(data.get('images')),
+            }
+        ]
+
+    normalized_dishes = []
+    for raw_item in dishes:
+        normalized = _normalize_dish_payload(raw_item)
+        if normalized and (normalized['dish_id'] or normalized['dish_name']):
+            normalized_dishes.append(normalized)
+    dishes = normalized_dishes
+    if not dishes:
+        return None, api_error('请至少选择一个菜品')
+
+    try:
+        buy_time = datetime.strptime(buy_time_str, '%Y-%m-%dT%H:%M')
+    except ValueError:
+        return None, api_error('时间格式错误')
+
+    now = datetime.now()
+    if enforce_repeat_guard:
+        cfg = _get_or_create_system_config()
+        guard_seconds = max(1, int(cfg.repeat_submit_minutes or 1)) * 60
+        allow_submit, retry_after = _acquire_submit_slot(user_id, window_id, now, guard_seconds)
+        if not allow_submit:
+            db.session.commit()
+            return None, api_error(f'提交过于频繁，请{retry_after}秒后再试', code=429, http_status=429, data={})
+
+    env_scores = _extract_score_pack(data, 'env', ['clean', 'air', 'hygiene'])
+    service_scores = _extract_score_pack(data, 'service', ['attitude', 'speed', 'dress'])
+    safety_scores = _extract_score_pack(data, 'safety', ['fresh', 'info'])
+    service_comment = (data.get('service_comment') or '').strip()
+    service_images = _normalize_images(data.get('service_images'))
+    env_comment = (data.get('env_comment') or '').strip()
+    env_images = _normalize_images(data.get('env_images'))
+    safety_comment = (data.get('safety_comment') or '').strip()
+    safety_images = _normalize_images(data.get('safety_images'))
+    images = data.get('images', [])
+    remark = data.get('remark', '')
+    comprehensive_score = _calc_comprehensive_score(dishes, env_scores, service_scores, safety_scores)
+    template_version = _safe_int(data.get('template_version')) or _active_template_id()
+    user_obj = db.session.get(User, user_id)
+    campus_id = _safe_int(getattr(user_obj, 'campus_id', None), _current_campus_id()) or _current_campus_id()
+
+    eval_main = EvaluationMain(
+        campus_id=campus_id,
+        user_id=user_id,
+        canteen_id=canteen_id,
+        window_id=window_id,
+        buy_time=buy_time,
+        identity_type=identity_type,
+        grade=data.get('grade'),
+        age=data.get('age'),
+        dining_years=data.get('dining_years'),
+        env_scores=env_scores,
+        service_scores=service_scores,
+        safety_scores=safety_scores,
+        service_comment=service_comment,
+        service_images=service_images,
+        env_comment=env_comment,
+        env_images=env_images,
+        safety_comment=safety_comment,
+        safety_images=safety_images,
+        comprehensive_score=comprehensive_score,
+        images=images,
+        remark=remark,
+        template_version=template_version,
+    )
+    db.session.add(eval_main)
+    db.session.flush()
+
+    db.session.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS evaluations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                evaluation_main_id INTEGER,
+                user_id INTEGER,
+                canteen_id INTEGER,
+                window_id INTEGER,
+                dish_id INTEGER,
+                score FLOAT DEFAULT 0,
+                remark TEXT,
+                images TEXT,
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            '''
+        )
+    )
+    eval_cols = {
+        row[1]
+        for row in db.session.execute(text('PRAGMA table_info(evaluations)')).fetchall()
+    }
+    for col_name, sql in {
+        'canteen_id': 'ALTER TABLE evaluations ADD COLUMN canteen_id INTEGER',
+        'window_id': 'ALTER TABLE evaluations ADD COLUMN window_id INTEGER',
+        'dish_id': 'ALTER TABLE evaluations ADD COLUMN dish_id INTEGER',
+    }.items():
+        if col_name not in eval_cols:
+            db.session.execute(text(sql))
+
+    for d in dishes:
+        dish_id = _safe_int(d.get('dish_id'), 0) or 0
+        dish_name = (d.get('dish_name') or '').strip()
+        dish_obj = db.session.get(Dish, dish_id) if dish_id else None
+        if not dish_name and dish_obj:
+            dish_name = dish_obj.name
+
+        eval_dish = EvaluationDish(
+            evaluation_id=eval_main.id,
+            dish_id=dish_id,
+            dish_name=dish_name or '未命名菜品',
+            food_scores=_safe_scores(d.get('food_scores', {})),
+            remark=(d.get('remark') or '').strip(),
+        )
+        db.session.add(eval_dish)
+
+        if dish_obj:
+            dish_obj.review_count = (dish_obj.review_count or 0) + 1
+
+        db.session.execute(
+            text(
+                '''
+                INSERT INTO evaluations(
+                    evaluation_main_id, user_id, canteen_id, window_id, dish_id, score, remark, images, create_time
+                ) VALUES (
+                    :evaluation_main_id, :user_id, :canteen_id, :window_id, :dish_id, :score, :remark, :images, :create_time
+                )
+                '''
+            ),
+            {
+                'evaluation_main_id': eval_main.id,
+                'user_id': user_id,
+                'canteen_id': canteen_id,
+                'window_id': window_id,
+                'dish_id': dish_id,
+                'score': comprehensive_score,
+                'remark': (d.get('remark') or '').strip() or remark,
+                'images': json.dumps(d.get('images') or [], ensure_ascii=False),
+                'create_time': now.strftime('%Y-%m-%d %H:%M:%S'),
+            },
+        )
+
+    _upsert_eval_risk_flag(eval_main)
+
+    db.session.commit()
+    try:
+        _trigger_bad_review_notifications(eval_main.id)
+    except Exception as notify_exc:
+        db.session.rollback()
+        app.logger.warning('bad_review_notification_failed evaluation_id=%s err=%s', eval_main.id, notify_exc)
+
+    return {'evaluation_id': eval_main.id, 'comprehensive_score': comprehensive_score}, None
+
+
 def _calc_note_mention_count(dish_names):
     if not dish_names:
         return 0
@@ -1468,37 +2590,106 @@ def _serialize_bad_warning(row, evaluation):
     }
 
 
-def _build_operation_dashboard_payload():
+def _build_operation_dashboard_payload(canteen_id=None, campus_id=None):
     _sync_operator_warnings()
 
     now = datetime.now()
     today = now.date()
-    thirty_days_ago = now - timedelta(days=29)
     week_begin = datetime.combine(today - timedelta(days=6), datetime.min.time())
 
-    today_evaluation_count = EvaluationMain.query.filter(func.date(EvaluationMain.create_time) == str(today)).count()
+    def _period_aggregate(begin, end):
+        query = db.session.query(
+            func.count(EvaluationMain.id).label('cnt'),
+            func.avg(EvaluationMain.comprehensive_score).label('avg_score'),
+        ).filter(EvaluationMain.create_time >= begin, EvaluationMain.create_time <= end)
+        if canteen_id:
+            query = query.filter(EvaluationMain.canteen_id == canteen_id)
+        if campus_id:
+            query = query.filter(EvaluationMain.campus_id == campus_id)
+        row = query.first()
+        return int((row.cnt if row else 0) or 0), float((row.avg_score if row else 0.0) or 0.0)
 
-    week_avg_value = db.session.query(func.avg(EvaluationMain.comprehensive_score)).filter(EvaluationMain.create_time >= week_begin, EvaluationMain.create_time <= now).scalar()
+    def _month_bounds(year, month):
+        begin = datetime(year, month, 1)
+        if month == 12:
+            next_begin = datetime(year + 1, 1, 1)
+        else:
+            next_begin = datetime(year, month + 1, 1)
+        return begin, next_begin - timedelta(seconds=1)
+
+    def _pct_change(current_value, base_value):
+        base = float(base_value or 0.0)
+        current = float(current_value or 0.0)
+        if abs(base) < 1e-6:
+            return 100.0 if current > 0 else 0.0
+        return round((current - base) / base * 100, 2)
+
+    today_query = EvaluationMain.query.filter(func.date(EvaluationMain.create_time) == str(today))
+    if canteen_id:
+        today_query = today_query.filter(EvaluationMain.canteen_id == canteen_id)
+    if campus_id:
+        today_query = today_query.filter(EvaluationMain.campus_id == campus_id)
+    today_evaluation_count = today_query.count()
+
+    week_query = db.session.query(func.avg(EvaluationMain.comprehensive_score)).filter(
+        EvaluationMain.create_time >= week_begin,
+        EvaluationMain.create_time <= now,
+    )
+    if canteen_id:
+        week_query = week_query.filter(EvaluationMain.canteen_id == canteen_id)
+    if campus_id:
+        week_query = week_query.filter(EvaluationMain.campus_id == campus_id)
+    week_avg_value = week_query.scalar()
     week_avg_score = round(float(week_avg_value or 0.0), 2)
 
-    bad_pairs = (
+    bad_pairs_query = (
         db.session.query(OperatorWarning, EvaluationMain)
-        .join(EvaluationMain, OperatorWarning.evaluation_id == EvaluationMain.id)
+        .join(EvaluationMain, EvaluationMain.id == OperatorWarning.evaluation_id)
         .filter(OperatorWarning.status == 'pending', func.coalesce(EvaluationMain.comprehensive_score, 0) <= 2)
         .order_by(OperatorWarning.create_time.desc())
-        .all()
     )
+    if canteen_id:
+        bad_pairs_query = bad_pairs_query.filter(OperatorWarning.canteen_id == canteen_id)
+    if campus_id:
+        bad_pairs_query = bad_pairs_query.filter(OperatorWarning.campus_id == campus_id)
+    bad_pairs = bad_pairs_query.all()
     bad_review_count = len(bad_pairs)
 
-    dish_name_list = [item.name for item in Dish.query.with_entities(Dish.name).all()]
+    dish_name_query = Dish.query.with_entities(Dish.name)
+    if canteen_id:
+        dish_name_query = dish_name_query.join(Window, Window.id == Dish.window_id).filter(Window.canteen_id == canteen_id)
+    if campus_id:
+        dish_name_query = dish_name_query.join(Window, Window.id == Dish.window_id).join(Canteen, Canteen.id == Window.canteen_id).filter(Canteen.campus_id == campus_id)
+    dish_name_list = [item.name for item in dish_name_query.all()]
     note_mention_count = _calc_note_mention_count(dish_name_list)
+
+    current_month_begin, current_month_end = _month_bounds(now.year, now.month)
+    current_month_count, current_month_avg = _period_aggregate(current_month_begin, now)
+
+    if now.month == 1:
+        prev_year, prev_month = now.year - 1, 12
+    else:
+        prev_year, prev_month = now.year, now.month - 1
+    prev_month_begin, prev_month_end = _month_bounds(prev_year, prev_month)
+    elapsed_days = (now - current_month_begin).days + 1
+    prev_same_end = min(prev_month_begin + timedelta(days=elapsed_days) - timedelta(seconds=1), prev_month_end)
+    prev_same_count, prev_same_avg = _period_aggregate(prev_month_begin, prev_same_end)
+
+    yoy_begin, yoy_end_of_month = _month_bounds(now.year - 1, now.month)
+    yoy_same_end = min(yoy_begin + timedelta(days=elapsed_days) - timedelta(seconds=1), yoy_end_of_month)
+    yoy_same_count, yoy_same_avg = _period_aggregate(yoy_begin, yoy_same_end)
 
     trend_rows = []
     for offset in range(30):
         day = today - timedelta(days=29 - offset)
         begin = datetime.combine(day, datetime.min.time())
         end = datetime.combine(day, datetime.max.time())
-        mains = EvaluationMain.query.filter(EvaluationMain.create_time >= begin, EvaluationMain.create_time <= end).all()
+        mains_query = EvaluationMain.query.filter(EvaluationMain.create_time >= begin, EvaluationMain.create_time <= end)
+        if canteen_id:
+            mains_query = mains_query.filter(EvaluationMain.canteen_id == canteen_id)
+        if campus_id:
+            mains_query = mains_query.filter(EvaluationMain.campus_id == campus_id)
+        mains = mains_query.all()
 
         env_values = []
         service_values = []
@@ -1518,10 +2709,17 @@ def _build_operation_dashboard_payload():
             }
         )
 
-    hot_raw = (
+    hot_query = (
         db.session.query(EvaluationDish.dish_id, func.count(EvaluationDish.id).label('eval_count'))
+        .join(EvaluationMain, EvaluationMain.id == EvaluationDish.evaluation_id)
         .filter(EvaluationDish.dish_id > 0)
-        .group_by(EvaluationDish.dish_id)
+    )
+    if canteen_id:
+        hot_query = hot_query.filter(EvaluationMain.canteen_id == canteen_id)
+    if campus_id:
+        hot_query = hot_query.filter(EvaluationMain.campus_id == campus_id)
+    hot_raw = (
+        hot_query.group_by(EvaluationDish.dish_id)
         .order_by(func.count(EvaluationDish.id).desc())
         .limit(10)
         .all()
@@ -1545,13 +2743,22 @@ def _build_operation_dashboard_payload():
     bad_review_list = [_serialize_bad_warning(warning, evaluation) for warning, evaluation in bad_pairs]
 
     return {
+        'metric_dictionary_version': METRIC_DICTIONARY_VERSION,
         'today_evaluation_count': int(today_evaluation_count),
         'week_avg_score': week_avg_score,
+        'month_evaluation_count': int(current_month_count),
+        'month_avg_score': round(current_month_avg, 2),
+        'month_count_mom_pct': _pct_change(current_month_count, prev_same_count),
+        'month_count_yoy_pct': _pct_change(current_month_count, yoy_same_count),
+        'month_avg_mom_delta': round(current_month_avg - prev_same_avg, 2),
+        'month_avg_yoy_delta': round(current_month_avg - yoy_same_avg, 2),
         'bad_review_count': int(bad_review_count),
         'note_mention_count': int(note_mention_count),
         '30day_score_trend': trend_rows,
         'hot_dishes_top10': hot_dishes_top10,
         'bad_review_list': bad_review_list,
+        'canteen_id': canteen_id or 0,
+        'campus_id': campus_id or 0,
         'last_refresh_time': now.strftime('%Y-%m-%d %H:%M:%S'),
     }
 
@@ -1592,6 +2799,8 @@ def _serialize_warning(row):
     canteen = db.session.get(Canteen, row.canteen_id) if row.canteen_id else None
     window = db.session.get(Window, row.window_id) if row.window_id else None
     dish = db.session.get(Dish, row.dish_id) if row.dish_id else None
+    elapsed = _warning_elapsed_hours(row)
+    sla_level = _sla_level_by_elapsed_hours(elapsed) if row.status == 'pending' else 'normal'
     return {
         'id': row.id,
         'evaluation_id': row.evaluation_id,
@@ -1603,6 +2812,8 @@ def _serialize_warning(row):
         'window_name': window.name if window else '-',
         'dish_name': dish.name if dish else '-',
         'user_identity': evaluation.identity_type if evaluation else '-',
+        'sla_elapsed_hours': round(elapsed, 2),
+        'sla_level': sla_level,
         'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
         'handled_time': row.handled_time.strftime('%Y-%m-%d %H:%M:%S') if row.handled_time else '',
     }
@@ -1643,6 +2854,8 @@ def register():
     session.permanent = True
     session['user_id'] = user.id
     session['role'] = user.role
+    session['campus_id'] = _safe_int(getattr(user, 'campus_id', 1), 1) or 1
+    session['login_nonce'] = f"{user.id}-{int(datetime.now().timestamp())}-{random.randint(1000, 9999)}"
     return api_success(_serialize_user(user), msg='注册成功')
 
 
@@ -1661,6 +2874,8 @@ def login():
     session.permanent = True
     session['user_id'] = user.id
     session['role'] = user.role
+    session['campus_id'] = _safe_int(getattr(user, 'campus_id', 1), 1) or 1
+    session['login_nonce'] = f"{user.id}-{int(datetime.now().timestamp())}-{random.randint(1000, 9999)}"
     return api_success(_serialize_user(user), msg='登录成功')
 
 
@@ -1674,7 +2889,9 @@ def logout():
 @login_required()
 def auth_me():
     user = db.session.get(User, session['user_id'])
-    return api_success(_serialize_user(user))
+    data = _serialize_user(user)
+    data['session_nonce'] = session.get('login_nonce') or ''
+    return api_success(data)
 
 
 @app.route('/api/user/profile', methods=['GET'])
@@ -1711,15 +2928,35 @@ def update_user_profile():
 
 @app.route('/api/canteens', methods=['GET'])
 def get_canteens():
-    rows = Canteen.query.order_by(Canteen.id.asc()).all()
+    requested_campus_id = _safe_int(request.args.get('campus_id'))
+    current_user = _current_user()
+    if current_user and current_user.role == 'admin':
+        if requested_campus_id:
+            rows = Canteen.query.filter(Canteen.campus_id == requested_campus_id).order_by(Canteen.id.asc()).all()
+        else:
+            rows = Canteen.query.order_by(Canteen.campus_id.asc(), Canteen.id.asc()).all()
+    else:
+        campus_id = _current_campus_id()
+        if requested_campus_id and requested_campus_id != campus_id:
+            return api_error('无权访问其他校区食堂', code=403, http_status=403)
+        rows = Canteen.query.filter(Canteen.campus_id == campus_id).order_by(Canteen.id.asc()).all()
     data = [{'id': row.id, 'name': row.name} for row in rows]
     return api_success(data, msg='查询成功')
+
+
+@app.route('/api/public/canteens', methods=['GET'])
+def public_get_canteens():
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    rows = Canteen.query.filter(Canteen.campus_id == campus_id, Canteen.is_active.is_(True)).order_by(Canteen.id.asc()).all()
+    data = [{'id': row.id, 'name': row.name, 'campus_id': int(row.campus_id or 0)} for row in rows]
+    return api_success({'list': data, 'campus_id': campus_id}, msg='查询成功')
 
 
 @app.route('/api/canteens/detail', methods=['GET'])
 def get_canteen_detail_by_name():
     _ensure_canteen_detail_seed_data()
     name = (request.args.get('name') or '').strip()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
     if not name:
         return api_error('缺少食堂名称参数 name')
 
@@ -1729,11 +2966,11 @@ def get_canteen_detail_by_name():
             SELECT id, name, COALESCE(address, '') AS address,
                    COALESCE(business_hours, '07:00-21:00') AS business_hours
             FROM canteen
-            WHERE name = :name
+            WHERE name = :name AND campus_id = :campus_id
             LIMIT 1
             '''
         ),
-        {'name': name},
+        {'name': name, 'campus_id': campus_id},
     ).mappings().first()
     if not row:
         return api_error('食堂不存在', code=404, http_status=404)
@@ -2064,7 +3301,9 @@ def get_window_safety(window_id):
 
 @app.route('/api/public/dashboard', methods=['GET'])
 def public_dashboard_overview():
-    seeded = _public_ensure_seed_data_if_needed()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    seeded = _public_ensure_seed_data_if_needed(campus_id)
+    canteen_id = _safe_int(request.args.get('canteen_id'))
     range_key, start_time, end_time = _public_parse_range(
         request.args.get('range') or request.args.get('period') or request.args.get('time_dimension')
     )
@@ -2072,7 +3311,10 @@ def public_dashboard_overview():
     base_filter = [
         EvaluationMain.buy_time >= start_time,
         EvaluationMain.buy_time <= end_time,
+        EvaluationMain.campus_id == campus_id,
     ]
+    if canteen_id:
+        base_filter.append(EvaluationMain.canteen_id == canteen_id)
     scored_filter = base_filter + [EvaluationMain.comprehensive_score > 0]
 
     total_visits = db.session.query(func.count(EvaluationMain.id)).filter(*base_filter).scalar() or 0
@@ -2083,7 +3325,12 @@ def public_dashboard_overview():
         .scalar()
         or 0
     )
-    active_dish_count = Dish.query.filter(Dish.is_active.is_(True)).count()
+    active_dish_count = (
+        Dish.query.join(Window, Window.id == Dish.window_id)
+        .join(Canteen, Canteen.id == Window.canteen_id)
+        .filter(Dish.is_active.is_(True), Canteen.campus_id == campus_id)
+        .count()
+    )
 
     ranking_rows = (
         db.session.query(
@@ -2110,11 +3357,38 @@ def public_dashboard_overview():
         for row in ranking_rows
     ]
 
+    if not ranking:
+        fallback_ranking_rows = (
+            db.session.query(
+                Canteen.id.label('canteen_id'),
+                Canteen.name.label('canteen_name'),
+                func.avg(Dish.average_score).label('avg_score'),
+                func.sum(Dish.review_count).label('eval_count'),
+            )
+            .join(Window, Window.canteen_id == Canteen.id)
+            .join(Dish, Dish.window_id == Window.id)
+            .filter(Canteen.campus_id == campus_id, Dish.is_active.is_(True))
+        )
+        if canteen_id:
+            fallback_ranking_rows = fallback_ranking_rows.filter(Canteen.id == canteen_id)
+        ranking = [
+            {
+                'canteen_id': row.canteen_id,
+                'canteen_name': row.canteen_name,
+                'avg_score': round(float(row.avg_score or 0), 1),
+                'eval_count': int(row.eval_count or 0),
+            }
+            for row in fallback_ranking_rows.group_by(Canteen.id, Canteen.name).order_by(func.avg(Dish.average_score).desc(), func.sum(Dish.review_count).desc()).limit(10).all()
+        ]
+
     latest_update = db.session.query(func.max(EvaluationMain.create_time)).scalar()
 
     return api_success(
         {
+            'metric_dictionary_version': METRIC_DICTIONARY_VERSION,
             'range': range_key,
+            'campus_id': campus_id,
+            'canteen_id': canteen_id or 0,
             'total_visits': int(total_visits),
             'avg_score': round(float(avg_score), 1),
             'bad_review_count': int(bad_review_count),
@@ -2128,18 +3402,32 @@ def public_dashboard_overview():
     )
 
 
+@app.route('/api/admin/metric_dictionary', methods=['GET'])
+@admin_login_required
+def admin_metric_dictionary():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    scope = (request.args.get('scope') or 'all').strip().lower()
+    if scope not in ('all', 'operation', 'public'):
+        return api_error('scope 参数无效')
+    return api_success(_metric_dictionary_payload(scope), msg='查询成功')
+
+
 @app.route('/api/public/trend', methods=['GET'])
 def public_dashboard_trend():
-    _public_ensure_seed_data_if_needed()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    _public_ensure_seed_data_if_needed(campus_id)
+    canteen_id = _safe_int(request.args.get('canteen_id'))
     range_key, start_time, end_time = _public_parse_range(
         request.args.get('range') or request.args.get('period') or request.args.get('time_dimension')
     )
 
-    rows = (
-        EvaluationMain.query.filter(EvaluationMain.buy_time >= start_time, EvaluationMain.buy_time <= end_time)
-        .order_by(EvaluationMain.buy_time.asc())
-        .all()
-    )
+    query = EvaluationMain.query.filter(EvaluationMain.buy_time >= start_time, EvaluationMain.buy_time <= end_time, EvaluationMain.campus_id == campus_id)
+    if canteen_id:
+        query = query.filter(EvaluationMain.canteen_id == canteen_id)
+    rows = query.order_by(EvaluationMain.buy_time.asc()).all()
 
     labels = []
     values = []
@@ -2163,17 +3451,19 @@ def public_dashboard_trend():
         labels = [d.strftime('%m-%d') for d in buckets.keys()]
         values = [buckets[d] for d in buckets.keys()]
 
-    return api_success({'labels': labels, 'values': values, 'range': range_key}, msg='查询成功')
+    return api_success({'labels': labels, 'values': values, 'range': range_key, 'campus_id': campus_id, 'canteen_id': canteen_id or 0}, msg='查询成功')
 
 
 @app.route('/api/public/top-dishes', methods=['GET'])
 def public_dashboard_top_dishes():
-    _public_ensure_seed_data_if_needed()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    _public_ensure_seed_data_if_needed(campus_id)
+    canteen_id = _safe_int(request.args.get('canteen_id'))
     _, start_time, end_time = _public_parse_range(
         request.args.get('range') or request.args.get('period') or request.args.get('time_dimension')
     )
 
-    rows = (
+    query = (
         db.session.query(
             Dish.id.label('dish_id'),
             Dish.name.label('dish_name'),
@@ -2181,25 +3471,54 @@ def public_dashboard_top_dishes():
         )
         .join(EvaluationDish, EvaluationDish.dish_id == Dish.id)
         .join(EvaluationMain, EvaluationMain.id == EvaluationDish.evaluation_id)
-        .filter(EvaluationMain.buy_time >= start_time, EvaluationMain.buy_time <= end_time)
-        .group_by(Dish.id, Dish.name)
+        .join(Window, Window.id == Dish.window_id)
+        .filter(EvaluationMain.buy_time >= start_time, EvaluationMain.buy_time <= end_time, EvaluationMain.campus_id == campus_id)
+    )
+    if canteen_id:
+        query = query.filter(Window.canteen_id == canteen_id)
+    rows = (
+        query.group_by(Dish.id, Dish.name)
         .order_by(func.count(EvaluationDish.id).desc(), Dish.id.asc())
         .limit(10)
         .all()
     )
 
+    if not rows:
+        fallback_query = (
+            db.session.query(
+                Dish.id.label('dish_id'),
+                Dish.name.label('dish_name'),
+                Dish.average_score.label('value'),
+            )
+            .join(Window, Window.id == Dish.window_id)
+            .join(Canteen, Canteen.id == Window.canteen_id)
+            .filter(Dish.is_active.is_(True), Canteen.campus_id == campus_id)
+        )
+        if canteen_id:
+            fallback_query = fallback_query.filter(Canteen.id == canteen_id)
+        rows = (
+            fallback_query.order_by(Dish.average_score.desc(), Dish.review_count.desc(), Dish.id.asc())
+            .limit(10)
+            .all()
+        )
+
     data = [{'dish_id': row.dish_id, 'name': row.dish_name, 'value': int(row.value or 0)} for row in rows]
-    return api_success({'list': data}, msg='查询成功')
+    return api_success({'list': data, 'campus_id': campus_id, 'canteen_id': canteen_id or 0}, msg='查询成功')
 
 
 @app.route('/api/public/peak-time', methods=['GET'])
 def public_dashboard_peak_time():
-    _public_ensure_seed_data_if_needed()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    _public_ensure_seed_data_if_needed(campus_id)
+    canteen_id = _safe_int(request.args.get('canteen_id'))
     _, start_time, end_time = _public_parse_range(
         request.args.get('range') or request.args.get('period') or request.args.get('time_dimension')
     )
 
-    rows = EvaluationMain.query.filter(EvaluationMain.buy_time >= start_time, EvaluationMain.buy_time <= end_time).all()
+    query = EvaluationMain.query.filter(EvaluationMain.buy_time >= start_time, EvaluationMain.buy_time <= end_time, EvaluationMain.campus_id == campus_id)
+    if canteen_id:
+        query = query.filter(EvaluationMain.canteen_id == canteen_id)
+    rows = query.all()
     buckets = [
         ('7:00-9:00', 7, 9),
         ('9:00-11:00', 9, 11),
@@ -2229,7 +3548,1537 @@ def public_dashboard_peak_time():
         for name, _, _ in buckets
     ]
 
-    return api_success({'list': data}, msg='查询成功')
+    return api_success({'list': data, 'campus_id': campus_id, 'canteen_id': canteen_id or 0}, msg='查询成功')
+
+
+def _recommendation_image_url(dish):
+    if dish.img_url:
+        return dish.img_url
+    cover_pool = [
+        '/static/img/food-hero.jpg',
+        '/static/img/hero-bg.jpg',
+        '/static/img/note-cover-1.svg',
+        '/static/img/note-cover-2.svg',
+        '/static/img/note-cover-3.svg',
+        '/static/img/note-cover-4.svg',
+    ]
+    return cover_pool[int(dish.id or 0) % len(cover_pool)]
+
+
+def _build_recommendation_profile(user):
+    profile = {
+        'favorite_dish_ids': set(),
+        'favorite_canteen_ids': set(),
+        'category_weights': {},
+        'tag_weights': {},
+        'canteen_weights': {},
+    }
+    if not user:
+        return profile
+
+    favorites = Favorite.query.filter_by(user_id=user.id).all()
+    for item in favorites:
+        ref_id = _safe_int(item.ref_id, 0) or 0
+        if item.fav_type == 'dish' and ref_id:
+            profile['favorite_dish_ids'].add(ref_id)
+        elif item.fav_type == 'canteen' and ref_id:
+            profile['favorite_canteen_ids'].add(ref_id)
+
+    recent_evals = (
+        EvaluationMain.query.filter_by(user_id=user.id)
+        .order_by(EvaluationMain.create_time.desc(), EvaluationMain.id.desc())
+        .limit(20)
+        .all()
+    )
+    for index, evaluation in enumerate(recent_evals):
+        score = float(evaluation.comprehensive_score or 0)
+        if score <= 0:
+            continue
+
+        recency_factor = max(0.45, 1.0 - index * 0.04)
+        delta = max(-1.5, min(2.0, (score - 5.0) / 2.0)) * recency_factor
+        if not delta:
+            continue
+
+        if evaluation.canteen_id:
+            profile['canteen_weights'][evaluation.canteen_id] = profile['canteen_weights'].get(evaluation.canteen_id, 0.0) + delta
+
+        for dish_eval in evaluation.dish_evaluations:
+            dish = dish_eval.dish
+            if not dish:
+                continue
+            category_key = (dish.category or '其他').strip()
+            profile['category_weights'][category_key] = profile['category_weights'].get(category_key, 0.0) + delta
+            for tag in _safe_tag_list(dish.tags_json):
+                profile['tag_weights'][tag] = profile['tag_weights'].get(tag, 0.0) + delta
+
+    return profile
+
+
+def _summarize_recommendation_reasons(reasons, fallback='校园热度推荐'):
+    cleaned = []
+    for item in reasons or []:
+        text = str(item or '').strip()
+        if text and text not in cleaned:
+            cleaned.append(text)
+    if not cleaned:
+        cleaned = [fallback]
+    return ' · '.join(cleaned[:2])
+
+
+def _recommendation_variant_seed(user):
+    user_part = str(getattr(user, 'id', 0) or 0)
+    ua_part = str(getattr(request.user_agent, 'string', '') or '')[:120]
+    ip_part = str(request.headers.get('X-Forwarded-For') or request.remote_addr or '')[:60]
+    return f'{user_part}|{ip_part}|{ua_part}'
+
+
+def _recommendation_user_segment(user):
+    if not user:
+        return 'anonymous'
+    create_time = getattr(user, 'create_time', None)
+    if create_time and (datetime.now() - create_time).days <= 14:
+        return 'new'
+    return 'returning'
+
+
+def _normalize_recommendation_weights(policy):
+    keys = ('weight_ctr', 'weight_satisfaction', 'weight_safety', 'weight_diversity')
+    raw = [max(0.0, float(policy.get(key, 0.0) or 0.0)) for key in keys]
+    total = sum(raw)
+    if total <= 0:
+        return {
+            'weight_ctr': 0.4,
+            'weight_satisfaction': 0.3,
+            'weight_safety': 0.2,
+            'weight_diversity': 0.1,
+        }
+    return {key: raw[index] / total for index, key in enumerate(keys)}
+
+
+def _recommendation_bandit_variant(campus_id, page, user_segment, policy):
+    _ensure_recommendation_event_table()
+    start_time = datetime.now() - timedelta(days=30)
+    query = RecommendationEvent.query.filter(
+        RecommendationEvent.campus_id == campus_id,
+        RecommendationEvent.create_time >= start_time,
+        RecommendationEvent.page == page,
+        RecommendationEvent.user_segment == user_segment,
+    )
+    rows = query.all()
+    exposure = {'A': 0, 'B': 0}
+    click = {'A': 0, 'B': 0}
+    for row in rows:
+        variant = (row.variant or 'A').upper()
+        if variant not in ('A', 'B'):
+            variant = 'A'
+        if row.event_type == 'click':
+            click[variant] += 1
+        else:
+            exposure[variant] += 1
+
+    alpha = max(0.1, float(policy.get('bandit_alpha', 1.0) or 1.0))
+    beta = max(0.1, float(policy.get('bandit_beta', 1.0) or 1.0))
+    sample_a = random.betavariate(alpha + click['A'], beta + max(0, exposure['A'] - click['A']))
+    sample_b = random.betavariate(alpha + click['B'], beta + max(0, exposure['B'] - click['B']))
+    variant = 'A' if sample_a >= sample_b else 'B'
+
+    # 通过蒙特卡洛近似记录策略概率，供反事实估计使用。
+    wins_a = 0
+    wins_b = 0
+    for _ in range(40):
+        draw_a = random.betavariate(alpha + click['A'], beta + max(0, exposure['A'] - click['A']))
+        draw_b = random.betavariate(alpha + click['B'], beta + max(0, exposure['B'] - click['B']))
+        if draw_a >= draw_b:
+            wins_a += 1
+        else:
+            wins_b += 1
+    propensity_a = wins_a / 40.0
+    propensity_b = wins_b / 40.0
+    propensity = propensity_a if variant == 'A' else propensity_b
+    propensity = max(0.05, min(0.95, propensity))
+
+    return variant, propensity, {
+        'sample_a': round(float(sample_a), 4),
+        'sample_b': round(float(sample_b), 4),
+        'exposure_a': exposure['A'],
+        'exposure_b': exposure['B'],
+        'click_a': click['A'],
+        'click_b': click['B'],
+    }
+
+
+def _recommendation_ab_variant(user, campus_id=None, page='unknown', policy=None):
+    policy_data = policy or _default_recommendation_ab_policy()
+    optimize_mode = str(policy_data.get('optimize_mode', 'ab') or 'ab').strip().lower()
+    if optimize_mode == 'bandit':
+        safe_campus_id = _safe_int(campus_id) or _current_campus_id()
+        safe_page = (page or 'unknown').strip().lower()[:30] or 'unknown'
+        user_segment = _recommendation_user_segment(user)
+        variant, propensity, bandit_debug = _recommendation_bandit_variant(safe_campus_id, safe_page, user_segment, policy_data)
+        return variant, propensity, user_segment, bandit_debug
+
+    cached = session.get('recommendation_ab_variant')
+    if cached in ('A', 'B'):
+        return cached, 0.5, _recommendation_user_segment(user), {}
+
+    digest = hashlib.md5(_recommendation_variant_seed(user).encode('utf-8')).hexdigest()
+    value = int(digest[:8], 16)
+    variant = 'A' if value % 2 == 0 else 'B'
+    session['recommendation_ab_variant'] = variant
+    return variant, 0.5, _recommendation_user_segment(user), {}
+
+
+def _recommendation_strategy_from_variant(variant):
+    return 'baseline' if variant == 'A' else 'explore'
+
+
+def _extract_safety_score(safety_scores):
+    score_obj = safety_scores if isinstance(safety_scores, dict) else {}
+    values = []
+    for _, value in score_obj.items():
+        score = _safe_number(value)
+        if score is not None:
+            values.append(float(score))
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _build_recommendation_objective_maps(campus_id, dish_ids):
+    dish_ids = [int(item) for item in (dish_ids or []) if _safe_int(item)]
+    if not dish_ids:
+        return {}, {}, {}, {}
+
+    start_time = datetime.now() - timedelta(days=30)
+    eval_rows = (
+        db.session.query(EvaluationDish.dish_id, EvaluationMain.comprehensive_score, EvaluationMain.safety_scores)
+        .join(EvaluationMain, EvaluationMain.id == EvaluationDish.evaluation_id)
+        .filter(
+            EvaluationDish.dish_id.in_(dish_ids),
+            EvaluationMain.campus_id == campus_id,
+            EvaluationMain.create_time >= start_time,
+        )
+        .all()
+    )
+    sat_acc = {}
+    safety_acc = {}
+    for dish_id, comprehensive_score, safety_scores in eval_rows:
+        did = int(dish_id or 0)
+        if not did:
+            continue
+        sat_acc.setdefault(did, []).append(float(comprehensive_score or 0.0))
+        safety_value = _extract_safety_score(safety_scores)
+        if safety_value is not None:
+            safety_acc.setdefault(did, []).append(float(safety_value))
+
+    satisfaction_map = {did: max(0.0, min(1.0, (sum(values) / len(values)) / 10.0)) for did, values in sat_acc.items() if values}
+    safety_map = {did: max(0.0, min(1.0, (sum(values) / len(values)) / 10.0)) for did, values in safety_acc.items() if values}
+
+    exposure_rows = (
+        db.session.query(RecommendationEvent.dish_id, func.count(RecommendationEvent.id))
+        .filter(
+            RecommendationEvent.campus_id == campus_id,
+            RecommendationEvent.event_type == 'exposure',
+            RecommendationEvent.create_time >= (datetime.now() - timedelta(days=14)),
+            RecommendationEvent.dish_id.in_(dish_ids),
+        )
+        .group_by(RecommendationEvent.dish_id)
+        .all()
+    )
+    exposure_map = {int(did or 0): int(cnt or 0) for did, cnt in exposure_rows}
+    max_exposure = max(exposure_map.values()) if exposure_map else 1
+    diversity_map = {}
+    for did in dish_ids:
+        exp_count = exposure_map.get(did, 0)
+        diversity_map[did] = max(0.0, min(1.0, 1.0 - (exp_count / max_exposure if max_exposure > 0 else 0.0)))
+
+    canteen_rows = (
+        db.session.query(RecommendationEvent.canteen_id, func.count(RecommendationEvent.id))
+        .filter(
+            RecommendationEvent.campus_id == campus_id,
+            RecommendationEvent.event_type == 'exposure',
+            RecommendationEvent.create_time >= (datetime.now() - timedelta(days=14)),
+        )
+        .group_by(RecommendationEvent.canteen_id)
+        .all()
+    )
+    total_exposure = sum(int(cnt or 0) for _, cnt in canteen_rows)
+    canteen_share_map = {}
+    if total_exposure > 0:
+        for cid, cnt in canteen_rows:
+            if cid:
+                canteen_share_map[int(cid)] = float(cnt or 0) / total_exposure
+
+    return satisfaction_map, safety_map, diversity_map, canteen_share_map
+
+
+def _recommendation_segmented_significance(rows, segment_by='page'):
+    segment_by = (segment_by or 'page').strip().lower()
+    if segment_by not in ('page', 'user_segment', 'canteen'):
+        segment_by = 'page'
+
+    bucket = {}
+    for row in rows or []:
+        variant = (row.variant or 'A').upper()
+        if variant not in ('A', 'B'):
+            variant = 'A'
+        if segment_by == 'user_segment':
+            key = (row.user_segment or ('returning' if row.user_id else 'anonymous')).strip().lower() or 'unknown'
+        elif segment_by == 'canteen':
+            key = str(_safe_int(row.canteen_id, 0) or 0)
+        else:
+            key = (row.page or 'unknown').strip().lower() or 'unknown'
+
+        if key not in bucket:
+            bucket[key] = {
+                'A': {'exposure': 0, 'click': 0},
+                'B': {'exposure': 0, 'click': 0},
+            }
+        if row.event_type == 'click':
+            bucket[key][variant]['click'] += 1
+        else:
+            bucket[key][variant]['exposure'] += 1
+
+    result = []
+    for key, pair in bucket.items():
+        a_exp = int(pair['A']['exposure'])
+        b_exp = int(pair['B']['exposure'])
+        a_clk = int(pair['A']['click'])
+        b_clk = int(pair['B']['click'])
+        significance = _recommendation_ctr_significance(a_clk, a_exp, b_clk, b_exp)
+        result.append(
+            {
+                'segment': key,
+                'variant_a': {'exposure': a_exp, 'click': a_clk, 'ctr': round((a_clk * 100.0 / a_exp), 2) if a_exp else 0.0},
+                'variant_b': {'exposure': b_exp, 'click': b_clk, 'ctr': round((b_clk * 100.0 / b_exp), 2) if b_exp else 0.0},
+                'significance': significance,
+            }
+        )
+    result.sort(key=lambda item: (item['variant_a']['exposure'] + item['variant_b']['exposure']), reverse=True)
+    return result
+
+
+def _recommendation_counterfactual_ips_dr(campus_id, days=7, page='', target_strategy='explore'):
+    _ensure_recommendation_event_table()
+    start_time = datetime.now() - timedelta(days=max(1, min(60, int(days))))
+    target_strategy = 'baseline' if str(target_strategy or '').strip().lower() == 'baseline' else 'explore'
+
+    query = RecommendationEvent.query.filter(
+        RecommendationEvent.campus_id == campus_id,
+        RecommendationEvent.create_time >= start_time,
+        RecommendationEvent.event_type == 'exposure',
+    )
+    if page:
+        query = query.filter(RecommendationEvent.page == page)
+    exposures = query.all()
+
+    if not exposures:
+        return {
+            'sample_size': 0,
+            'target_strategy': target_strategy,
+            'ips': 0.0,
+            'dr': 0.0,
+            'baseline_reward_model': {'baseline': 0.0, 'explore': 0.0},
+            'note': '样本不足',
+        }
+
+    click_rows = RecommendationEvent.query.filter(
+        RecommendationEvent.campus_id == campus_id,
+        RecommendationEvent.create_time >= start_time,
+        RecommendationEvent.event_type == 'click',
+    )
+    if page:
+        click_rows = click_rows.filter(RecommendationEvent.page == page)
+    click_rows = click_rows.all()
+    click_set = set()
+    for row in click_rows:
+        click_set.add(
+            (
+                row.request_id or '',
+                int(row.dish_id or 0),
+                int(row.user_id or 0),
+                (row.page or 'unknown').strip().lower(),
+            )
+        )
+
+    reward_sum = {'baseline': 0.0, 'explore': 0.0}
+    reward_cnt = {'baseline': 0, 'explore': 0}
+    for row in exposures:
+        strategy = (row.strategy or _recommendation_strategy_from_variant((row.variant or 'A').upper())).strip().lower()
+        strategy = 'baseline' if strategy == 'baseline' else 'explore'
+        reward = 1.0 if (
+            (
+                row.request_id or '',
+                int(row.dish_id or 0),
+                int(row.user_id or 0),
+                (row.page or 'unknown').strip().lower(),
+            ) in click_set
+        ) else 0.0
+        reward_sum[strategy] += reward
+        reward_cnt[strategy] += 1
+
+    q_hat = {
+        'baseline': (reward_sum['baseline'] / reward_cnt['baseline']) if reward_cnt['baseline'] else 0.0,
+        'explore': (reward_sum['explore'] / reward_cnt['explore']) if reward_cnt['explore'] else 0.0,
+    }
+
+    ips_sum = 0.0
+    dr_sum = 0.0
+    for row in exposures:
+        strategy = (row.strategy or _recommendation_strategy_from_variant((row.variant or 'A').upper())).strip().lower()
+        strategy = 'baseline' if strategy == 'baseline' else 'explore'
+        propensity = max(0.05, min(0.95, float(_safe_number(getattr(row, 'propensity', 0.5)) if _safe_number(getattr(row, 'propensity', 0.5)) is not None else 0.5)))
+        reward = 1.0 if (
+            (
+                row.request_id or '',
+                int(row.dish_id or 0),
+                int(row.user_id or 0),
+                (row.page or 'unknown').strip().lower(),
+            ) in click_set
+        ) else 0.0
+        indicator = 1.0 if strategy == target_strategy else 0.0
+        ips_sum += indicator * reward / propensity
+        dr_sum += q_hat[target_strategy] + indicator * (reward - q_hat[strategy]) / propensity
+
+    sample_size = len(exposures)
+    return {
+        'sample_size': sample_size,
+        'target_strategy': target_strategy,
+        'ips': round(float(ips_sum / sample_size), 6),
+        'dr': round(float(dr_sum / sample_size), 6),
+        'baseline_reward_model': {
+            'baseline': round(float(q_hat['baseline']), 6),
+            'explore': round(float(q_hat['explore']), 6),
+        },
+        'note': '采用日志概率(propensity)进行IPS/DR估计',
+    }
+
+
+def _recommendation_request_id(user, campus_id):
+    user_id = _safe_int(getattr(user, 'id', 0), 0) or 0
+    now_key = datetime.now().strftime('%Y%m%d%H%M%S%f')
+    raw = f'{now_key}|{campus_id}|{user_id}|{random.randint(1000, 9999)}'
+    return hashlib.md5(raw.encode('utf-8')).hexdigest()[:24]
+
+
+def _ensure_recommendation_event_table():
+    db.session.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS recommendation_event (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id VARCHAR(64) DEFAULT '',
+                event_type VARCHAR(20) DEFAULT 'exposure',
+                variant VARCHAR(10) DEFAULT 'A',
+                strategy VARCHAR(30) DEFAULT 'baseline',
+                user_id INTEGER,
+                campus_id INTEGER DEFAULT 1,
+                canteen_id INTEGER,
+                dish_id INTEGER NOT NULL,
+                position INTEGER DEFAULT 0,
+                page VARCHAR(30) DEFAULT 'unknown',
+                user_segment VARCHAR(20) DEFAULT 'anonymous',
+                propensity FLOAT DEFAULT 0.5,
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            '''
+        )
+    )
+    existing_cols = {
+        row[1]
+        for row in db.session.execute(text('PRAGMA table_info(recommendation_event)')).fetchall()
+    }
+    migration_sql = {
+        'user_segment': "ALTER TABLE recommendation_event ADD COLUMN user_segment VARCHAR(20) DEFAULT 'anonymous'",
+        'propensity': 'ALTER TABLE recommendation_event ADD COLUMN propensity FLOAT DEFAULT 0.5',
+    }
+    changed = False
+    for col_name, sql in migration_sql.items():
+        if col_name not in existing_cols:
+            db.session.execute(text(sql))
+            changed = True
+    if changed:
+        db.session.commit()
+    db.session.commit()
+
+
+def _ensure_recommendation_tuning_table():
+    db.session.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS recommendation_ab_tuning (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campus_id INTEGER NOT NULL UNIQUE,
+                explore_multiplier FLOAT DEFAULT 1.0,
+                updated_by INTEGER,
+                update_note VARCHAR(255) DEFAULT '',
+                update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            '''
+        )
+    )
+    db.session.commit()
+
+
+def _ensure_recommendation_tuning_log_table():
+    db.session.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS recommendation_ab_tuning_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campus_id INTEGER NOT NULL,
+                before_multiplier FLOAT DEFAULT 1.0,
+                after_multiplier FLOAT DEFAULT 1.0,
+                trigger_type VARCHAR(20) DEFAULT 'manual',
+                reason VARCHAR(255) DEFAULT '',
+                actor_id INTEGER,
+                create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            '''
+        )
+    )
+    db.session.commit()
+
+
+def _ensure_recommendation_policy_table():
+    db.session.execute(
+        text(
+            '''
+            CREATE TABLE IF NOT EXISTS recommendation_ab_policy (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                campus_id INTEGER NOT NULL UNIQUE,
+                min_exposure INTEGER DEFAULT 30,
+                ctr_delta_threshold FLOAT DEFAULT 1.0,
+                step_up FLOAT DEFAULT 0.05,
+                step_down FLOAT DEFAULT 0.10,
+                min_multiplier FLOAT DEFAULT 0.40,
+                max_multiplier FLOAT DEFAULT 2.00,
+                guard_enabled BOOLEAN DEFAULT 1,
+                guard_pvalue_threshold FLOAT DEFAULT 0.10,
+                guard_ctr_drop_threshold FLOAT DEFAULT 0.80,
+                guard_consecutive_limit INTEGER DEFAULT 2,
+                optimize_mode VARCHAR(20) DEFAULT 'ab',
+                bandit_alpha FLOAT DEFAULT 1.0,
+                bandit_beta FLOAT DEFAULT 1.0,
+                weight_ctr FLOAT DEFAULT 0.40,
+                weight_satisfaction FLOAT DEFAULT 0.30,
+                weight_safety FLOAT DEFAULT 0.20,
+                weight_diversity FLOAT DEFAULT 0.10,
+                fairness_lambda FLOAT DEFAULT 0.20,
+                fairness_top_share_limit FLOAT DEFAULT 0.35,
+                updated_by INTEGER,
+                update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            '''
+        )
+    )
+    existing_cols = {
+        row[1]
+        for row in db.session.execute(text('PRAGMA table_info(recommendation_ab_policy)')).fetchall()
+    }
+    migration_sql = {
+        'guard_enabled': 'ALTER TABLE recommendation_ab_policy ADD COLUMN guard_enabled BOOLEAN DEFAULT 1',
+        'guard_pvalue_threshold': 'ALTER TABLE recommendation_ab_policy ADD COLUMN guard_pvalue_threshold FLOAT DEFAULT 0.10',
+        'guard_ctr_drop_threshold': 'ALTER TABLE recommendation_ab_policy ADD COLUMN guard_ctr_drop_threshold FLOAT DEFAULT 0.80',
+        'guard_consecutive_limit': 'ALTER TABLE recommendation_ab_policy ADD COLUMN guard_consecutive_limit INTEGER DEFAULT 2',
+        'optimize_mode': "ALTER TABLE recommendation_ab_policy ADD COLUMN optimize_mode VARCHAR(20) DEFAULT 'ab'",
+        'bandit_alpha': 'ALTER TABLE recommendation_ab_policy ADD COLUMN bandit_alpha FLOAT DEFAULT 1.0',
+        'bandit_beta': 'ALTER TABLE recommendation_ab_policy ADD COLUMN bandit_beta FLOAT DEFAULT 1.0',
+        'weight_ctr': 'ALTER TABLE recommendation_ab_policy ADD COLUMN weight_ctr FLOAT DEFAULT 0.40',
+        'weight_satisfaction': 'ALTER TABLE recommendation_ab_policy ADD COLUMN weight_satisfaction FLOAT DEFAULT 0.30',
+        'weight_safety': 'ALTER TABLE recommendation_ab_policy ADD COLUMN weight_safety FLOAT DEFAULT 0.20',
+        'weight_diversity': 'ALTER TABLE recommendation_ab_policy ADD COLUMN weight_diversity FLOAT DEFAULT 0.10',
+        'fairness_lambda': 'ALTER TABLE recommendation_ab_policy ADD COLUMN fairness_lambda FLOAT DEFAULT 0.20',
+        'fairness_top_share_limit': 'ALTER TABLE recommendation_ab_policy ADD COLUMN fairness_top_share_limit FLOAT DEFAULT 0.35',
+    }
+    changed = False
+    for col_name, sql in migration_sql.items():
+        if col_name not in existing_cols:
+            db.session.execute(text(sql))
+            changed = True
+    if changed:
+        db.session.commit()
+    db.session.commit()
+
+
+def _default_recommendation_ab_policy():
+    return {
+        'min_exposure': 30,
+        'ctr_delta_threshold': 1.0,
+        'step_up': 0.05,
+        'step_down': 0.10,
+        'min_multiplier': 0.40,
+        'max_multiplier': 2.00,
+        'guard_enabled': True,
+        'guard_pvalue_threshold': 0.10,
+        'guard_ctr_drop_threshold': 0.80,
+        'guard_consecutive_limit': 2,
+        'optimize_mode': 'ab',
+        'bandit_alpha': 1.0,
+        'bandit_beta': 1.0,
+        'weight_ctr': 0.40,
+        'weight_satisfaction': 0.30,
+        'weight_safety': 0.20,
+        'weight_diversity': 0.10,
+        'fairness_lambda': 0.20,
+        'fairness_top_share_limit': 0.35,
+    }
+
+
+def _get_recommendation_ab_policy(campus_id):
+    _ensure_recommendation_policy_table()
+    defaults = _default_recommendation_ab_policy()
+    row = RecommendationAbPolicy.query.filter_by(campus_id=campus_id).first()
+    if not row:
+        return dict(defaults)
+    optimize_mode = str(getattr(row, 'optimize_mode', defaults['optimize_mode']) or defaults['optimize_mode']).strip().lower()
+    if optimize_mode not in ('ab', 'bandit'):
+        optimize_mode = 'ab'
+    guard_enabled_raw = str(getattr(row, 'guard_enabled', 1)).strip().lower()
+    guard_enabled = guard_enabled_raw in ('1', 'true', 'yes', 'on')
+    return {
+        'min_exposure': max(10, int(_safe_int(getattr(row, 'min_exposure', defaults['min_exposure']), defaults['min_exposure']) or defaults['min_exposure'])),
+        'ctr_delta_threshold': max(0.1, float(_safe_number(getattr(row, 'ctr_delta_threshold', defaults['ctr_delta_threshold'])) if _safe_number(getattr(row, 'ctr_delta_threshold', defaults['ctr_delta_threshold'])) is not None else defaults['ctr_delta_threshold'])),
+        'step_up': max(0.01, float(_safe_number(getattr(row, 'step_up', defaults['step_up'])) if _safe_number(getattr(row, 'step_up', defaults['step_up'])) is not None else defaults['step_up'])),
+        'step_down': max(0.01, float(_safe_number(getattr(row, 'step_down', defaults['step_down'])) if _safe_number(getattr(row, 'step_down', defaults['step_down'])) is not None else defaults['step_down'])),
+        'min_multiplier': max(0.10, float(_safe_number(getattr(row, 'min_multiplier', defaults['min_multiplier'])) if _safe_number(getattr(row, 'min_multiplier', defaults['min_multiplier'])) is not None else defaults['min_multiplier'])),
+        'max_multiplier': max(0.20, float(_safe_number(getattr(row, 'max_multiplier', defaults['max_multiplier'])) if _safe_number(getattr(row, 'max_multiplier', defaults['max_multiplier'])) is not None else defaults['max_multiplier'])),
+        'guard_enabled': guard_enabled,
+        'guard_pvalue_threshold': max(0.01, min(0.5, float(_safe_number(getattr(row, 'guard_pvalue_threshold', defaults['guard_pvalue_threshold'])) if _safe_number(getattr(row, 'guard_pvalue_threshold', defaults['guard_pvalue_threshold'])) is not None else defaults['guard_pvalue_threshold']))),
+        'guard_ctr_drop_threshold': max(0.1, float(_safe_number(getattr(row, 'guard_ctr_drop_threshold', defaults['guard_ctr_drop_threshold'])) if _safe_number(getattr(row, 'guard_ctr_drop_threshold', defaults['guard_ctr_drop_threshold'])) is not None else defaults['guard_ctr_drop_threshold'])),
+        'guard_consecutive_limit': max(1, min(10, int(_safe_int(getattr(row, 'guard_consecutive_limit', defaults['guard_consecutive_limit']), defaults['guard_consecutive_limit']) or defaults['guard_consecutive_limit']))),
+        'optimize_mode': optimize_mode,
+        'bandit_alpha': max(0.1, float(_safe_number(getattr(row, 'bandit_alpha', defaults['bandit_alpha'])) if _safe_number(getattr(row, 'bandit_alpha', defaults['bandit_alpha'])) is not None else defaults['bandit_alpha'])),
+        'bandit_beta': max(0.1, float(_safe_number(getattr(row, 'bandit_beta', defaults['bandit_beta'])) if _safe_number(getattr(row, 'bandit_beta', defaults['bandit_beta'])) is not None else defaults['bandit_beta'])),
+        'weight_ctr': max(0.0, float(_safe_number(getattr(row, 'weight_ctr', defaults['weight_ctr'])) if _safe_number(getattr(row, 'weight_ctr', defaults['weight_ctr'])) is not None else defaults['weight_ctr'])),
+        'weight_satisfaction': max(0.0, float(_safe_number(getattr(row, 'weight_satisfaction', defaults['weight_satisfaction'])) if _safe_number(getattr(row, 'weight_satisfaction', defaults['weight_satisfaction'])) is not None else defaults['weight_satisfaction'])),
+        'weight_safety': max(0.0, float(_safe_number(getattr(row, 'weight_safety', defaults['weight_safety'])) if _safe_number(getattr(row, 'weight_safety', defaults['weight_safety'])) is not None else defaults['weight_safety'])),
+        'weight_diversity': max(0.0, float(_safe_number(getattr(row, 'weight_diversity', defaults['weight_diversity'])) if _safe_number(getattr(row, 'weight_diversity', defaults['weight_diversity'])) is not None else defaults['weight_diversity'])),
+        'fairness_lambda': max(0.0, float(_safe_number(getattr(row, 'fairness_lambda', defaults['fairness_lambda'])) if _safe_number(getattr(row, 'fairness_lambda', defaults['fairness_lambda'])) is not None else defaults['fairness_lambda'])),
+        'fairness_top_share_limit': max(0.05, min(0.95, float(_safe_number(getattr(row, 'fairness_top_share_limit', defaults['fairness_top_share_limit'])) if _safe_number(getattr(row, 'fairness_top_share_limit', defaults['fairness_top_share_limit'])) is not None else defaults['fairness_top_share_limit']))),
+    }
+
+
+def _set_recommendation_ab_policy(campus_id, payload, actor_id=None):
+    _ensure_recommendation_policy_table()
+    defaults = _default_recommendation_ab_policy()
+    old_policy = _get_recommendation_ab_policy(campus_id)
+    row = RecommendationAbPolicy.query.filter_by(campus_id=campus_id).first()
+    if not row:
+        row = RecommendationAbPolicy(campus_id=campus_id)
+        db.session.add(row)
+
+    row.min_exposure = max(10, _safe_int(payload.get('min_exposure'), defaults['min_exposure']) or defaults['min_exposure'])
+    row.ctr_delta_threshold = max(0.1, float(_safe_number(payload.get('ctr_delta_threshold')) if _safe_number(payload.get('ctr_delta_threshold')) is not None else defaults['ctr_delta_threshold']))
+    row.step_up = max(0.01, float(_safe_number(payload.get('step_up')) if _safe_number(payload.get('step_up')) is not None else defaults['step_up']))
+    row.step_down = max(0.01, float(_safe_number(payload.get('step_down')) if _safe_number(payload.get('step_down')) is not None else defaults['step_down']))
+    row.min_multiplier = max(0.10, float(_safe_number(payload.get('min_multiplier')) if _safe_number(payload.get('min_multiplier')) is not None else defaults['min_multiplier']))
+    row.max_multiplier = max(0.20, float(_safe_number(payload.get('max_multiplier')) if _safe_number(payload.get('max_multiplier')) is not None else defaults['max_multiplier']))
+    row.guard_enabled = str(payload.get('guard_enabled', defaults['guard_enabled'])).strip().lower() in ('1', 'true', 'yes', 'on')
+    row.guard_pvalue_threshold = max(0.01, min(0.5, float(_safe_number(payload.get('guard_pvalue_threshold')) if _safe_number(payload.get('guard_pvalue_threshold')) is not None else defaults['guard_pvalue_threshold'])))
+    row.guard_ctr_drop_threshold = max(0.1, float(_safe_number(payload.get('guard_ctr_drop_threshold')) if _safe_number(payload.get('guard_ctr_drop_threshold')) is not None else defaults['guard_ctr_drop_threshold']))
+    row.guard_consecutive_limit = max(1, min(10, _safe_int(payload.get('guard_consecutive_limit'), defaults['guard_consecutive_limit']) or defaults['guard_consecutive_limit']))
+    optimize_mode = str(payload.get('optimize_mode') or defaults['optimize_mode']).strip().lower()
+    row.optimize_mode = optimize_mode if optimize_mode in ('ab', 'bandit') else defaults['optimize_mode']
+    row.bandit_alpha = max(0.1, float(_safe_number(payload.get('bandit_alpha')) if _safe_number(payload.get('bandit_alpha')) is not None else defaults['bandit_alpha']))
+    row.bandit_beta = max(0.1, float(_safe_number(payload.get('bandit_beta')) if _safe_number(payload.get('bandit_beta')) is not None else defaults['bandit_beta']))
+    row.weight_ctr = max(0.0, float(_safe_number(payload.get('weight_ctr')) if _safe_number(payload.get('weight_ctr')) is not None else defaults['weight_ctr']))
+    row.weight_satisfaction = max(0.0, float(_safe_number(payload.get('weight_satisfaction')) if _safe_number(payload.get('weight_satisfaction')) is not None else defaults['weight_satisfaction']))
+    row.weight_safety = max(0.0, float(_safe_number(payload.get('weight_safety')) if _safe_number(payload.get('weight_safety')) is not None else defaults['weight_safety']))
+    row.weight_diversity = max(0.0, float(_safe_number(payload.get('weight_diversity')) if _safe_number(payload.get('weight_diversity')) is not None else defaults['weight_diversity']))
+    row.fairness_lambda = max(0.0, float(_safe_number(payload.get('fairness_lambda')) if _safe_number(payload.get('fairness_lambda')) is not None else defaults['fairness_lambda']))
+    row.fairness_top_share_limit = max(0.05, min(0.95, float(_safe_number(payload.get('fairness_top_share_limit')) if _safe_number(payload.get('fairness_top_share_limit')) is not None else defaults['fairness_top_share_limit'])))
+    if row.max_multiplier < row.min_multiplier:
+        row.max_multiplier = row.min_multiplier
+    row.updated_by = actor_id
+    row.update_time = datetime.now()
+    db.session.commit()
+    return old_policy, _get_recommendation_ab_policy(campus_id)
+
+
+def _recommendation_ctr_significance(a_click, a_exposure, b_click, b_exposure):
+    a_click = max(0, int(a_click or 0))
+    b_click = max(0, int(b_click or 0))
+    a_exposure = max(0, int(a_exposure or 0))
+    b_exposure = max(0, int(b_exposure or 0))
+    if a_exposure <= 0 or b_exposure <= 0:
+        return {'z_score': 0.0, 'p_value': 1.0, 'significant': False, 'method': 'two_proportion_z_test'}
+
+    p1 = a_click / a_exposure
+    p2 = b_click / b_exposure
+    pooled = (a_click + b_click) / (a_exposure + b_exposure)
+    variance = pooled * (1 - pooled) * ((1 / a_exposure) + (1 / b_exposure))
+    if variance <= 0:
+        return {'z_score': 0.0, 'p_value': 1.0, 'significant': False, 'method': 'two_proportion_z_test'}
+    z = (p2 - p1) / math.sqrt(variance)
+    p_value = max(0.0, min(1.0, math.erfc(abs(z) / math.sqrt(2))))
+    return {
+        'z_score': round(float(z), 4),
+        'p_value': round(float(p_value), 6),
+        'significant': bool(p_value < 0.05),
+        'method': 'two_proportion_z_test',
+    }
+
+
+def _get_recommendation_explore_multiplier(campus_id):
+    _ensure_recommendation_tuning_table()
+    policy = _get_recommendation_ab_policy(campus_id)
+    row = RecommendationAbTuning.query.filter_by(campus_id=campus_id).first()
+    if not row:
+        return 1.0
+    value = _safe_number(getattr(row, 'explore_multiplier', 1.0))
+    return max(policy['min_multiplier'], min(policy['max_multiplier'], float(value if value is not None else 1.0)))
+
+
+def _set_recommendation_explore_multiplier(campus_id, multiplier, actor_id=None, note='', trigger_type='manual'):
+    _ensure_recommendation_tuning_table()
+    _ensure_recommendation_tuning_log_table()
+    policy = _get_recommendation_ab_policy(campus_id)
+    safe_value = max(policy['min_multiplier'], min(policy['max_multiplier'], float(_safe_number(multiplier) if _safe_number(multiplier) is not None else 1.0)))
+    row = RecommendationAbTuning.query.filter_by(campus_id=campus_id).first()
+    before_value = 1.0
+    if not row:
+        row = RecommendationAbTuning(campus_id=campus_id)
+        db.session.add(row)
+    else:
+        before_value = max(policy['min_multiplier'], min(policy['max_multiplier'], float(_safe_number(getattr(row, 'explore_multiplier', 1.0)) if _safe_number(getattr(row, 'explore_multiplier', 1.0)) is not None else 1.0)))
+    row.explore_multiplier = safe_value
+    row.updated_by = actor_id
+    row.update_note = (note or '').strip()[:255]
+    row.update_time = datetime.now()
+    db.session.add(
+        RecommendationAbTuningLog(
+            campus_id=campus_id,
+            before_multiplier=before_value,
+            after_multiplier=safe_value,
+            trigger_type=(trigger_type or 'manual')[:20],
+            reason=(note or '').strip()[:255],
+            actor_id=actor_id,
+        )
+    )
+    db.session.commit()
+    return safe_value
+
+
+def _serialize_recommendation_tuning_log(row):
+    return {
+        'id': int(row.id or 0),
+        'campus_id': int(row.campus_id or 0),
+        'before_multiplier': round(float(row.before_multiplier or 1.0), 2),
+        'after_multiplier': round(float(row.after_multiplier or 1.0), 2),
+        'trigger_type': row.trigger_type or 'manual',
+        'reason': row.reason or '',
+        'actor_id': _safe_int(row.actor_id, 0) or 0,
+        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+    }
+
+
+def _recommendation_ab_summary(campus_id, days=7, page=''):
+    _ensure_recommendation_event_table()
+    start_time = datetime.now() - timedelta(days=max(1, min(60, int(days))))
+    query = RecommendationEvent.query.filter(
+        RecommendationEvent.create_time >= start_time,
+        RecommendationEvent.campus_id == campus_id,
+    )
+    if page:
+        query = query.filter(RecommendationEvent.page == page)
+    rows = query.all()
+    bucket = {
+        'A': {'exposure': 0, 'click': 0},
+        'B': {'exposure': 0, 'click': 0},
+    }
+    for row in rows:
+        key = 'A' if (row.variant or 'A').upper() not in ('A', 'B') else row.variant.upper()
+        if row.event_type == 'click':
+            bucket[key]['click'] += 1
+        else:
+            bucket[key]['exposure'] += 1
+
+    summary = []
+    for key in ('A', 'B'):
+        expo = bucket[key]['exposure']
+        click = bucket[key]['click']
+        ctr = round((click * 100.0 / expo), 2) if expo else 0.0
+        summary.append({'variant': key, 'exposure': expo, 'click': click, 'ctr': ctr})
+    return summary, rows
+
+
+def _recommendation_guard_evaluation(campus_id, policy, summary, significance):
+    by_variant = {item['variant']: item for item in (summary or [])}
+    a_row = by_variant.get('A', {'exposure': 0, 'ctr': 0.0})
+    b_row = by_variant.get('B', {'exposure': 0, 'ctr': 0.0})
+    b_exposure = int(b_row.get('exposure', 0) or 0)
+    delta_ctr = float(b_row.get('ctr', 0.0) or 0.0) - float(a_row.get('ctr', 0.0) or 0.0)
+    p_value = float(significance.get('p_value', 1.0) or 1.0)
+
+    degrade = (
+        b_exposure >= int(policy['min_exposure'])
+        and delta_ctr <= -float(policy['guard_ctr_drop_threshold'])
+        and p_value <= float(policy['guard_pvalue_threshold'])
+    )
+    return {
+        'degrade': degrade,
+        'delta_ctr': round(float(delta_ctr), 4),
+        'b_exposure': b_exposure,
+        'p_value': round(float(p_value), 6),
+    }
+
+
+def _recommendation_guard_streak(campus_id):
+    _ensure_recommendation_tuning_log_table()
+    logs = (
+        RecommendationAbTuningLog.query.filter(RecommendationAbTuningLog.campus_id == campus_id)
+        .order_by(RecommendationAbTuningLog.id.desc())
+        .limit(20)
+        .all()
+    )
+    streak = 0
+    oldest_degrade_log = None
+    for row in logs:
+        if (row.trigger_type or '') != 'auto':
+            continue
+        reason = (row.reason or '').strip()
+        if '[guard_degrade=1]' in reason:
+            streak += 1
+            oldest_degrade_log = row
+            continue
+        break
+    return streak, oldest_degrade_log
+
+
+def _build_recommendation_ab_report(campus_id, days=7, page=''):
+    summary, rows = _recommendation_ab_summary(campus_id, days=days, page=page)
+    by_variant = {item['variant']: item for item in summary}
+    significance = _recommendation_ctr_significance(
+        by_variant.get('A', {}).get('click', 0),
+        by_variant.get('A', {}).get('exposure', 0),
+        by_variant.get('B', {}).get('click', 0),
+        by_variant.get('B', {}).get('exposure', 0),
+    )
+    policy = _get_recommendation_ab_policy(campus_id)
+    guard_eval = _recommendation_guard_evaluation(campus_id, policy, summary, significance)
+    guard_streak, _ = _recommendation_guard_streak(campus_id)
+
+    logs = (
+        RecommendationAbTuningLog.query.filter(RecommendationAbTuningLog.campus_id == campus_id)
+        .order_by(RecommendationAbTuningLog.id.desc())
+        .limit(30)
+        .all()
+    )
+    segmented_by_page = _recommendation_segmented_significance(rows, segment_by='page')
+    segmented_by_user = _recommendation_segmented_significance(rows, segment_by='user_segment')
+    counterfactual = _recommendation_counterfactual_ips_dr(campus_id, days=days, page=page, target_strategy='explore')
+
+    return {
+        'meta': {
+            'campus_id': campus_id,
+            'days': days,
+            'page': page or 'all',
+            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        },
+        'summary': summary,
+        'significance': significance,
+        'policy': policy,
+        'guard': {
+            **guard_eval,
+            'consecutive_degrade': guard_streak,
+            'consecutive_limit': int(policy.get('guard_consecutive_limit', 2) or 2),
+        },
+        'segmented': {
+            'page': segmented_by_page,
+            'user_segment': segmented_by_user,
+        },
+        'counterfactual': counterfactual,
+        'tuning_logs': [_serialize_recommendation_tuning_log(item) for item in logs],
+    }
+
+
+def _recommendation_report_to_markdown(report):
+    meta = report.get('meta', {})
+    lines = [
+        '# 推荐实验报告',
+        '',
+        f"- 生成时间: {meta.get('generated_at', '-')}",
+        f"- 校区ID: {meta.get('campus_id', 0)}",
+        f"- 统计窗口: 近{meta.get('days', 7)}天",
+        f"- 页面范围: {meta.get('page', 'all')}",
+        '',
+        '## 总体A/B',
+    ]
+    for row in report.get('summary', []):
+        lines.append(f"- {row.get('variant', '-')}组: 曝光 {row.get('exposure', 0)} / 点击 {row.get('click', 0)} / CTR {row.get('ctr', 0)}%")
+    sg = report.get('significance', {})
+    lines.extend([
+        '',
+        f"- 显著性: z={sg.get('z_score', 0)}, p={sg.get('p_value', 1)}, significant={sg.get('significant', False)}",
+        '',
+        '## 分层显著性（按页面）',
+    ])
+    for item in report.get('segmented', {}).get('page', [])[:10]:
+        lines.append(
+            f"- {item.get('segment', 'unknown')}: A CTR {item.get('variant_a', {}).get('ctr', 0)}% / B CTR {item.get('variant_b', {}).get('ctr', 0)}% / p={item.get('significance', {}).get('p_value', 1)}"
+        )
+    lines.extend(['', '## 反事实评估（IPS/DR）'])
+    cf = report.get('counterfactual', {})
+    lines.append(f"- 样本量: {cf.get('sample_size', 0)}")
+    lines.append(f"- IPS: {cf.get('ips', 0)}")
+    lines.append(f"- DR: {cf.get('dr', 0)}")
+    return '\n'.join(lines)
+
+
+@app.route('/api/public/recommendations', methods=['GET'])
+def public_recommendations():
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    _public_ensure_seed_data_if_needed(campus_id)
+    canteen_id = _safe_int(request.args.get('canteen_id'))
+    limit = max(3, min(12, _safe_int(request.args.get('limit'), 6) or 6))
+    page = (request.args.get('page') or 'unknown').strip().lower()[:30] or 'unknown'
+
+    user = _current_user()
+    policy = _get_recommendation_ab_policy(campus_id)
+    normalized_weights = _normalize_recommendation_weights(policy)
+    ab_variant, propensity, user_segment, bandit_debug = _recommendation_ab_variant(user, campus_id=campus_id, page=page, policy=policy)
+    ab_strategy = _recommendation_strategy_from_variant(ab_variant)
+    request_id = _recommendation_request_id(user, campus_id)
+    explore_multiplier = _get_recommendation_explore_multiplier(campus_id)
+    profile = _build_recommendation_profile(user)
+
+    query = (
+        db.session.query(
+            Dish,
+            Window.name.label('window_name'),
+            Canteen.id.label('canteen_id'),
+            Canteen.name.label('canteen_name'),
+        )
+        .join(Window, Window.id == Dish.window_id)
+        .join(Canteen, Canteen.id == Window.canteen_id)
+        .filter(Dish.is_active.is_(True), Canteen.is_active.is_(True), Canteen.campus_id == campus_id)
+    )
+    if canteen_id:
+        query = query.filter(Canteen.id == canteen_id)
+
+    rows = (
+        query.order_by(Dish.average_score.desc(), Dish.review_count.desc(), Dish.id.asc())
+        .limit(200)
+        .all()
+    )
+    dish_ids = [int(dish.id or 0) for dish, _, _, _ in rows if _safe_int(getattr(dish, 'id', 0))]
+    satisfaction_map, safety_map, diversity_map, canteen_share_map = _build_recommendation_objective_maps(campus_id, dish_ids)
+
+    scored_rows = []
+    for dish, window_name, row_canteen_id, row_canteen_name in rows:
+        tags = _safe_tag_list(dish.tags_json)
+        dish_id = int(dish.id or 0)
+        review_count = int(dish.review_count or 0)
+        avg_score = float(dish.average_score or 0)
+        score = avg_score * 8.0 + math.log1p(review_count) * 2.0
+        reasons = []
+
+        if dish_id in profile['favorite_dish_ids']:
+            score += 6.0
+            reasons.append('你收藏过')
+
+        if row_canteen_id in profile['favorite_canteen_ids']:
+            score += 2.5
+            reasons.append('你常去的食堂')
+
+        category_weight = profile['category_weights'].get((dish.category or '其他').strip(), 0.0)
+        if category_weight > 0:
+            score += category_weight * 2.0
+            reasons.append(f'偏好{dish.category or "该类"}')
+        elif category_weight < 0:
+            score += category_weight * 0.6
+
+        matched_tags = []
+        tag_boost = 0.0
+        for tag in tags:
+            tag_weight = profile['tag_weights'].get(tag, 0.0)
+            if tag_weight > 0:
+                matched_tags.append(tag)
+            tag_boost += tag_weight * 0.9
+        score += tag_boost
+        if matched_tags:
+            reasons.append('匹配' + '、'.join(matched_tags[:2]))
+
+        canteen_weight = profile['canteen_weights'].get(row_canteen_id, 0.0)
+        if canteen_weight:
+            score += canteen_weight * 1.4
+
+        if ab_variant == 'B':
+            # B组偏探索：适当提升中低曝光菜品权重，观察长期点击与复访提升。
+            explore_boost = max(0.0, 8.0 - min(float(review_count), 8.0)) * 0.35 * explore_multiplier
+            if avg_score >= 8.0:
+                explore_boost += 0.5 * explore_multiplier
+            score += explore_boost
+            if explore_boost >= 1.2:
+                reasons.append('探索新菜')
+
+        ctr_proxy = max(0.0, min(1.0, math.log1p(review_count) / math.log1p(50.0)))
+        satisfaction_score = satisfaction_map.get(dish_id, max(0.0, min(1.0, avg_score / 10.0)))
+        safety_score = safety_map.get(dish_id, satisfaction_score)
+        diversity_score = diversity_map.get(dish_id, 1.0)
+        multi_objective_score = (
+            normalized_weights['weight_ctr'] * ctr_proxy
+            + normalized_weights['weight_satisfaction'] * satisfaction_score
+            + normalized_weights['weight_safety'] * safety_score
+            + normalized_weights['weight_diversity'] * diversity_score
+        )
+        score += multi_objective_score * 8.0
+
+        canteen_share = canteen_share_map.get(int(row_canteen_id or 0), 0.0)
+        fairness_penalty = 0.0
+        if canteen_share > policy['fairness_top_share_limit']:
+            fairness_penalty = (canteen_share - policy['fairness_top_share_limit']) * 10.0 * policy['fairness_lambda']
+            score -= fairness_penalty
+            reasons.append('公平曝光校正')
+
+        if review_count == 0:
+            score += 0.4
+            reasons.append('新品尝鲜')
+        elif review_count >= 20:
+            reasons.append('热度较高')
+
+        if avg_score >= 8.5:
+            reasons.append('高分推荐')
+
+        if safety_score >= 0.85:
+            reasons.append('食安表现稳定')
+
+        if diversity_score >= 0.8:
+            reasons.append('丰富度补位')
+
+        if not reasons:
+            reasons.append('校园热门')
+
+        if len(reasons) > 3:
+            reasons = reasons[:3]
+
+        scored_rows.append(
+            {
+                'dish_id': dish_id,
+                'dish_name': dish.name,
+                'img_url': _recommendation_image_url(dish),
+                'price': float(dish.price or 0),
+                'category': dish.category or '',
+                'tags': tags,
+                'review_count': review_count,
+                'average_score': round(avg_score, 1),
+                'canteen_id': int(row_canteen_id or 0),
+                'canteen_name': row_canteen_name or '-',
+                'window_name': window_name or '-',
+                'score': round(score, 2),
+                'reasons': reasons,
+                'reason_summary': _summarize_recommendation_reasons(reasons),
+                'explanation': {
+                    'strategy': ab_strategy,
+                    'objective_components': {
+                        'ctr_proxy': round(float(ctr_proxy), 4),
+                        'satisfaction': round(float(satisfaction_score), 4),
+                        'safety': round(float(safety_score), 4),
+                        'diversity': round(float(diversity_score), 4),
+                    },
+                    'weights': {k: round(float(v), 4) for k, v in normalized_weights.items()},
+                    'fairness_penalty': round(float(fairness_penalty), 4),
+                },
+            }
+        )
+
+    scored_rows.sort(key=lambda item: (item['score'], item['average_score'], item['review_count']), reverse=True)
+
+    selected = []
+    selected_ids = set()
+    canteen_counts = {}
+    max_per_canteen = max(1, int(math.ceil(limit * max(0.05, min(0.95, float(policy['fairness_top_share_limit']))))))
+    for item in scored_rows:
+        canteen_cnt = canteen_counts.get(item['canteen_id'], 0)
+        if canteen_cnt >= max_per_canteen:
+            continue
+        selected.append(item)
+        selected_ids.add(item['dish_id'])
+        canteen_counts[item['canteen_id']] = canteen_cnt + 1
+        if len(selected) >= limit:
+            break
+
+    if len(selected) < limit:
+        for item in scored_rows:
+            if item['dish_id'] in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(item['dish_id'])
+            if len(selected) >= limit:
+                break
+
+    return api_success(
+        {
+            'list': selected[:limit],
+            'campus_id': campus_id,
+            'canteen_id': canteen_id or 0,
+            'personalized': bool(user),
+            'reason': 'personalized' if user else 'popular',
+            'ab_variant': ab_variant,
+            'ab_strategy': ab_strategy,
+            'request_id': request_id,
+            'explore_multiplier': round(float(explore_multiplier), 2),
+            'page': page,
+            'user_segment': user_segment,
+            'propensity': round(float(propensity), 4),
+            'optimize_mode': policy.get('optimize_mode', 'ab'),
+            'bandit_debug': bandit_debug,
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/public/recommendations/track', methods=['POST'])
+def public_track_recommendations():
+    _ensure_recommendation_event_table()
+    data = request.get_json(silent=True) or {}
+    event_type = (data.get('event_type') or '').strip().lower()
+    if event_type not in ('exposure', 'click'):
+        return api_error('event_type 仅支持 exposure/click')
+
+    campus_id = _safe_int(data.get('campus_id')) or _current_campus_id()
+    request_id = (data.get('request_id') or '').strip()[:64]
+    variant = (data.get('ab_variant') or 'A').strip().upper()
+    if variant not in ('A', 'B'):
+        variant = 'A'
+    strategy = (data.get('ab_strategy') or _recommendation_strategy_from_variant(variant)).strip().lower()[:30]
+    page = (data.get('page') or 'unknown').strip().lower()[:30]
+    user = _current_user()
+    user_id = int(user.id) if user else None
+    user_segment = (data.get('user_segment') or _recommendation_user_segment(user)).strip().lower()[:20] or 'anonymous'
+    if user_segment not in ('anonymous', 'new', 'returning'):
+        user_segment = 'anonymous'
+    propensity = max(0.05, min(0.95, float(_safe_number(data.get('propensity')) if _safe_number(data.get('propensity')) is not None else 0.5)))
+
+    rows = []
+    if event_type == 'exposure':
+        items = data.get('items') if isinstance(data.get('items'), list) else []
+        for idx, item in enumerate(items[:20], start=1):
+            if not isinstance(item, dict):
+                continue
+            dish_id = _safe_int(item.get('dish_id'))
+            if not dish_id:
+                continue
+            rows.append(
+                RecommendationEvent(
+                    request_id=request_id,
+                    event_type='exposure',
+                    variant=variant,
+                    strategy=strategy or 'baseline',
+                    user_id=user_id,
+                    campus_id=campus_id,
+                    canteen_id=_safe_int(item.get('canteen_id')),
+                    dish_id=dish_id,
+                    position=_safe_int(item.get('position'), idx) or idx,
+                    page=page,
+                    user_segment=user_segment,
+                    propensity=propensity,
+                )
+            )
+    else:
+        dish_id = _safe_int(data.get('dish_id'))
+        if not dish_id:
+            return api_error('click 事件缺少 dish_id')
+        click_query = RecommendationEvent.query.filter(
+            RecommendationEvent.event_type == 'click',
+            RecommendationEvent.request_id == request_id,
+            RecommendationEvent.dish_id == dish_id,
+            RecommendationEvent.page == page,
+        )
+        if user_id is None:
+            click_query = click_query.filter(RecommendationEvent.user_id.is_(None))
+        else:
+            click_query = click_query.filter(RecommendationEvent.user_id == user_id)
+        existed_click = click_query.first()
+        if existed_click:
+            return api_success({'accepted': 0, 'deduplicated': True}, msg='上报成功')
+
+        rows.append(
+            RecommendationEvent(
+                request_id=request_id,
+                event_type='click',
+                variant=variant,
+                strategy=strategy or 'baseline',
+                user_id=user_id,
+                campus_id=campus_id,
+                canteen_id=_safe_int(data.get('canteen_id')),
+                dish_id=dish_id,
+                position=_safe_int(data.get('position'), 0) or 0,
+                page=page,
+                user_segment=user_segment,
+                propensity=propensity,
+            )
+        )
+
+    if rows:
+        db.session.add_all(rows)
+        db.session.commit()
+
+    return api_success({'accepted': len(rows)}, msg='上报成功')
+
+
+@app.route('/api/admin/recommendation_ab_metrics', methods=['GET'])
+@admin_login_required
+def admin_recommendation_ab_metrics():
+    _ensure_recommendation_event_table()
+    days = max(1, min(60, _safe_int(request.args.get('days'), 7) or 7))
+    page = (request.args.get('page') or '').strip().lower()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    summary, rows = _recommendation_ab_summary(campus_id, days=days, page=page)
+    explore_multiplier = _get_recommendation_explore_multiplier(campus_id)
+    policy = _get_recommendation_ab_policy(campus_id)
+    by_variant = {item['variant']: item for item in summary}
+    significance = _recommendation_ctr_significance(
+        by_variant.get('A', {}).get('click', 0),
+        by_variant.get('A', {}).get('exposure', 0),
+        by_variant.get('B', {}).get('click', 0),
+        by_variant.get('B', {}).get('exposure', 0),
+    )
+    segmented_by_page = _recommendation_segmented_significance(rows, segment_by='page')
+    segmented_by_user = _recommendation_segmented_significance(rows, segment_by='user_segment')
+    guard_eval = _recommendation_guard_evaluation(campus_id, policy, summary, significance)
+    guard_streak, _ = _recommendation_guard_streak(campus_id)
+
+    return api_success(
+        {
+            'campus_id': campus_id,
+            'days': days,
+            'page': page or 'all',
+            'summary': summary,
+            'total_events': len(rows),
+            'explore_multiplier': round(float(explore_multiplier), 2),
+            'policy': policy,
+            'significance': significance,
+            'segments': {
+                'page': segmented_by_page,
+                'user_segment': segmented_by_user,
+            },
+            'guard': {
+                **guard_eval,
+                'consecutive_degrade': guard_streak,
+                'consecutive_limit': int(policy.get('guard_consecutive_limit', 2) or 2),
+            },
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/recommendation_ab_segments', methods=['GET'])
+@admin_login_required
+def admin_recommendation_ab_segments():
+    _ensure_recommendation_event_table()
+    days = max(1, min(60, _safe_int(request.args.get('days'), 7) or 7))
+    page = (request.args.get('page') or '').strip().lower()
+    segment_by = (request.args.get('segment_by') or 'page').strip().lower()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    _, rows = _recommendation_ab_summary(campus_id, days=days, page=page)
+    segments = _recommendation_segmented_significance(rows, segment_by=segment_by)
+    return api_success({'campus_id': campus_id, 'days': days, 'page': page or 'all', 'segment_by': segment_by, 'list': segments}, msg='查询成功')
+
+
+@app.route('/api/admin/recommendation_counterfactual_eval', methods=['GET'])
+@admin_login_required
+def admin_recommendation_counterfactual_eval():
+    _ensure_recommendation_event_table()
+    days = max(1, min(60, _safe_int(request.args.get('days'), 7) or 7))
+    page = (request.args.get('page') or '').strip().lower()
+    target_strategy = (request.args.get('target_strategy') or 'explore').strip().lower()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    result = _recommendation_counterfactual_ips_dr(campus_id, days=days, page=page, target_strategy=target_strategy)
+    return api_success({'campus_id': campus_id, 'days': days, 'page': page or 'all', **result}, msg='查询成功')
+
+
+@app.route('/api/admin/recommendation_ab_report', methods=['GET'])
+@admin_login_required
+def admin_recommendation_ab_report():
+    _ensure_recommendation_event_table()
+    days = max(1, min(60, _safe_int(request.args.get('days'), 7) or 7))
+    page = (request.args.get('page') or '').strip().lower()
+    export_format = (request.args.get('format') or 'json').strip().lower()
+    campus_id = _safe_int(request.args.get('campus_id')) or _current_campus_id()
+    report = _build_recommendation_ab_report(campus_id, days=days, page=page)
+
+    filename_base = f"recommendation_ab_report_c{campus_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    if export_format == 'md':
+        markdown = _recommendation_report_to_markdown(report)
+        return Response(
+            markdown,
+            mimetype='text/markdown; charset=utf-8',
+            headers={'Content-Disposition': f'attachment; filename={filename_base}.md'},
+        )
+    if export_format == 'csv':
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['campus_id', 'days', 'page', 'variant', 'exposure', 'click', 'ctr'])
+        for row in report.get('summary', []):
+            writer.writerow([
+                report.get('meta', {}).get('campus_id', 0),
+                report.get('meta', {}).get('days', 7),
+                report.get('meta', {}).get('page', 'all'),
+                row.get('variant', '-'),
+                row.get('exposure', 0),
+                row.get('click', 0),
+                row.get('ctr', 0.0),
+            ])
+        writer.writerow([])
+        writer.writerow(['segment_by_page', 'segment', 'a_exposure', 'a_click', 'a_ctr', 'b_exposure', 'b_click', 'b_ctr', 'p_value'])
+        for row in report.get('segmented', {}).get('page', []):
+            writer.writerow([
+                'page',
+                row.get('segment', 'unknown'),
+                row.get('variant_a', {}).get('exposure', 0),
+                row.get('variant_a', {}).get('click', 0),
+                row.get('variant_a', {}).get('ctr', 0.0),
+                row.get('variant_b', {}).get('exposure', 0),
+                row.get('variant_b', {}).get('click', 0),
+                row.get('variant_b', {}).get('ctr', 0.0),
+                row.get('significance', {}).get('p_value', 1.0),
+            ])
+        response = Response(output.getvalue(), mimetype='text/csv; charset=utf-8')
+        response.headers['Content-Disposition'] = f'attachment; filename={filename_base}.csv'
+        return response
+
+    return api_success(report, msg='查询成功')
+
+
+@app.route('/api/admin/recommendation_guard_check', methods=['POST'])
+@admin_login_required
+def admin_recommendation_guard_check():
+    _ensure_recommendation_tuning_log_table()
+    data = request.get_json(silent=True) or {}
+    requested_campus_id = _safe_int(data.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+    campus_id = scoped_campus_id or _current_campus_id()
+    days = max(1, min(60, _safe_int(data.get('days'), 7) or 7))
+    page = (data.get('page') or '').strip().lower()
+
+    summary, _ = _recommendation_ab_summary(campus_id, days=days, page=page)
+    by_variant = {item['variant']: item for item in summary}
+    significance = _recommendation_ctr_significance(
+        by_variant.get('A', {}).get('click', 0),
+        by_variant.get('A', {}).get('exposure', 0),
+        by_variant.get('B', {}).get('click', 0),
+        by_variant.get('B', {}).get('exposure', 0),
+    )
+    policy = _get_recommendation_ab_policy(campus_id)
+    guard_eval = _recommendation_guard_evaluation(campus_id, policy, summary, significance)
+    streak, oldest = _recommendation_guard_streak(campus_id)
+
+    triggered = False
+    restored_multiplier = _get_recommendation_explore_multiplier(campus_id)
+    detail_msg = '未触发保护回滚'
+    if bool(policy.get('guard_enabled')) and guard_eval['degrade'] and streak >= int(policy.get('guard_consecutive_limit', 2) or 2):
+        actor = _current_user()
+        restore_to = oldest.before_multiplier if oldest else restored_multiplier
+        restored_multiplier = _set_recommendation_explore_multiplier(
+            campus_id,
+            restore_to,
+            actor_id=actor.id if actor else None,
+            note=f'guard_rollback: 连续{streak}次显著劣化触发保护回滚',
+            trigger_type='guard_rollback',
+        )
+        triggered = True
+        detail_msg = f'已触发保护回滚，恢复探索系数到 {restored_multiplier:.2f}'
+
+    return api_success(
+        {
+            'campus_id': campus_id,
+            'days': days,
+            'page': page or 'all',
+            'triggered': triggered,
+            'restored_multiplier': round(float(restored_multiplier), 2),
+            'guard': {
+                **guard_eval,
+                'consecutive_degrade': streak,
+                'consecutive_limit': int(policy.get('guard_consecutive_limit', 2) or 2),
+                'enabled': bool(policy.get('guard_enabled')),
+            },
+            'summary': summary,
+            'significance': significance,
+            'policy': policy,
+            'message': detail_msg,
+        },
+        msg='检测完成',
+    )
+
+
+@app.route('/api/admin/recommendation_ab_tune', methods=['POST'])
+@admin_login_required
+def admin_recommendation_ab_tune():
+    _ensure_recommendation_tuning_table()
+    data = request.get_json(silent=True) or {}
+    requested_campus_id = _safe_int(data.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+
+    campus_id = scoped_campus_id or _current_campus_id()
+    days = max(1, min(60, _safe_int(data.get('days'), 7) or 7))
+    policy = _get_recommendation_ab_policy(campus_id)
+    min_exposure = max(10, min(500, _safe_int(data.get('min_exposure'), policy['min_exposure']) or policy['min_exposure']))
+    page = (data.get('page') or '').strip().lower()
+
+    summary, _ = _recommendation_ab_summary(campus_id, days=days, page=page)
+    by_variant = {item['variant']: item for item in summary}
+    a_row = by_variant.get('A', {'exposure': 0, 'ctr': 0.0})
+    b_row = by_variant.get('B', {'exposure': 0, 'ctr': 0.0})
+    significance = _recommendation_ctr_significance(
+        by_variant.get('A', {}).get('click', 0),
+        by_variant.get('A', {}).get('exposure', 0),
+        by_variant.get('B', {}).get('click', 0),
+        by_variant.get('B', {}).get('exposure', 0),
+    )
+    guard_eval = _recommendation_guard_evaluation(campus_id, policy, summary, significance)
+
+    current_multiplier = _get_recommendation_explore_multiplier(campus_id)
+    next_multiplier = current_multiplier
+    reason = '样本不足，维持当前探索强度'
+
+    if int(b_row.get('exposure', 0) or 0) < min_exposure:
+        next_multiplier = min(policy['max_multiplier'], current_multiplier + policy['step_down'])
+        reason = f'B组曝光不足({b_row.get("exposure", 0)}<{min_exposure})，提高探索强度收集样本'
+    else:
+        delta_ctr = float(b_row.get('ctr', 0.0) or 0.0) - float(a_row.get('ctr', 0.0) or 0.0)
+        if delta_ctr <= -policy['ctr_delta_threshold']:
+            next_multiplier = max(policy['min_multiplier'], current_multiplier - policy['step_down'])
+            reason = f'B组CTR低于A组({delta_ctr:.2f}%)，降低探索强度'
+        elif delta_ctr >= policy['ctr_delta_threshold']:
+            next_multiplier = min(policy['max_multiplier'], current_multiplier + policy['step_up'])
+            reason = f'B组CTR高于A组({delta_ctr:.2f}%)，适度提高探索强度'
+        else:
+            reason = f'A/B CTR差异较小({delta_ctr:.2f}%)，维持当前探索强度'
+
+    actor = _current_user()
+    guard_tag = '[guard_degrade=1]' if guard_eval['degrade'] else '[guard_degrade=0]'
+    saved_multiplier = _set_recommendation_explore_multiplier(
+        campus_id,
+        next_multiplier,
+        actor_id=actor.id if actor else None,
+        note=f'auto_tune: {reason} {guard_tag}',
+        trigger_type='auto',
+    )
+
+    streak, oldest = _recommendation_guard_streak(campus_id)
+    guard_triggered = False
+    guard_restore_to = None
+    if bool(policy.get('guard_enabled')) and guard_eval['degrade'] and streak >= int(policy.get('guard_consecutive_limit', 2) or 2):
+        guard_restore_to = oldest.before_multiplier if oldest else current_multiplier
+        saved_multiplier = _set_recommendation_explore_multiplier(
+            campus_id,
+            guard_restore_to,
+            actor_id=actor.id if actor else None,
+            note=f'guard_rollback(auto): 连续{streak}次显著劣化触发保护回滚',
+            trigger_type='guard_rollback',
+        )
+        guard_triggered = True
+
+    return api_success(
+        {
+            'campus_id': campus_id,
+            'days': days,
+            'page': page or 'all',
+            'min_exposure': min_exposure,
+            'before_multiplier': round(float(current_multiplier), 2),
+            'after_multiplier': round(float(saved_multiplier), 2),
+            'summary': summary,
+            'reason': reason,
+            'policy': policy,
+            'significance': significance,
+            'guard': {
+                **guard_eval,
+                'consecutive_degrade': streak,
+                'consecutive_limit': int(policy.get('guard_consecutive_limit', 2) or 2),
+                'triggered': guard_triggered,
+            },
+        },
+        msg='调参完成',
+    )
+
+
+@app.route('/api/admin/recommendation_ab_tune_logs', methods=['GET'])
+@admin_login_required
+def admin_recommendation_ab_tune_logs():
+    _ensure_recommendation_tuning_log_table()
+    requested_campus_id = _safe_int(request.args.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+    campus_id = scoped_campus_id or _current_campus_id()
+    limit = max(5, min(100, _safe_int(request.args.get('limit'), 20) or 20))
+
+    rows = (
+        RecommendationAbTuningLog.query.filter(RecommendationAbTuningLog.campus_id == campus_id)
+        .order_by(RecommendationAbTuningLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return api_success({'campus_id': campus_id, 'list': [_serialize_recommendation_tuning_log(row) for row in rows]}, msg='查询成功')
+
+
+@app.route('/api/admin/recommendation_ab_policy', methods=['GET'])
+@admin_login_required
+def admin_get_recommendation_ab_policy():
+    requested_campus_id = _safe_int(request.args.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+    campus_id = scoped_campus_id or _current_campus_id()
+    return api_success({'campus_id': campus_id, 'policy': _get_recommendation_ab_policy(campus_id)}, msg='查询成功')
+
+
+@app.route('/api/admin/recommendation_ab_policy', methods=['POST'])
+@admin_login_required
+def admin_update_recommendation_ab_policy():
+    data = request.get_json(silent=True) or {}
+    requested_campus_id = _safe_int(data.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+    campus_id = scoped_campus_id or _current_campus_id()
+    actor = _current_user()
+    old_policy, new_policy = _set_recommendation_ab_policy(campus_id, data, actor_id=actor.id if actor else None)
+    return api_success({'campus_id': campus_id, 'before_policy': old_policy, 'policy': new_policy}, msg='更新成功')
+
+
+@app.route('/api/admin/recommendation_ab_tune_rollback', methods=['POST'])
+@admin_login_required
+def admin_recommendation_ab_tune_rollback():
+    _ensure_recommendation_tuning_log_table()
+    data = request.get_json(silent=True) or {}
+    requested_campus_id = _safe_int(data.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+    campus_id = scoped_campus_id or _current_campus_id()
+
+    latest_row = (
+        RecommendationAbTuningLog.query.filter(RecommendationAbTuningLog.campus_id == campus_id)
+        .order_by(RecommendationAbTuningLog.id.desc())
+        .first()
+    )
+    if not latest_row:
+        return api_error('暂无可回滚记录')
+
+    actor = _current_user()
+    restored = _set_recommendation_explore_multiplier(
+        campus_id,
+        latest_row.before_multiplier,
+        actor_id=actor.id if actor else None,
+        note=f'rollback: 回滚到日志#{latest_row.id}前值',
+        trigger_type='rollback',
+    )
+    return api_success(
+        {
+            'campus_id': campus_id,
+            'rolled_back_log_id': int(latest_row.id or 0),
+            'restored_multiplier': round(float(restored), 2),
+        },
+        msg='回滚成功',
+    )
 
 @app.route('/api/submit_evaluation', methods=['POST'])
 @login_required()
@@ -2245,195 +5094,18 @@ def submit_evaluation_alias():
 
 def _submit_evaluation(enforce_repeat_guard=True):
     try:
-        data = request.get_json(silent=True) or {}
-
-        # 1. 基础校验
-        # 注意：前端传过来的字段名可能与数据库模型不完全一致，需在此处映射
-        user_id = session.get('user_id')
-        canteen_id = _safe_int(data.get('canteen_id'))
-        window_id = _safe_int(data.get('window_id'))
-        buy_time_str = data.get('buy_time')
-        identity_type = (data.get('identity_type') or '').strip() or 'student'
-
-        if not buy_time_str:
-            buy_time_str = datetime.now().strftime('%Y-%m-%dT%H:%M')
-
-        if not all([canteen_id, window_id, buy_time_str]):
-            return api_error('缺少必填字段')
-
-        # 校验：至少选1个菜品
-        dishes = data.get('dishes', [])
-        if (not dishes) and _safe_int(data.get('dish_id')):
-            dishes = [
-                {
-                    'dish_id': _safe_int(data.get('dish_id')),
-                    'dish_name': data.get('dish_name') or '',
-                    'food_scores': _safe_scores(data.get('food_scores', {})),
-                    'remark': data.get('remark') or '',
-                    'images': _normalize_images(data.get('images')),
-                }
-            ]
-
-        normalized_dishes = []
-        for raw_item in dishes:
-            normalized = _normalize_dish_payload(raw_item)
-            if normalized and (normalized['dish_id'] or normalized['dish_name']):
-                normalized_dishes.append(normalized)
-
-        dishes = normalized_dishes
-        if not dishes:
-            return api_error('请至少选择一个菜品')
-            
-        # 2. 数据入库
-        try:
-            buy_time = datetime.strptime(buy_time_str, '%Y-%m-%dT%H:%M')
-        except ValueError:
-            return api_error('时间格式错误')
-
-        now = datetime.now()
+        payload = request.get_json(silent=True) or {}
+        result, api_err = _create_evaluation_from_payload(payload, session.get('user_id'), enforce_repeat_guard=enforce_repeat_guard)
+        if api_err:
+            return api_err
         if enforce_repeat_guard:
-            cfg = _get_or_create_system_config()
-            guard_seconds = max(1, int(cfg.repeat_submit_minutes or 1)) * 60
-            allow_submit, retry_after = _acquire_submit_slot(user_id, window_id, now, guard_seconds)
-            if not allow_submit:
-                db.session.commit()
-                app.logger.warning(
-                    'submit_blocked user_id=%s window_id=%s retry_after=%s',
-                    user_id,
-                    window_id,
-                    retry_after,
-                )
-                return api_error(
-                    f'提交过于频繁，请{retry_after}秒后再试',
-                    code=429,
-                    http_status=429,
-                    data={},
-                )
-
-        # 提取评分 JSON，并将图文拆分到独立列
-        env_scores = _extract_score_pack(data, 'env', ['clean', 'air', 'hygiene'])
-        service_scores = _extract_score_pack(data, 'service', ['attitude', 'speed', 'dress'])
-        safety_scores = _extract_score_pack(data, 'safety', ['fresh', 'info'])
-        service_comment = (data.get('service_comment') or '').strip()
-        service_images = _normalize_images(data.get('service_images'))
-        env_comment = (data.get('env_comment') or '').strip()
-        env_images = _normalize_images(data.get('env_images'))
-        safety_comment = (data.get('safety_comment') or '').strip()
-        safety_images = _normalize_images(data.get('safety_images'))
-        images = data.get('images', [])
-        remark = data.get('remark', '')
-        comprehensive_score = _calc_comprehensive_score(dishes, env_scores, service_scores, safety_scores)
-
-        # 创建评价主表
-        eval_main = EvaluationMain(
-            user_id=user_id,
-            canteen_id=canteen_id,
-            window_id=window_id,
-            buy_time=buy_time,
-            identity_type=identity_type,
-            grade=data.get('grade'),
-            age=data.get('age'),
-            dining_years=data.get('dining_years'),
-            env_scores=env_scores,
-            service_scores=service_scores,
-            safety_scores=safety_scores,
-            service_comment=service_comment,
-            service_images=service_images,
-            env_comment=env_comment,
-            env_images=env_images,
-            safety_comment=safety_comment,
-            safety_images=safety_images,
-            comprehensive_score=comprehensive_score,
-            images=images,
-            remark=remark
-        )
-        db.session.add(eval_main)
-        db.session.flush() # 获取ID
-
-        db.session.execute(
-            text(
-                '''
-                CREATE TABLE IF NOT EXISTS evaluations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    evaluation_main_id INTEGER,
-                    user_id INTEGER,
-                    canteen_id INTEGER,
-                    window_id INTEGER,
-                    dish_id INTEGER,
-                    score FLOAT DEFAULT 0,
-                    remark TEXT,
-                    images TEXT,
-                    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-                '''
+            app.logger.info(
+                'submit_success user_id=%s window_id=%s evaluation_id=%s',
+                session.get('user_id'),
+                _safe_int(payload.get('window_id')),
+                result.get('evaluation_id'),
             )
-        )
-        eval_cols = {
-            row[1]
-            for row in db.session.execute(text('PRAGMA table_info(evaluations)')).fetchall()
-        }
-        for col_name, sql in {
-            'canteen_id': 'ALTER TABLE evaluations ADD COLUMN canteen_id INTEGER',
-            'window_id': 'ALTER TABLE evaluations ADD COLUMN window_id INTEGER',
-            'dish_id': 'ALTER TABLE evaluations ADD COLUMN dish_id INTEGER',
-        }.items():
-            if col_name not in eval_cols:
-                db.session.execute(text(sql))
-        
-        # 创建评价-菜品关联表
-        for d in dishes:
-            dish_id = _safe_int(d.get('dish_id'), 0) or 0
-            dish_name = (d.get('dish_name') or '').strip()
-            dish_obj = db.session.get(Dish, dish_id) if dish_id else None
-            if not dish_name and dish_obj:
-                dish_name = dish_obj.name
-
-            eval_dish = EvaluationDish(
-                evaluation_id=eval_main.id,
-                dish_id=dish_id, # 0为自定义
-                dish_name=dish_name or '未命名菜品',
-                # dish_img_url 暂不处理
-                food_scores=_safe_scores(d.get('food_scores', {})),
-                remark=(d.get('remark') or '').strip()
-            )
-            db.session.add(eval_dish)
-
-            dish = dish_obj
-            if dish:
-                dish.review_count = (dish.review_count or 0) + 1
-
-            db.session.execute(
-                text(
-                    '''
-                    INSERT INTO evaluations(
-                        evaluation_main_id, user_id, canteen_id, window_id, dish_id, score, remark, images, create_time
-                    ) VALUES (
-                        :evaluation_main_id, :user_id, :canteen_id, :window_id, :dish_id, :score, :remark, :images, :create_time
-                    )
-                    '''
-                ),
-                {
-                    'evaluation_main_id': eval_main.id,
-                    'user_id': user_id,
-                    'canteen_id': canteen_id,
-                    'window_id': window_id,
-                    'dish_id': dish_id,
-                    'score': comprehensive_score,
-                    'remark': (d.get('remark') or '').strip() or remark,
-                    'images': json.dumps(d.get('images') or [], ensure_ascii=False),
-                    'create_time': now.strftime('%Y-%m-%d %H:%M:%S'),
-                },
-            )
-                
-        db.session.commit()
-        try:
-            _trigger_bad_review_notifications(eval_main.id)
-        except Exception as notify_exc:
-            db.session.rollback()
-            app.logger.warning('bad_review_notification_failed evaluation_id=%s err=%s', eval_main.id, notify_exc)
-        if enforce_repeat_guard:
-            app.logger.info('submit_success user_id=%s window_id=%s evaluation_id=%s', user_id, window_id, eval_main.id)
-        return api_success({'evaluation_id': eval_main.id, 'comprehensive_score': comprehensive_score}, msg='评价提交成功')
+        return api_success(result, msg='评价提交成功')
 
     except Exception as e:
         db.session.rollback()
@@ -2452,6 +5124,603 @@ def submit_evaluation_compat():
     return _submit_evaluation(enforce_repeat_guard=True)
 
 
+def _serialize_guest_submission(row):
+    canteen = db.session.get(Canteen, row.canteen_id) if row.canteen_id else None
+    window = db.session.get(Window, row.window_id) if row.window_id else None
+    reviewer = db.session.get(User, row.reviewed_by) if row.reviewed_by else None
+    return {
+        'id': row.id,
+        'canteen_id': int(row.canteen_id or 0),
+        'canteen_name': canteen.name if canteen else '-',
+        'window_id': int(row.window_id or 0),
+        'window_name': window.name if window else '-',
+        'identity_type': row.identity_type or 'visitor',
+        'comprehensive_score': float(row.comprehensive_score or 0),
+        'remark': row.remark or '',
+        'dishes': row.dishes_json if isinstance(row.dishes_json, list) else [],
+        'status': row.status,
+        'reject_reason': row.reject_reason or '',
+        'template_version': _safe_int(row.template_version),
+        'reviewed_by': reviewer.username if reviewer else '',
+        'reviewed_time': row.reviewed_time.strftime('%Y-%m-%d %H:%M:%S') if row.reviewed_time else '',
+        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+    }
+
+
+@app.route('/api/guest/evaluations', methods=['POST'])
+def guest_submit_evaluation():
+    payload = request.get_json(silent=True) or {}
+    identity_type = (payload.get('identity_type') or '').strip().lower()
+    if identity_type and identity_type not in ('visitor', 'guest'):
+        return api_error('游客模式仅支持 visitor 身份')
+
+    client_ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
+    if _guest_guard_blocked(client_ip, seconds=45):
+        return api_error('游客提交过于频繁，请稍后重试', code=429, http_status=429)
+
+    data = payload.copy() if isinstance(payload, dict) else {}
+    data['identity_type'] = 'visitor'
+    canteen_id = _safe_int(data.get('canteen_id'))
+    window_id = _safe_int(data.get('window_id'))
+    if not canteen_id or not window_id:
+        return api_error('缺少必填字段')
+    buy_time_str = data.get('buy_time') or datetime.now().strftime('%Y-%m-%dT%H:%M')
+    try:
+        buy_time = datetime.strptime(buy_time_str, '%Y-%m-%dT%H:%M')
+    except ValueError:
+        return api_error('时间格式错误')
+
+    dishes = data.get('dishes', [])
+    normalized_dishes = []
+    for raw_item in dishes:
+        normalized = _normalize_dish_payload(raw_item)
+        if normalized and (normalized['dish_id'] or normalized['dish_name']):
+            normalized_dishes.append(normalized)
+    if not normalized_dishes:
+        return api_error('请至少选择一个菜品')
+
+    env_scores = _extract_score_pack(data, 'env', ['clean', 'air', 'hygiene'])
+    service_scores = _extract_score_pack(data, 'service', ['attitude', 'speed', 'dress'])
+    safety_scores = _extract_score_pack(data, 'safety', ['fresh', 'info'])
+    score = _calc_comprehensive_score(normalized_dishes, env_scores, service_scores, safety_scores)
+
+    row = GuestEvaluationSubmission(
+        canteen_id=canteen_id,
+        window_id=window_id,
+        buy_time=buy_time,
+        identity_type='visitor',
+        grade=data.get('grade'),
+        age=_safe_int(data.get('age')),
+        dining_years=_safe_int(data.get('dining_years')),
+        env_scores=env_scores,
+        service_scores=service_scores,
+        safety_scores=safety_scores,
+        service_comment=(data.get('service_comment') or '').strip(),
+        service_images=_normalize_images(data.get('service_images')),
+        env_comment=(data.get('env_comment') or '').strip(),
+        env_images=_normalize_images(data.get('env_images')),
+        safety_comment=(data.get('safety_comment') or '').strip(),
+        safety_images=_normalize_images(data.get('safety_images')),
+        comprehensive_score=score,
+        images=_normalize_images(data.get('images')),
+        remark=(data.get('remark') or '').strip(),
+        dishes_json=normalized_dishes,
+        template_version=_safe_int(data.get('template_version')) or _active_template_id(),
+        status='pending',
+        submit_ip=client_ip,
+        user_agent=(request.headers.get('User-Agent') or '')[:255],
+    )
+    db.session.add(row)
+    db.session.commit()
+    return api_success({'id': row.id, 'status': row.status}, msg='游客评价已提交，待管理员审核后生效')
+
+
+@app.route('/api/guest/evaluations/<int:submission_id>/status', methods=['GET'])
+def guest_evaluation_status(submission_id):
+    row = db.session.get(GuestEvaluationSubmission, submission_id)
+    if not row:
+        return api_error('记录不存在', code=404, http_status=404)
+
+    client_ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
+    if (row.submit_ip or '').strip() and client_ip != (row.submit_ip or '').strip():
+        return api_error('无权查看该记录', code=403, http_status=403)
+
+    return api_success(
+        {
+            'id': row.id,
+            'status': row.status,
+            'reject_reason': row.reject_reason or '',
+            'reviewed_time': row.reviewed_time.strftime('%Y-%m-%d %H:%M:%S') if row.reviewed_time else '',
+            'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/guest_evaluations', methods=['GET'])
+@admin_login_required
+def admin_get_guest_evaluations():
+    status = (request.args.get('status') or 'pending').strip().lower()
+    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
+    limit = max(1, min(50, _safe_int(request.args.get('limit'), 10) or 10))
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    query = GuestEvaluationSubmission.query
+    if status in ('pending', 'approved', 'rejected'):
+        query = query.filter(GuestEvaluationSubmission.status == status)
+    if scoped_canteen_id:
+        query = query.filter(GuestEvaluationSubmission.canteen_id == scoped_canteen_id)
+
+    total = query.count()
+    rows = query.order_by(GuestEvaluationSubmission.create_time.desc()).offset((page - 1) * limit).limit(limit).all()
+    return api_success(
+        {
+            'list': [_serialize_guest_submission(row) for row in rows],
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': math.ceil(total / limit) if total else 0,
+        },
+        msg='查询成功',
+    )
+
+
+def _guest_submission_to_payload(row):
+    return {
+        'canteen_id': row.canteen_id,
+        'window_id': row.window_id,
+        'buy_time': row.buy_time.strftime('%Y-%m-%dT%H:%M') if row.buy_time else datetime.now().strftime('%Y-%m-%dT%H:%M'),
+        'identity_type': 'visitor',
+        'grade': row.grade,
+        'age': row.age,
+        'dining_years': row.dining_years,
+        'env_scores': row.env_scores if isinstance(row.env_scores, dict) else {},
+        'service_scores': row.service_scores if isinstance(row.service_scores, dict) else {},
+        'safety_scores': row.safety_scores if isinstance(row.safety_scores, dict) else {},
+        'service_comment': row.service_comment or '',
+        'service_images': row.service_images if isinstance(row.service_images, list) else [],
+        'env_comment': row.env_comment or '',
+        'env_images': row.env_images if isinstance(row.env_images, list) else [],
+        'safety_comment': row.safety_comment or '',
+        'safety_images': row.safety_images if isinstance(row.safety_images, list) else [],
+        'images': row.images if isinstance(row.images, list) else [],
+        'remark': row.remark or '',
+        'dishes': row.dishes_json if isinstance(row.dishes_json, list) else [],
+        'template_version': _safe_int(row.template_version),
+    }
+
+
+def _approve_guest_submission(row, reviewer_id):
+    guest_user = _get_or_create_guest_shadow_user()
+    result, api_err = _create_evaluation_from_payload(_guest_submission_to_payload(row), guest_user.id, enforce_repeat_guard=False)
+    if api_err:
+        return None, api_err
+
+    row.status = 'approved'
+    row.reviewed_by = reviewer_id
+    row.reviewed_time = datetime.now()
+    row.reject_reason = ''
+    _audit_log(
+        'guest_evaluation_approve',
+        target_type='guest_submission',
+        target_id=row.id,
+        detail={'canteen_id': row.canteen_id, 'window_id': row.window_id, 'evaluation_id': result.get('evaluation_id')},
+    )
+    db.session.commit()
+    return result, None
+
+
+def _reject_guest_submission(row, reviewer_id, reason):
+    row.status = 'rejected'
+    row.reject_reason = (reason or '内容不符合发布要求').strip()[:255]
+    row.reviewed_by = reviewer_id
+    row.reviewed_time = datetime.now()
+    _audit_log(
+        'guest_evaluation_reject',
+        target_type='guest_submission',
+        target_id=row.id,
+        detail={'canteen_id': row.canteen_id, 'window_id': row.window_id, 'reason': row.reject_reason},
+    )
+    db.session.commit()
+
+
+@app.route('/api/admin/guest_evaluations/<int:submission_id>/approve', methods=['POST'])
+@admin_login_required
+def admin_approve_guest_evaluation(submission_id):
+    row = db.session.get(GuestEvaluationSubmission, submission_id)
+    if not row:
+        return api_error('游客评价不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.canteen_id)
+    if access_error:
+        return access_error
+    if row.status != 'pending':
+        return api_error('该记录已审核，无需重复操作')
+
+    result, api_err = _approve_guest_submission(row, session.get('user_id'))
+    if api_err:
+        return api_err
+    return api_success({'submission_id': row.id, 'evaluation_id': result.get('evaluation_id')}, msg='审核通过并已入库')
+
+
+@app.route('/api/admin/guest_evaluations/<int:submission_id>/reject', methods=['POST'])
+@admin_login_required
+def admin_reject_guest_evaluation(submission_id):
+    row = db.session.get(GuestEvaluationSubmission, submission_id)
+    if not row:
+        return api_error('游客评价不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.canteen_id)
+    if access_error:
+        return access_error
+    if row.status != 'pending':
+        return api_error('该记录已审核，无需重复操作')
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '内容不符合发布要求').strip()
+    _reject_guest_submission(row, session.get('user_id'), reason)
+    return api_success({'submission_id': row.id, 'status': row.status}, msg='已驳回')
+
+
+@app.route('/api/admin/guest_evaluations/batch_review', methods=['POST'])
+@admin_login_required
+def admin_batch_review_guest_evaluations():
+    data = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip().lower()
+    if action not in ('approve', 'reject'):
+        return api_error('批量操作类型无效')
+
+    raw_ids = data.get('ids') if isinstance(data.get('ids'), list) else []
+    ids = []
+    for item in raw_ids:
+        val = _safe_int(item)
+        if val and val not in ids:
+            ids.append(val)
+    if not ids:
+        return api_error('请至少选择一条记录')
+    if len(ids) > 100:
+        return api_error('单次最多处理100条记录')
+
+    reviewer_id = session.get('user_id')
+    reason = (data.get('reason') or '内容不符合发布要求').strip()
+    processed = []
+    skipped = []
+    created_eval_ids = []
+
+    for submission_id in ids:
+        row = db.session.get(GuestEvaluationSubmission, submission_id)
+        if not row:
+            skipped.append({'id': submission_id, 'reason': '记录不存在'})
+            continue
+        if row.status != 'pending':
+            skipped.append({'id': submission_id, 'reason': '已审核'})
+            continue
+        access_error = _ensure_resource_canteen_access(row.canteen_id)
+        if access_error:
+            skipped.append({'id': submission_id, 'reason': '无该食堂权限'})
+            continue
+
+        if action == 'approve':
+            result, api_err = _approve_guest_submission(row, reviewer_id)
+            if api_err:
+                db.session.rollback()
+                skipped.append({'id': submission_id, 'reason': api_err.get_json().get('msg', '入库失败')})
+                continue
+            if result and _safe_int(result.get('evaluation_id')):
+                created_eval_ids.append(int(result.get('evaluation_id')))
+            processed.append({'id': submission_id, 'status': 'approved'})
+        else:
+            _reject_guest_submission(row, reviewer_id, reason)
+            processed.append({'id': submission_id, 'status': 'rejected'})
+
+    _audit_log(
+        'guest_evaluation_batch_review',
+        target_type='guest_submission',
+        detail={
+            'action': action,
+            'requested_count': len(ids),
+            'processed_count': len(processed),
+            'skipped_count': len(skipped),
+        },
+    )
+    db.session.commit()
+
+    return api_success(
+        {
+            'action': action,
+            'processed_count': len(processed),
+            'skipped_count': len(skipped),
+            'processed': processed,
+            'skipped': skipped,
+            'created_evaluation_ids': created_eval_ids,
+        },
+        msg='批量审核完成',
+    )
+
+
+@app.route('/api/evaluation/template/current', methods=['GET'])
+def get_current_evaluation_template():
+    version = _ensure_default_template()
+    return api_success(_serialize_template(version), msg='查询成功')
+
+
+@app.route('/api/admin/evaluation_templates', methods=['GET'])
+@admin_login_required
+def admin_get_evaluation_templates():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    rows = EvaluationTemplateVersion.query.order_by(EvaluationTemplateVersion.version_no.desc()).all()
+    data = [_serialize_template(row) for row in rows]
+    return api_success({'list': data, 'total': len(data)}, msg='查询成功')
+
+
+@app.route('/api/admin/evaluation_templates', methods=['POST'])
+@admin_login_required
+def admin_create_evaluation_template():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip() or f"评价模板 {datetime.now().strftime('%Y%m%d%H%M')}"
+    items = data.get('items') if isinstance(data.get('items'), list) else []
+
+    max_version = db.session.query(func.max(EvaluationTemplateVersion.version_no)).scalar() or 0
+    version = EvaluationTemplateVersion(
+        version_no=int(max_version) + 1,
+        name=name[:100],
+        status='draft',
+        created_by=session.get('user_id'),
+    )
+    db.session.add(version)
+    db.session.flush()
+
+    if not items:
+        active = EvaluationTemplateVersion.query.filter_by(status='active').order_by(EvaluationTemplateVersion.version_no.desc()).first()
+        if active:
+            base_items = EvaluationTemplateItem.query.filter_by(version_id=active.id).all()
+            for item in base_items:
+                db.session.add(
+                    EvaluationTemplateItem(
+                        version_id=version.id,
+                        category=item.category,
+                        item_key=item.item_key,
+                        item_label=item.item_label,
+                        sort_order=item.sort_order,
+                        score_min=item.score_min,
+                        score_max=item.score_max,
+                        enabled=item.enabled,
+                    )
+                )
+        else:
+            for item in _template_default_items():
+                db.session.add(
+                    EvaluationTemplateItem(
+                        version_id=version.id,
+                        category=item['category'],
+                        item_key=item['item_key'],
+                        item_label=item['item_label'],
+                        sort_order=item['sort_order'],
+                        score_min=1,
+                        score_max=10,
+                        enabled=True,
+                    )
+                )
+    else:
+        for idx, item in enumerate(items, start=1):
+            category = (item.get('category') or '').strip().lower()
+            item_key = (item.get('item_key') or '').strip()
+            item_label = (item.get('item_label') or '').strip()
+            if category not in ('food', 'service', 'env', 'safety') or not item_key or not item_label:
+                continue
+            db.session.add(
+                EvaluationTemplateItem(
+                    version_id=version.id,
+                    category=category,
+                    item_key=item_key[:60],
+                    item_label=item_label[:120],
+                    sort_order=_safe_int(item.get('sort_order'), idx) or idx,
+                    score_min=_to_int(item.get('score_min'), 1, 0, 100),
+                    score_max=_to_int(item.get('score_max'), 10, 1, 100),
+                    enabled=_to_bool(item.get('enabled'), True),
+                )
+            )
+
+    _audit_log(
+        'template_create',
+        target_type='evaluation_template',
+        target_id=version.id,
+        detail={'version_no': version.version_no, 'item_count': len(items) if items else 0, 'status': 'draft'},
+    )
+    db.session.commit()
+    return api_success(_serialize_template(version), msg='创建成功')
+
+
+@app.route('/api/admin/evaluation_templates/<int:version_id>/publish', methods=['POST'])
+@admin_login_required
+def admin_publish_evaluation_template(version_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    target = db.session.get(EvaluationTemplateVersion, version_id)
+    if not target:
+        return api_error('模板版本不存在', code=404, http_status=404)
+
+    if not EvaluationTemplateItem.query.filter_by(version_id=target.id).first():
+        return api_error('模板细项不能为空')
+
+    EvaluationTemplateVersion.query.update({EvaluationTemplateVersion.status: 'archived'}, synchronize_session=False)
+    target.status = 'active'
+    target.publish_time = datetime.now()
+    _audit_log(
+        'template_publish',
+        target_type='evaluation_template',
+        target_id=target.id,
+        detail={'version_no': target.version_no, 'status': target.status},
+    )
+    db.session.commit()
+    return api_success(_serialize_template(target), msg='发布成功')
+
+
+@app.route('/api/admin/evaluation_templates/<int:version_id>', methods=['PUT'])
+@admin_login_required
+def admin_update_evaluation_template(version_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    target = db.session.get(EvaluationTemplateVersion, version_id)
+    if not target:
+        return api_error('模板版本不存在', code=404, http_status=404)
+    if target.status == 'active':
+        return api_error('生效中的模板不允许直接修改，请先新建草稿模板')
+
+    data = request.get_json(silent=True) or {}
+    before_snapshot = {
+        'name': target.name,
+        'status': target.status,
+        'items_count': EvaluationTemplateItem.query.filter_by(version_id=target.id).count(),
+    }
+    if 'name' in data:
+        target.name = ((data.get('name') or '').strip() or target.name)[:100]
+
+    items = data.get('items') if isinstance(data.get('items'), list) else None
+    if items is not None:
+        EvaluationTemplateItem.query.filter_by(version_id=target.id).delete(synchronize_session=False)
+        for idx, item in enumerate(items, start=1):
+            category = (item.get('category') or '').strip().lower()
+            item_key = (item.get('item_key') or '').strip()
+            item_label = (item.get('item_label') or '').strip()
+            if category not in ('food', 'service', 'env', 'safety') or not item_key or not item_label:
+                continue
+            db.session.add(
+                EvaluationTemplateItem(
+                    version_id=target.id,
+                    category=category,
+                    item_key=item_key[:60],
+                    item_label=item_label[:120],
+                    sort_order=_safe_int(item.get('sort_order'), idx) or idx,
+                    score_min=_to_int(item.get('score_min'), 1, 0, 100),
+                    score_max=_to_int(item.get('score_max'), 10, 1, 100),
+                    enabled=_to_bool(item.get('enabled'), True),
+                )
+            )
+
+    _audit_log(
+        'template_update',
+        target_type='evaluation_template',
+        target_id=target.id,
+        detail={
+            'version_no': target.version_no,
+            'name': target.name,
+            'items_updated': len(items) if items is not None else 0,
+        },
+        before_data=before_snapshot,
+        after_data={
+            'name': target.name,
+            'status': target.status,
+            'items_count': EvaluationTemplateItem.query.filter_by(version_id=target.id).count(),
+        },
+    )
+    db.session.commit()
+    return api_success(_serialize_template(target), msg='更新成功')
+
+
+@app.route('/api/admin/action_logs', methods=['GET'])
+@admin_login_required
+def admin_get_action_logs():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
+    limit = max(1, min(100, _safe_int(request.args.get('limit'), 20) or 20))
+    action = (request.args.get('action') or '').strip()
+    actor_id = _safe_int(request.args.get('actor_id'))
+    start_time = _parse_datetime_text(request.args.get('start_time'))
+    end_time = _parse_datetime_text(request.args.get('end_time'))
+
+    query = AdminActionLog.query
+    if action:
+        query = query.filter(AdminActionLog.action == action)
+    if actor_id:
+        query = query.filter(AdminActionLog.actor_id == actor_id)
+    if start_time:
+        query = query.filter(AdminActionLog.create_time >= start_time)
+    if end_time:
+        query = query.filter(AdminActionLog.create_time <= end_time)
+
+    total = query.count()
+    rows = query.order_by(AdminActionLog.id.desc()).offset((page - 1) * limit).limit(limit).all()
+    return api_success(
+        {
+            'list': [_serialize_action_log(row) for row in rows],
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': math.ceil(total / limit) if total else 0,
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/action_logs/export', methods=['GET'])
+@admin_login_required
+def admin_export_action_logs():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    action = (request.args.get('action') or '').strip()
+    actor_id = _safe_int(request.args.get('actor_id'))
+    start_time = _parse_datetime_text(request.args.get('start_time'))
+    end_time = _parse_datetime_text(request.args.get('end_time'))
+
+    query = AdminActionLog.query
+    if action:
+        query = query.filter(AdminActionLog.action == action)
+    if actor_id:
+        query = query.filter(AdminActionLog.actor_id == actor_id)
+    if start_time:
+        query = query.filter(AdminActionLog.create_time >= start_time)
+    if end_time:
+        query = query.filter(AdminActionLog.create_time <= end_time)
+
+    rows = query.order_by(AdminActionLog.id.desc()).limit(2000).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['id', 'time', 'actor_id', 'actor_role', 'action', 'target_type', 'target_id', 'detail'])
+    for row in rows:
+        writer.writerow(
+            [
+                row.id,
+                row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+                row.actor_id,
+                row.actor_role,
+                row.action,
+                row.target_type,
+                row.target_id,
+                row.detail,
+            ]
+        )
+
+    content = output.getvalue()
+    output.close()
+    filename = f"action_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content,
+        mimetype='text/csv; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename={filename}',
+        },
+    )
+
+
 @app.route('/api/evaluation/stats/<int:window_id>', methods=['GET'])
 def get_evaluation_stats(window_id):
     rows = EvaluationMain.query.filter_by(window_id=window_id).all()
@@ -2467,11 +5736,92 @@ def get_evaluation_stats(window_id):
 @login_required()
 def get_my_evaluations():
     user_id = session.get('user_id')
+    with_pagination = (request.args.get('with_pagination') or '').strip() in ('1', 'true', 'True')
+    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
+    limit = max(1, min(50, _safe_int(request.args.get('limit'), 10) or 10))
+    governance_filter = (request.args.get('governance_status') or '').strip().lower()
     
     evals = EvaluationMain.query.filter_by(user_id=user_id).order_by(EvaluationMain.create_time.desc()).all()
     
     result = []
     for e in evals:
+        warning = OperatorWarning.query.filter_by(evaluation_id=e.id).first()
+        rect_rows = []
+        if warning:
+            rect_rows = RectificationRecord.query.filter_by(warning_id=warning.id).order_by(RectificationRecord.id.desc()).all()
+
+        governance_status = 'normal'
+        governance_text = '正常'
+        if warning and warning.status == 'pending':
+            governance_status = 'pending'
+            governance_text = '待处理'
+        elif warning and warning.status == 'handled':
+            governance_status = 'handled'
+            governance_text = '已处理'
+
+        latest_rect = rect_rows[0] if rect_rows else None
+        timeline = [
+            {
+                'type': 'evaluation_submitted',
+                'title': '评价已提交',
+                'time': e.create_time.strftime('%Y-%m-%d %H:%M:%S') if e.create_time else '-',
+                'status': 'done',
+            }
+        ]
+        if warning:
+            timeline.append(
+                {
+                    'type': 'warning_created',
+                    'title': '系统触发预警',
+                    'time': warning.create_time.strftime('%Y-%m-%d %H:%M:%S') if warning.create_time else '-',
+                    'status': 'done',
+                }
+            )
+            if warning.status == 'handled':
+                timeline.append(
+                    {
+                        'type': 'warning_handled',
+                        'title': '运营已处理',
+                        'time': warning.handled_time.strftime('%Y-%m-%d %H:%M:%S') if warning.handled_time else '-',
+                        'status': 'done',
+                    }
+                )
+            else:
+                timeline.append(
+                    {
+                        'type': 'warning_pending',
+                        'title': '待运营处理',
+                        'time': '-',
+                        'status': 'pending',
+                    }
+                )
+
+        for item in sorted(rect_rows, key=lambda x: x.id):
+            timeline.append(
+                {
+                    'type': 'rectification',
+                    'title': item.title or '整改记录',
+                    'time': item.update_time.strftime('%Y-%m-%d %H:%M:%S') if item.update_time else '-',
+                    'status': 'done' if item.is_public else 'processing',
+                    'is_public': bool(item.is_public),
+                }
+            )
+
+        rectification_list = []
+        for item in rect_rows:
+            images = item.images_json if isinstance(item.images_json, list) else []
+            rectification_list.append(
+                {
+                    'id': item.id,
+                    'title': item.title or '整改记录',
+                    'issue_desc': item.issue_desc or '',
+                    'action_detail': item.action_detail or '',
+                    'images': images,
+                    'is_public': bool(item.is_public),
+                    'update_time': item.update_time.strftime('%Y-%m-%d %H:%M:%S') if item.update_time else '-',
+                }
+            )
+
         # 获取关联的菜品信息
         dish_list = []
         for ed in e.dish_evaluations:
@@ -2514,8 +5864,35 @@ def get_my_evaluations():
             'env_images': env_images,
             'safety_comment': safety_comment,
             'safety_images': safety_images,
+            'governance_status': governance_status,
+            'governance_text': governance_text,
+            'warning_id': int(warning.id) if warning else 0,
+            'rectification_count': len(rect_rows),
+            'latest_rectification_title': latest_rect.title if latest_rect else '',
+            'latest_rectification_time': latest_rect.update_time.strftime('%Y-%m-%d %H:%M:%S') if latest_rect and latest_rect.update_time else '',
+            'latest_rectification_public': bool(latest_rect.is_public) if latest_rect else False,
+            'governance_timeline': timeline,
+            'rectifications': rectification_list,
         })
         
+    if governance_filter in ('pending', 'handled', 'normal'):
+        result = [item for item in result if (item.get('governance_status') or '') == governance_filter]
+
+    if with_pagination:
+        total = len(result)
+        start = (page - 1) * limit
+        end = start + limit
+        return api_success(
+            {
+                'list': result[start:end],
+                'total': total,
+                'page': page,
+                'limit': limit,
+                'pages': math.ceil(total / limit) if total else 0,
+            },
+            msg='查询成功',
+        )
+
     return api_success(result)
 
 
@@ -3004,15 +6381,26 @@ def admin_mark_notification_read_all():
 @app.route('/api/admin/users', methods=['GET'])
 @admin_login_required
 def admin_get_users():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
     try:
         page = max(1, int(request.args.get('page', 1)))
         limit = max(1, min(50, int(request.args.get('limit', 10))))
     except (TypeError, ValueError):
         return api_error('分页参数不合法')
 
+    requested_campus_id = _safe_int(request.args.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+
     keyword = (request.args.get('keyword') or '').strip()
 
     query = User.query
+    if scoped_campus_id:
+        query = query.filter(User.campus_id == scoped_campus_id)
     if keyword:
         fuzzy = f'%{keyword}%'
         query = query.filter(
@@ -3031,6 +6419,8 @@ def admin_get_users():
 
     data = []
     for item in rows:
+        canteen = db.session.get(Canteen, _safe_int(getattr(item, 'operator_canteen_id', None))) if getattr(item, 'operator_canteen_id', None) else None
+        campus = db.session.get(Campus, _safe_int(getattr(item, 'campus_id', 1), 1) or 1)
         data.append(
             {
                 'id': item.id,
@@ -3039,6 +6429,10 @@ def admin_get_users():
                 'phone': item.phone,
                 'role': item.role,
                 'role_name': _role_code_to_name(item.role),
+                'campus_id': _safe_int(getattr(item, 'campus_id', 1), 1) or 1,
+                'campus_name': campus.name if campus else '默认校区',
+                'operator_canteen_id': _safe_int(getattr(item, 'operator_canteen_id', None)),
+                'operator_canteen_name': canteen.name if canteen else '',
                 'create_time': item.create_time.strftime('%Y-%m-%d %H:%M:%S') if item.create_time else '-',
                 'status': '启用',
             }
@@ -3059,12 +6453,18 @@ def admin_get_users():
 @app.route('/api/admin/users', methods=['POST'])
 @admin_login_required
 def admin_create_user():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
     data = request.get_json(silent=True) or {}
     username = (data.get('username') or '').strip()
     password = (data.get('password') or '123456').strip()
     nickname = (data.get('nickname') or '').strip()
     phone = (data.get('phone') or '').strip()
     role = _normalize_role(data.get('role_id'), data.get('role'))
+    operator_canteen_id = _safe_int(data.get('operator_canteen_id') or data.get('canteen_id'))
+    campus_id = _safe_int(data.get('campus_id'), 1) or 1
 
     if len(username) < 2 or len(username) > 20:
         return api_error('用户名长度需在2-20位之间')
@@ -3075,12 +6475,28 @@ def admin_create_user():
     if User.query.filter_by(username=username).first():
         return api_error('用户名已存在', code=409, http_status=409)
 
+    campus = db.session.get(Campus, campus_id)
+    if not campus:
+        return api_error('所属校区不存在', code=404, http_status=404)
+
+    if role == 'operator':
+        if not operator_canteen_id:
+            return api_error('食堂运营账号必须绑定食堂')
+        canteen = db.session.get(Canteen, operator_canteen_id)
+        if not canteen:
+            return api_error('绑定食堂不存在', code=404, http_status=404)
+        campus_id = _safe_int(getattr(canteen, 'campus_id', campus_id), campus_id) or campus_id
+    else:
+        operator_canteen_id = None
+
     user = User(
         username=username,
         password=generate_password_hash(password),
         nickname=nickname or None,
         phone=phone or None,
         role=role,
+        campus_id=campus_id,
+        operator_canteen_id=operator_canteen_id,
     )
     db.session.add(user)
     db.session.commit()
@@ -3090,6 +6506,10 @@ def admin_create_user():
 @app.route('/api/admin/users/<int:user_id>', methods=['PUT'])
 @admin_login_required
 def admin_update_user(user_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
     user = db.session.get(User, user_id)
     if not user:
         return api_error('用户不存在', code=404, http_status=404)
@@ -3099,6 +6519,8 @@ def admin_update_user(user_id):
     nickname = (data.get('nickname') or '').strip()
     phone = (data.get('phone') or '').strip()
     role = _normalize_role(data.get('role_id'), data.get('role')) if ('role_id' in data or 'role' in data) else None
+    operator_canteen_id = _safe_int(data.get('operator_canteen_id') or data.get('canteen_id')) if ('operator_canteen_id' in data or 'canteen_id' in data) else None
+    campus_id = _safe_int(data.get('campus_id'), _safe_int(getattr(user, 'campus_id', 1), 1) or 1) or _safe_int(getattr(user, 'campus_id', 1), 1) or 1
 
     if password:
         if len(password) < 6:
@@ -3115,6 +6537,27 @@ def admin_update_user(user_id):
     if role is not None:
         user.role = role
 
+    if 'campus_id' in data:
+        campus = db.session.get(Campus, campus_id)
+        if not campus:
+            return api_error('所属校区不存在', code=404, http_status=404)
+        user.campus_id = campus_id
+
+    target_role = role if role is not None else user.role
+    if target_role == 'operator':
+        bound_canteen_id = operator_canteen_id if operator_canteen_id is not None else _safe_int(getattr(user, 'operator_canteen_id', None))
+        if not bound_canteen_id:
+            return api_error('食堂运营账号必须绑定食堂')
+        canteen = db.session.get(Canteen, bound_canteen_id)
+        if not canteen:
+            return api_error('绑定食堂不存在', code=404, http_status=404)
+        if 'campus_id' in data and _safe_int(getattr(canteen, 'campus_id', campus_id), campus_id) != campus_id:
+            return api_error('运营账号所属校区必须与绑定食堂一致')
+        user.campus_id = _safe_int(getattr(canteen, 'campus_id', user.campus_id), user.campus_id) or user.campus_id
+        user.operator_canteen_id = bound_canteen_id
+    elif role is not None:
+        user.operator_canteen_id = None
+
     db.session.commit()
     return api_success(msg='更新成功')
 
@@ -3122,9 +6565,15 @@ def admin_update_user(user_id):
 @app.route('/api/admin/users/<int:user_id>', methods=['GET'])
 @admin_login_required
 def admin_get_user_detail(user_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
     user = db.session.get(User, user_id)
     if not user:
         return api_error('用户不存在', code=404, http_status=404)
+    canteen = db.session.get(Canteen, _safe_int(getattr(user, 'operator_canteen_id', None))) if getattr(user, 'operator_canteen_id', None) else None
+    campus = db.session.get(Campus, _safe_int(getattr(user, 'campus_id', 1), 1) or 1)
     return api_success(
         {
             'id': user.id,
@@ -3132,6 +6581,10 @@ def admin_get_user_detail(user_id):
             'nickname': user.nickname,
             'phone': user.phone,
             'role': user.role,
+            'campus_id': _safe_int(getattr(user, 'campus_id', 1), 1) or 1,
+            'campus_name': campus.name if campus else '默认校区',
+            'operator_canteen_id': _safe_int(getattr(user, 'operator_canteen_id', None)),
+            'operator_canteen_name': canteen.name if canteen else '',
             'create_time': user.create_time.strftime('%Y-%m-%d %H:%M:%S') if user.create_time else '-',
         },
         msg='查询成功',
@@ -3141,6 +6594,10 @@ def admin_get_user_detail(user_id):
 @app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
 @admin_login_required
 def admin_delete_user(user_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
     current_user_id = session.get('user_id')
     if current_user_id == user_id:
         return api_error('不能删除当前登录账号')
@@ -3373,7 +6830,12 @@ def admin_update_sensitive_config_alias():
 @app.route('/api/admin/operator/dashboard', methods=['GET'])
 @admin_login_required
 def admin_operator_dashboard():
-    payload = _build_operation_dashboard_payload()
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    payload = _build_operation_dashboard_payload(scoped_canteen_id)
     trend = payload.get('30day_score_trend', [])
     warnings = payload.get('bad_review_list', [])
     hot_dishes = payload.get('hot_dishes_top10', [])
@@ -3383,6 +6845,12 @@ def admin_operator_dashboard():
             'stats': {
                 'today_eval_count': payload.get('today_evaluation_count', 0),
                 'week_avg_score': payload.get('week_avg_score', 0.0),
+                'month_eval_count': payload.get('month_evaluation_count', 0),
+                'month_avg_score': payload.get('month_avg_score', 0.0),
+                'month_count_mom_pct': payload.get('month_count_mom_pct', 0.0),
+                'month_count_yoy_pct': payload.get('month_count_yoy_pct', 0.0),
+                'month_avg_mom_delta': payload.get('month_avg_mom_delta', 0.0),
+                'month_avg_yoy_delta': payload.get('month_avg_yoy_delta', 0.0),
                 'bad_review_count': payload.get('bad_review_count', 0),
                 'note_mention_count': payload.get('note_mention_count', 0),
             },
@@ -3421,7 +6889,57 @@ def admin_operator_dashboard():
 @app.route('/api/operation/dashboard', methods=['GET'])
 @admin_login_required
 def operation_dashboard():
-    return api_success(_build_operation_dashboard_payload(), msg='查询成功')
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+    _scan_warning_sla_and_notify(scoped_canteen_id)
+    return api_success(_build_operation_dashboard_payload(scoped_canteen_id), msg='查询成功')
+
+
+@app.route('/api/admin/sla/todos', methods=['GET'])
+@admin_login_required
+def admin_sla_todos():
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    _scan_warning_sla_and_notify(scoped_canteen_id)
+
+    query = OperatorWarning.query.filter(OperatorWarning.status == 'pending')
+    if scoped_canteen_id:
+        query = query.filter(OperatorWarning.canteen_id == scoped_canteen_id)
+    rows = query.order_by(OperatorWarning.create_time.asc()).all()
+
+    overdue_rows = []
+    escalated_rows = []
+    normal_rows = []
+    for row in rows:
+        item = _serialize_warning(row)
+        if item['sla_level'] == 'escalated':
+            escalated_rows.append(item)
+        elif item['sla_level'] == 'overdue':
+            overdue_rows.append(item)
+        else:
+            normal_rows.append(item)
+
+    return api_success(
+        {
+            'canteen_id': scoped_canteen_id or 0,
+            'summary': {
+                'pending_total': len(rows),
+                'overdue_count': len(overdue_rows),
+                'escalated_count': len(escalated_rows),
+            },
+            'todo_list': escalated_rows + overdue_rows + normal_rows,
+            'sla_config': {
+                'first_response_hours': SLA_FIRST_RESPONSE_HOURS,
+                'escalate_hours': SLA_ESCALATE_HOURS,
+            },
+        },
+        msg='查询成功',
+    )
 
 
 @app.route('/api/operation/bad_reviews/<int:warning_id>/handle', methods=['POST'])
@@ -3430,6 +6948,9 @@ def operation_handle_bad_review(warning_id):
     row = db.session.get(OperatorWarning, warning_id)
     if not row:
         return api_error('差评预警不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.canteen_id)
+    if access_error:
+        return access_error
     row.status = 'handled'
     row.handler_id = session.get('user_id')
     row.handled_time = datetime.now()
@@ -3444,7 +6965,15 @@ def operation_handle_bad_review(warning_id):
 @admin_login_required
 def admin_operator_dashboard_export():
     _sync_operator_warnings()
-    rows = OperatorWarning.query.order_by(OperatorWarning.create_time.desc()).all()
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    query = OperatorWarning.query
+    if scoped_canteen_id:
+        query = query.filter(OperatorWarning.canteen_id == scoped_canteen_id)
+    rows = query.order_by(OperatorWarning.create_time.desc()).all()
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(['预警ID', '评分', '食堂', '窗口', '菜品', '问题摘要', '状态', '创建时间', '处理时间'])
@@ -3476,6 +7005,9 @@ def admin_handle_warning(warning_id):
     row = db.session.get(OperatorWarning, warning_id)
     if not row:
         return api_error('预警记录不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.canteen_id)
+    if access_error:
+        return access_error
 
     data = request.get_json(silent=True) or {}
     row.status = 'handled'
@@ -3499,7 +7031,14 @@ def admin_get_dishes():
     window_id = request.args.get('window_id')
     status = (request.args.get('status') or '').strip().lower()
 
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
     query = Dish.query
+    if scoped_canteen_id:
+        query = query.join(Window, Window.id == Dish.window_id).filter(Window.canteen_id == scoped_canteen_id)
     if keyword:
         fuzzy = f'%{keyword}%'
         query = query.filter(Dish.name.ilike(fuzzy))
@@ -3526,6 +7065,8 @@ def admin_get_dishes():
                 'name': dish.name,
                 'window_id': dish.window_id,
                 'window_name': dish.window.name if dish.window else '-',
+                'canteen_id': dish.window.canteen_id if dish.window else 0,
+                'canteen_name': dish.window.canteen.name if dish.window and dish.window.canteen else '-',
                 'price': float(dish.price or 0),
                 'category': dish.category or '',
                 'tags': _safe_tag_list(dish.tags_json),
@@ -3567,6 +7108,9 @@ def admin_create_dish():
     window = db.session.get(Window, window_id)
     if not window:
         return api_error('窗口不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(window.canteen_id)
+    if access_error:
+        return access_error
 
     row = Dish(
         window_id=window_id,
@@ -3589,6 +7133,9 @@ def admin_update_dish(dish_id):
     row = db.session.get(Dish, dish_id)
     if not row:
         return api_error('菜品不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.window.canteen_id if row.window else None)
+    if access_error:
+        return access_error
 
     data = request.get_json(silent=True) or {}
     if 'name' in data:
@@ -3622,6 +7169,9 @@ def admin_delete_dish(dish_id):
     row = db.session.get(Dish, dish_id)
     if not row:
         return api_error('菜品不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.window.canteen_id if row.window else None)
+    if access_error:
+        return access_error
     db.session.delete(row)
     db.session.commit()
     return api_success(msg='删除成功')
@@ -3633,6 +7183,9 @@ def admin_toggle_dish_status(dish_id):
     row = db.session.get(Dish, dish_id)
     if not row:
         return api_error('菜品不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.window.canteen_id if row.window else None)
+    if access_error:
+        return access_error
     data = request.get_json(silent=True) or {}
     target = _to_bool(data.get('is_active'), not bool(row.is_active))
     row.is_active = target
@@ -3681,6 +7234,10 @@ def admin_batch_import_dishes():
             window = db.session.get(Window, window_id)
             if not window:
                 errors.append(f'第{idx}行: 窗口不存在 window_id={window_id}')
+                continue
+            access_error = _ensure_resource_canteen_access(window.canteen_id)
+            if access_error:
+                errors.append(f'第{idx}行: 无权导入到该窗口')
                 continue
 
             row = Dish(
@@ -3939,11 +7496,18 @@ def admin_get_dish_evaluations():
     date_text = (request.args.get('date') or '').strip()
     target_day = _parse_date_text(date_text)
 
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
     dish_ids = db.session.query(EvaluationDish.dish_id).filter(EvaluationDish.dish_id > 0).group_by(EvaluationDish.dish_id).all()
     all_items = []
     for (dish_id,) in dish_ids:
         dish = db.session.get(Dish, dish_id)
         if not dish:
+            continue
+        if scoped_canteen_id and (not dish.window or dish.window.canteen_id != scoped_canteen_id):
             continue
         if keyword and keyword not in (dish.name or '').lower():
             continue
@@ -3998,6 +7562,9 @@ def admin_get_dish_evaluation_details(dish_id):
     dish = db.session.get(Dish, dish_id)
     if not dish:
         return api_error('菜品不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(dish.window.canteen_id if dish.window else None)
+    if access_error:
+        return access_error
 
     eval_rows = EvaluationDish.query.filter_by(dish_id=dish_id).order_by(EvaluationDish.id.desc()).all()
     data = []
@@ -4336,12 +7903,16 @@ def admin_seed_operator_test_data():
 @app.route('/api/get_dish_evaluations', methods=['GET'])
 @app.route('/api/dish_evaluations', methods=['GET'])
 def get_dish_evaluations():
-    dish_id = request.args.get('dish_id')
+    dish_id = _safe_int(request.args.get('dish_id'))
     if not dish_id:
         return api_error('缺少dish_id')
+    campus_id = _safe_int(request.args.get('campus_id'))
         
     # 查询关联表
-    dish_evals = EvaluationDish.query.filter_by(dish_id=dish_id).all()
+    dish_query = EvaluationDish.query.filter(EvaluationDish.dish_id == dish_id)
+    if campus_id:
+        dish_query = dish_query.join(EvaluationMain, EvaluationMain.id == EvaluationDish.evaluation_id).filter(EvaluationMain.campus_id == campus_id)
+    dish_evals = dish_query.all()
     
     result = []
     total_scores = {'taste': 0, 'color': 0, 'appearance': 0, 'price': 0, 'portion': 0, 'speed': 0}
@@ -4385,21 +7956,314 @@ def get_dish_evaluations():
         })
 
 
+@app.route('/api/admin/risk_evaluations', methods=['GET'])
+@admin_login_required
+def admin_get_risk_evaluations():
+    status = (request.args.get('status') or '').strip().lower()
+    min_score = max(0, min(100, _safe_int(request.args.get('min_score'), 0) or 0))
+    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
+    limit = max(1, min(50, _safe_int(request.args.get('limit'), 20) or 20))
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    query = EvaluationRiskFlag.query.filter(EvaluationRiskFlag.campus_id == _current_campus_id())
+    if status in ('pending', 'approved', 'rejected', 'watch'):
+        query = query.filter(EvaluationRiskFlag.status == status)
+    if min_score:
+        query = query.filter(EvaluationRiskFlag.risk_score >= min_score)
+    if scoped_canteen_id:
+        query = query.filter(EvaluationRiskFlag.canteen_id == scoped_canteen_id)
+
+    total = query.count()
+    rows = query.order_by(EvaluationRiskFlag.risk_score.desc(), EvaluationRiskFlag.id.desc()).offset((page - 1) * limit).limit(limit).all()
+    return api_success(
+        {
+            'list': [_serialize_risk_flag(row) for row in rows],
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': math.ceil(total / limit) if total else 0,
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/risk_evaluations/scan', methods=['POST'])
+@admin_login_required
+def admin_scan_risk_evaluations():
+    requested_canteen_id = _safe_int((request.get_json(silent=True) or {}).get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    query = EvaluationMain.query.filter(EvaluationMain.campus_id == _current_campus_id())
+    if scoped_canteen_id:
+        query = query.filter(EvaluationMain.canteen_id == scoped_canteen_id)
+    rows = query.order_by(EvaluationMain.id.desc()).limit(300).all()
+
+    touched = 0
+    for row in rows:
+        _upsert_eval_risk_flag(row)
+        touched += 1
+    db.session.commit()
+    return api_success({'scanned': touched}, msg='异常评分扫描完成')
+
+
+@app.route('/api/admin/risk_evaluations/<int:risk_id>/review', methods=['POST'])
+@admin_login_required
+def admin_review_risk_evaluation(risk_id):
+    row = db.session.get(EvaluationRiskFlag, risk_id)
+    if not row or row.campus_id != _current_campus_id():
+        return api_error('风险记录不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.canteen_id)
+    if access_error:
+        return access_error
+
+    data = request.get_json(silent=True) or {}
+    decision = (data.get('decision') or '').strip().lower()
+    if decision not in ('approved', 'rejected', 'watch'):
+        return api_error('无效处理动作')
+
+    row.status = decision
+    row.review_note = (data.get('note') or '').strip()[:500]
+    reviewer = _current_user()
+    row.reviewer_id = reviewer.id if reviewer else None
+    row.reviewed_time = datetime.now()
+    row.update_time = datetime.now()
+    db.session.commit()
+    return api_success(_serialize_risk_flag(row), msg='复核完成')
+
+
+@app.route('/api/admin/risk_evaluations/<int:risk_id>/work_order', methods=['POST'])
+@admin_login_required
+def admin_create_work_order_from_risk(risk_id):
+    risk = db.session.get(EvaluationRiskFlag, risk_id)
+    if not risk or risk.campus_id != _current_campus_id():
+        return api_error('风险记录不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(risk.canteen_id)
+    if access_error:
+        return access_error
+
+    data = request.get_json(silent=True) or {}
+    due_time = _parse_datetime_text(data.get('due_time') or '')
+    if not due_time:
+        due_time = datetime.now() + timedelta(hours=WORK_ORDER_DEFAULT_SLA_HOURS)
+
+    actor = _current_user()
+    order = RectificationWorkOrder(
+        campus_id=risk.campus_id,
+        source_type='risk_flag',
+        source_id=risk.id,
+        canteen_id=risk.canteen_id,
+        window_id=risk.window_id,
+        title=(data.get('title') or f'异常评价整改#{risk.id}').strip()[:200],
+        issue_desc=(data.get('issue_desc') or '来自异常评价检测，请核查窗口服务与评分真实性。').strip(),
+        priority=(data.get('priority') or ('high' if (risk.risk_score or 0) >= 70 else 'medium')).strip().lower(),
+        status='pending',
+        assignee_id=_safe_int(data.get('assignee_id')),
+        due_time=due_time,
+        created_by=actor.id if actor else None,
+    )
+    db.session.add(order)
+    db.session.flush()
+    _append_work_order_log(order, 'create', '', 'pending', '由异常评价自动建单')
+    db.session.commit()
+    return api_success(_serialize_work_order(order), msg='工单创建成功')
+
+
+@app.route('/api/admin/work_orders', methods=['GET'])
+@admin_login_required
+def admin_get_work_orders():
+    status = (request.args.get('status') or '').strip().lower()
+    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
+    limit = max(1, min(50, _safe_int(request.args.get('limit'), 20) or 20))
+    overdue = (request.args.get('overdue') or '').strip().lower()
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    query = RectificationWorkOrder.query.filter(RectificationWorkOrder.campus_id == _current_campus_id())
+    if status in ('pending', 'processing', 'review', 'completed', 'archived'):
+        query = query.filter(RectificationWorkOrder.status == status)
+    if overdue in ('1', 'true', 'yes'):
+        query = query.filter(RectificationWorkOrder.is_overdue == True)
+    if scoped_canteen_id:
+        query = query.filter(RectificationWorkOrder.canteen_id == scoped_canteen_id)
+
+    total = query.count()
+    rows = query.order_by(RectificationWorkOrder.is_overdue.desc(), RectificationWorkOrder.id.desc()).offset((page - 1) * limit).limit(limit).all()
+    return api_success(
+        {
+            'list': [_serialize_work_order(row) for row in rows],
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': math.ceil(total / limit) if total else 0,
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/work_orders', methods=['POST'])
+@admin_login_required
+def admin_create_work_order():
+    data = request.get_json(silent=True) or {}
+    title = (data.get('title') or '').strip()
+    if not title:
+        return api_error('工单标题不能为空')
+
+    canteen_id = _safe_int(data.get('canteen_id'))
+    window_id = _safe_int(data.get('window_id'))
+    access_error = _ensure_resource_canteen_access(canteen_id)
+    if access_error:
+        return access_error
+
+    due_time = _parse_datetime_text(data.get('due_time') or '')
+    if not due_time:
+        due_time = datetime.now() + timedelta(hours=WORK_ORDER_DEFAULT_SLA_HOURS)
+
+    actor = _current_user()
+    row = RectificationWorkOrder(
+        campus_id=_current_campus_id(),
+        source_type=(data.get('source_type') or 'manual').strip()[:30],
+        source_id=_safe_int(data.get('source_id'), 0) or 0,
+        canteen_id=canteen_id,
+        window_id=window_id,
+        title=title[:200],
+        issue_desc=(data.get('issue_desc') or '').strip(),
+        priority=(data.get('priority') or 'medium').strip().lower(),
+        status='pending',
+        assignee_id=_safe_int(data.get('assignee_id')),
+        due_time=due_time,
+        created_by=actor.id if actor else None,
+    )
+    db.session.add(row)
+    db.session.flush()
+    _append_work_order_log(row, 'create', '', 'pending', '手工创建工单')
+    db.session.commit()
+    return api_success(_serialize_work_order(row), msg='工单创建成功')
+
+
+@app.route('/api/admin/work_orders/<int:order_id>/transition', methods=['POST'])
+@admin_login_required
+def admin_transition_work_order(order_id):
+    row = db.session.get(RectificationWorkOrder, order_id)
+    if not row or row.campus_id != _current_campus_id():
+        return api_error('工单不存在', code=404, http_status=404)
+    access_error = _ensure_resource_canteen_access(row.canteen_id)
+    if access_error:
+        return access_error
+
+    data = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip().lower()
+    note = (data.get('note') or '').strip()[:500]
+    from_status = row.status
+    now = datetime.now()
+    transition_map = {
+        'accept': 'processing',
+        'start': 'processing',
+        'to_review': 'review',
+        'complete': 'completed',
+        'archive': 'archived',
+        'reopen': 'processing',
+    }
+    if action not in transition_map:
+        return api_error('无效流转动作')
+
+    to_status = transition_map[action]
+    row.status = to_status
+    row.update_time = now
+    if to_status == 'processing' and not row.started_time:
+        row.started_time = now
+    if to_status == 'review':
+        row.review_time = now
+    if to_status == 'completed':
+        row.completed_time = now
+    if to_status == 'archived':
+        row.archived_time = now
+
+    assignee_id = _safe_int(data.get('assignee_id'))
+    if assignee_id:
+        row.assignee_id = assignee_id
+
+    _append_work_order_log(row, action, from_status, to_status, note)
+    db.session.commit()
+    return api_success(_serialize_work_order(row), msg='流转成功')
+
+
+@app.route('/api/admin/work_orders/stats', methods=['GET'])
+@admin_login_required
+def admin_work_order_stats():
+    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+
+    _scan_work_order_sla(scoped_canteen_id)
+    query = RectificationWorkOrder.query.filter(RectificationWorkOrder.campus_id == _current_campus_id())
+    if scoped_canteen_id:
+        query = query.filter(RectificationWorkOrder.canteen_id == scoped_canteen_id)
+
+    rows = query.all()
+    status_counter = {'pending': 0, 'processing': 0, 'review': 0, 'completed': 0, 'archived': 0}
+    overdue = 0
+    for row in rows:
+        status_key = row.status if row.status in status_counter else 'pending'
+        status_counter[status_key] += 1
+        if row.is_overdue:
+            overdue += 1
+
+    return api_success(
+        {
+            'total': len(rows),
+            'overdue': overdue,
+            'status_counter': status_counter,
+        },
+        msg='查询成功',
+    )
+
+
+@app.route('/api/admin/work_orders/sla_scan', methods=['POST'])
+@admin_login_required
+def admin_work_order_sla_scan():
+    requested_canteen_id = _safe_int((request.get_json(silent=True) or {}).get('canteen_id'))
+    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
+    if scope_error:
+        return scope_error
+    touched = _scan_work_order_sla(scoped_canteen_id)
+    return api_success({'touched': touched}, msg='SLA扫描完成')
+
+
 @app.route('/api/notes', methods=['GET'])
 def get_notes():
+    fallback_images = [
+        '/static/img/note-cover-1.svg',
+        '/static/img/note-cover-2.svg',
+        '/static/img/note-cover-3.svg',
+        '/static/img/note-cover-4.svg',
+        '/static/img/food-hero.jpg',
+        '/static/img/hero-bg.jpg',
+    ]
+
     notes = (
-        Note.query.filter(Note.status == 'published').order_by(Note.create_time.desc())
+        Note.query.filter(Note.status == 'published', Note.campus_id == _current_campus_id()).order_by(Note.create_time.desc())
         .limit(20)
         .all()
     )
     result = []
     for n in notes:
         user = db.session.get(User, n.user_id)
+        images = _extract_images_from_text(n.content)
+        if not images:
+            images = [fallback_images[n.id % len(fallback_images)]]
         result.append(
             {
                 'id': n.id,
                 'title': n.title,
-                'images': [],
+                'images': images,
                 'is_anonymous': False,
                 'user_id': n.user_id,
                 'username': user.username if user else '用户',
@@ -4414,9 +8278,11 @@ def get_notes():
 @app.cli.command("init-db")
 def init_db_command():
     _ensure_schema_columns()
+    ensure_default_admin_operator_accounts()
     print("数据库表结构已创建")
 
 if __name__ == '__main__':
     with app.app_context():
         _ensure_schema_columns()
+        ensure_default_admin_operator_accounts()
     app.run(debug=True, port=5000)

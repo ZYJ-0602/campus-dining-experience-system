@@ -36,6 +36,19 @@
             font-size: 16px;
         }
 
+        .campus-switch {
+            margin-left: 10px;
+            min-width: 94px;
+            max-width: 136px;
+            border: 1px solid #f1d4bd;
+            border-radius: 999px;
+            background: #fff;
+            color: #b85d13;
+            font-size: 12px;
+            padding: 5px 10px;
+            box-shadow: 0 2px 6px rgba(255, 127, 36, 0.06);
+        }
+
         .logo-icon {
             font-size: 20px;
             margin-right: 5px;
@@ -133,6 +146,24 @@
             margin: 0 10px 15px;
         }
 
+        .recommend-subtitle {
+            font-size: 12px;
+            color: #8a8a8a;
+            margin-top: 2px;
+        }
+
+        .recommend-refresh {
+            border: none;
+            background: rgba(255, 127, 36, 0.08);
+            color: #ff7f24;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
         .section-header {
             display: flex;
             justify-content: space-between;
@@ -164,7 +195,8 @@
 
         .recommend-img {
             width: 100%;
-            height: 100px;
+            aspect-ratio: 4 / 3;
+            height: auto;
             object-fit: cover;
         }
 
@@ -187,6 +219,28 @@
             font-weight: bold;
         }
 
+        .recommend-reason {
+            font-size: 10px;
+            color: #8a8a8a;
+            margin-top: 4px;
+            line-height: 1.4;
+            min-height: 28px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .recommend-empty {
+            min-height: 132px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 13px;
+            width: 100%;
+        }
+
         /* 瀑布流笔记 */
         .waterfall-container {
             padding: 0 10px;
@@ -196,27 +250,31 @@
 
         .note-card {
             background-color: #fff;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             break-inside: avoid;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.06);
         }
 
         .note-img {
             width: 100%;
+            aspect-ratio: 3 / 4;
             height: auto;
+            max-height: 260px;
+            object-fit: cover;
             display: block;
+            background: #f5f5f5;
         }
 
         .note-content {
-            padding: 10px;
+            padding: 8px 9px 9px;
         }
 
         .note-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -228,7 +286,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 11px;
+            font-size: 10px;
             color: #999;
         }
 
@@ -314,6 +372,7 @@
         <div class="logo-area">
             <i class="bi bi-shop logo-icon"></i>
             校园食评
+            <select id="campusSwitch" class="campus-switch" aria-label="切换校区"></select>
         </div>
         <div class="search-bar">
             <i class="bi bi-search search-icon"></i>
@@ -359,32 +418,17 @@
     <!-- 3. 智能推荐模块 -->
     <div class="recommend-section">
         <div class="section-header">
-            <span class="section-title">猜你喜欢</span>
-            <small class="text-muted">实时更新</small>
+            <div>
+                <span class="section-title">猜你喜欢</span>
+                <div class="recommend-subtitle" id="recommendSubtitle">基于收藏、评价和热度动态排序</div>
+            </div>
+            <button class="recommend-refresh" type="button" onclick="loadRecommendations(true)">
+                <i class="bi bi-arrow-clockwise"></i>
+                换一批
+            </button>
         </div>
-        <div class="scroll-container">
-            <!-- 修复：确保dish_detail.html存在，若不存在则暂跳首页 -->
-            <div class="recommend-card" onclick="location.href='dish_detail.html?id=1'">
-                <img src="https://via.placeholder.com/140x100/FF7F24/ffffff?text=番茄炒蛋" class="recommend-img">
-                <div class="recommend-info">
-                    <div class="recommend-name">番茄炒蛋</div>
-                    <div class="recommend-score">9.2分</div>
-                </div>
-            </div>
-            <div class="recommend-card" onclick="location.href='dish_detail.html?id=2'">
-                <img src="https://via.placeholder.com/140x100/FFA500/ffffff?text=红烧肉" class="recommend-img">
-                <div class="recommend-info">
-                    <div class="recommend-name">红烧肉</div>
-                    <div class="recommend-score">8.8分</div>
-                </div>
-            </div>
-            <div class="recommend-card" onclick="location.href='dish_detail.html?id=3'">
-                <img src="https://via.placeholder.com/140x100/FF6347/ffffff?text=麻辣香锅" class="recommend-img">
-                <div class="recommend-info">
-                    <div class="recommend-name">麻辣香锅</div>
-                    <div class="recommend-score">8.5分</div>
-                </div>
-            </div>
+        <div class="scroll-container" id="recommendationList">
+            <div class="recommend-empty">正在加载推荐内容...</div>
         </div>
     </div>
 
@@ -427,10 +471,219 @@
 
     <!-- JavaScript -->
     <script src="../../static/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
     <script>
+        const PUBLIC_CAMPUS_STORAGE_KEY = 'publicCampusId';
+        const publicCampusState = {
+            campusId: Number(localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || '0') || 0,
+            campusName: ''
+        };
+        const recommendationMeta = {
+            requestId: '',
+            abVariant: 'A',
+            abStrategy: 'baseline'
+        };
+
         document.addEventListener('DOMContentLoaded', function() {
-            renderNotes();
+            initCampusSwitch().then(() => {
+                loadRecommendations();
+                renderNotes();
+            });
         });
+
+        function getCampusQuery() {
+            return publicCampusState.campusId ? `&campus_id=${encodeURIComponent(publicCampusState.campusId)}` : '';
+        }
+
+        async function applyCampusAwareCanteenLinks() {
+            const links = document.querySelectorAll('a[href^="canteen_detail.html?"]');
+            let targetName = '北区食堂';
+            try {
+                const res = await Common.apiFetch(`${API.PUBLIC_CANTEENS}?campus_id=${encodeURIComponent(publicCampusState.campusId || 0)}`);
+                const list = res.code === 200 && res.data && Array.isArray(res.data.list) ? res.data.list : [];
+                if (list.length > 0) {
+                    targetName = String(list[0].name || targetName).trim() || targetName;
+                }
+            } catch (error) {
+                console.error('获取校区食堂列表失败:', error);
+            }
+
+            const targetHref = `canteen_detail.html?name=${encodeURIComponent(targetName)}&campus_id=${encodeURIComponent(publicCampusState.campusId || 0)}`;
+            links.forEach((node) => {
+                node.setAttribute('href', targetHref);
+            });
+        }
+
+        async function initCampusSwitch() {
+            const switcher = document.getElementById('campusSwitch');
+            if (!switcher) return;
+
+            switcher.disabled = true;
+            switcher.innerHTML = '<option>校区加载中...</option>';
+
+            try {
+                const res = await Common.apiFetch(API.CAMPUSES);
+                if (res.code !== 200) {
+                    throw new Error(res.msg || '校区加载失败');
+                }
+
+                const payload = res.data || {};
+                const campuses = Array.isArray(payload.list) ? payload.list : [];
+                if (!campuses.length) {
+                    switcher.innerHTML = '<option>默认校区</option>';
+                    switcher.disabled = true;
+                    return;
+                }
+
+                const preferredId = publicCampusState.campusId || Number(payload.current_campus_id || 0) || Number(campuses[0].id || 0);
+                publicCampusState.campusId = campuses.some((item) => Number(item.id) === preferredId)
+                    ? preferredId
+                    : Number(payload.current_campus_id || campuses[0].id || 0);
+                publicCampusState.campusName = payload.current_campus_name || '';
+                localStorage.setItem(PUBLIC_CAMPUS_STORAGE_KEY, String(publicCampusState.campusId || ''));
+                await applyCampusAwareCanteenLinks();
+
+                switcher.innerHTML = campuses.map((campus) => {
+                    const selected = Number(campus.id) === Number(publicCampusState.campusId) ? 'selected' : '';
+                    return `<option value="${campus.id}" ${selected}>${escapeHtml(campus.name || '未命名校区')}</option>`;
+                }).join('');
+                switcher.disabled = false;
+
+                switcher.onchange = async () => {
+                    publicCampusState.campusId = Number(switcher.value || 0) || 0;
+                    localStorage.setItem(PUBLIC_CAMPUS_STORAGE_KEY, String(publicCampusState.campusId || ''));
+                    await applyCampusAwareCanteenLinks();
+                    await loadRecommendations(true);
+                };
+            } catch (error) {
+                console.error('初始化校区切换失败:', error);
+                switcher.innerHTML = '<option>默认校区</option>';
+                switcher.disabled = true;
+                await applyCampusAwareCanteenLinks();
+            }
+        }
+
+        function normalizeImageUrl(src) {
+            const value = String(src || '').trim();
+            if (!value) {
+                return '/static/img/food-hero.jpg';
+            }
+            if (value.startsWith('http://') || value.startsWith('https://')) {
+                return value;
+            }
+            if (value.startsWith('/')) {
+                return value;
+            }
+            return `${window.location.origin}/${value.replace(/^\.\//, '')}`;
+        }
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>'"]/g, (m) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[m]));
+        }
+
+        function renderRecommendationFallback(message) {
+            const container = document.getElementById('recommendationList');
+            container.innerHTML = `<div class="recommend-empty">${escapeHtml(message || '暂无推荐内容')}</div>`;
+        }
+
+        function trackRecommendationEvent(payload) {
+            if (!payload || typeof payload !== 'object') {
+                return;
+            }
+            const body = JSON.stringify(payload);
+            const beaconOk = navigator.sendBeacon && navigator.sendBeacon(API.RECOMMENDATION_TRACK, body);
+            if (!beaconOk) {
+                fetchApi(API.RECOMMENDATION_TRACK, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body
+                }).catch(() => {});
+            }
+        }
+
+        function trackRecommendationClick(dishId, canteenId, position) {
+            trackRecommendationEvent({
+                event_type: 'click',
+                request_id: recommendationMeta.requestId,
+                ab_variant: recommendationMeta.abVariant,
+                ab_strategy: recommendationMeta.abStrategy,
+                campus_id: publicCampusState.campusId,
+                dish_id: Number(dishId || 0),
+                canteen_id: Number(canteenId || 0),
+                position,
+                page: 'index'
+            });
+        }
+
+        async function loadRecommendations(forceRefresh = false) {
+            const container = document.getElementById('recommendationList');
+            if (forceRefresh) {
+                container.innerHTML = '<div class="recommend-empty">正在刷新推荐...</div>';
+            }
+
+            try {
+                const res = await Common.apiFetch(`/public/recommendations?limit=6${getCampusQuery()}`);
+                if (res.code !== 200) {
+                    renderRecommendationFallback(res.msg || '推荐加载失败');
+                    return;
+                }
+
+                const payload = res.data || {};
+                const items = Array.isArray(payload.list) ? payload.list : [];
+                recommendationMeta.requestId = payload.request_id || '';
+                recommendationMeta.abVariant = payload.ab_variant || 'A';
+                recommendationMeta.abStrategy = payload.ab_strategy || 'baseline';
+                const subtitle = document.getElementById('recommendSubtitle');
+                subtitle.textContent = payload.personalized
+                    ? '基于你的收藏、评价和校区偏好动态排序'
+                    : '基于校园热度和高分菜品动态排序';
+
+                if (!items.length) {
+                    renderRecommendationFallback('暂无推荐数据，去多评价几道菜试试');
+                    return;
+                }
+
+                container.innerHTML = items.map((item, index) => {
+                    const imgUrl = normalizeImageUrl(item.img_url || '');
+                    const score = Number(item.average_score || 0).toFixed(1);
+                    const reasons = item.reason_summary || (Array.isArray(item.reasons) ? item.reasons.slice(0, 2).join(' · ') : '');
+                    const dishCampusQuery = publicCampusState.campusId ? `&campus_id=${encodeURIComponent(publicCampusState.campusId)}` : '';
+                    return `
+                        <div class="recommend-card" onclick="trackRecommendationClick(${Number(item.dish_id || 0)}, ${Number(item.canteen_id || 0)}, ${index + 1}); location.href='dish_detail.html?id=${item.dish_id}${dishCampusQuery}'">
+                            <img src="${imgUrl}" class="recommend-img" loading="lazy" onerror="this.onerror=null;this.src='/static/img/hero-bg.jpg'">
+                            <div class="recommend-info">
+                                <div class="recommend-name">${escapeHtml(item.dish_name || '未命名菜品')}</div>
+                                <div class="recommend-score">${score}分 · ${escapeHtml(item.canteen_name || '-')}</div>
+                                <div class="recommend-reason">${escapeHtml(reasons || '综合热度推荐')}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                trackRecommendationEvent({
+                    event_type: 'exposure',
+                    request_id: recommendationMeta.requestId,
+                    ab_variant: recommendationMeta.abVariant,
+                    ab_strategy: recommendationMeta.abStrategy,
+                    campus_id: publicCampusState.campusId,
+                    page: 'index',
+                    items: items.map((item, idx) => ({
+                        dish_id: Number(item.dish_id || 0),
+                        canteen_id: Number(item.canteen_id || 0),
+                        position: idx + 1
+                    }))
+                });
+            } catch (error) {
+                console.error('加载推荐失败:', error);
+                renderRecommendationFallback('推荐加载失败，请稍后重试');
+            }
+        }
 
         async function renderNotes() {
             const container = document.getElementById('waterfallContainer');
@@ -443,16 +696,29 @@
                 
                 const notes = resData.data.list || [];
                 let html = '';
+
+                function normalizeImageUrl(src) {
+                    const value = String(src || '').trim();
+                    if (!value) {
+                        return '/static/img/food-hero.jpg';
+                    }
+                    if (value.startsWith('http://') || value.startsWith('https://')) {
+                        return value;
+                    }
+                    if (value.startsWith('/')) {
+                        return value;
+                    }
+                    return `${window.location.origin}/${value.replace(/^\.\//, '')}`;
+                }
                 
                 notes.forEach(note => {
                     // 处理可能为 JSON 字符串的 images
-                    let imgUrl = "https://via.placeholder.com/200x200/cccccc/ffffff?text=No+Image";
+                    let imgUrl = '/static/img/food-hero.jpg';
                     if (note.images) {
                         try {
                             const imgs = typeof note.images === 'string' ? JSON.parse(note.images) : note.images;
                             if (imgs && imgs.length > 0) {
-                                // 兼容相对路径
-                                imgUrl = imgs[0].startsWith('http') ? imgs[0] : `${window.location.origin}${imgs[0]}`;
+                                imgUrl = normalizeImageUrl(imgs[0]);
                             }
                         } catch (e) {
                             console.error("解析图片失败", e);
@@ -461,13 +727,13 @@
 
                     html += `
                         <div class="note-card" onclick="location.href='post_detail.html?id=${note.id}'">
-                            <img src="${imgUrl}" class="note-img" loading="lazy" onerror="this.src='https://via.placeholder.com/200x200/cccccc/ffffff?text=Error'">
+                            <img src="${imgUrl}" class="note-img" loading="lazy" onerror="this.onerror=null;this.src='/static/img/hero-bg.jpg'">
                             <div class="note-content">
                                 <div class="note-title">${note.title || '无标题'}</div>
                                 <div class="note-footer">
                                     <div class="note-author">
-                                        <img src="https://ui-avatars.com/api/?name=${note.is_anonymous ? '匿' : (note.user_id || 'U')}&background=random" class="author-avatar">
-                                        <span>${note.is_anonymous ? '匿名用户' : '用户' + note.user_id}</span>
+                                        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(note.is_anonymous ? '匿' : (note.username || note.user_id || 'U'))}&background=random" class="author-avatar">
+                                        <span>${note.is_anonymous ? '匿名用户' : (note.username || ('用户' + note.user_id))}</span>
                                     </div>
                                     <div class="note-likes">
                                         <i class="bi bi-heart"></i> ${note.like_count || 0}

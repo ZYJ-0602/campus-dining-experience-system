@@ -25,6 +25,38 @@
         }
         .back-btn { font-size: 1.2rem; color: #333; }
         .page-title { font-weight: bold; font-size: 1.1rem; }
+        .timeline {
+            position: relative;
+            margin-top: 8px;
+            padding-left: 18px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 2px;
+            bottom: 2px;
+            width: 2px;
+            background: #e5e7eb;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 10px;
+            padding-left: 10px;
+        }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-dot {
+            position: absolute;
+            left: -18px;
+            top: 4px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #9ca3af;
+        }
+        .timeline-dot.done { background: #16a34a; }
+        .timeline-dot.pending { background: #f59e0b; }
+        .timeline-dot.processing { background: #2563eb; }
     </style>
 </head>
 <body class="bg-light">
@@ -39,6 +71,13 @@
 <div class="container" style="margin-top: 60px;">
     <div class="card shadow-sm mb-4">
         <div class="card-body">
+            <div class="d-flex justify-content-end mb-3">
+                <select id="statusFilter" class="form-select form-select-sm" style="width: 180px;">
+                    <option value="all">全部记录</option>
+                    <option value="pending">仅看待处理</option>
+                    <option value="handled">仅看已处理</option>
+                </select>
+            </div>
             <div id="loading" class="text-center py-3">
                 <div class="spinner-border text-warning" role="status">
                     <span class="visually-hidden">Loading...</span>
@@ -47,11 +86,30 @@
             <div id="eval-list" class="accordion" id="accordionExample">
                 <!-- 评价列表将动态插入这里 -->
             </div>
+            <div id="paginationBar" class="d-flex justify-content-between align-items-center mt-3 d-none">
+                <small class="text-muted" id="pageInfo">-</small>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" id="prevPageBtn">上一页</button>
+                    <button class="btn btn-outline-secondary" id="nextPageBtn">下一页</button>
+                </div>
+            </div>
             <div id="empty-state" class="text-center py-5 d-none text-muted">
                 <i class="bi bi-clipboard-x display-1 text-secondary opacity-25"></i>
                 <p class="mt-3">暂无评价记录</p>
                 <a href="quick_evaluation.html" class="btn btn-outline-warning btn-sm mt-2">去评价</a>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="rectificationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">整改详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="rectificationModalBody"></div>
         </div>
     </div>
 </div>

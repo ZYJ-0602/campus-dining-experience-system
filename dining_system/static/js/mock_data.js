@@ -91,11 +91,10 @@ const mockPostData = [
         author: "小明", 
         avatar: "user1", 
         likes: 128, 
-        img: "https://via.placeholder.com/600x400/FFE4B5/333?text=Tomato+Egg", 
+        img: "/static/img/food-hero.jpg", 
         images: [
-            "https://via.placeholder.com/600x400/FFE4B5/333?text=Tomato+Egg",
-            "https://via.placeholder.com/600x400/E6E6FA/333?text=Environment",
-            "https://via.placeholder.com/600x400/FFC0CB/333?text=Menu"
+            "/static/img/food-hero.jpg",
+            "/static/img/hero-bg.jpg"
         ],
         status: "passed",
         tags: ["推荐", "北区食堂", "番茄炒蛋"],
@@ -114,8 +113,8 @@ const mockPostData = [
         author: "张三", 
         avatar: "user2", 
         likes: 45, 
-        img: "https://via.placeholder.com/600x400/87CEEB/333?text=Bad+Food", 
-        images: ["https://via.placeholder.com/600x400/87CEEB/333?text=Bad+Food"],
+        img: "/static/img/hero-bg.jpg", 
+        images: ["/static/img/hero-bg.jpg"],
         status: "passed",
         tags: ["避雷", "南区食堂"],
         canteen: "南区食堂",
@@ -133,8 +132,8 @@ const mockPostData = [
         author: "李四", 
         avatar: "user3", 
         likes: 230, 
-        img: "https://via.placeholder.com/600x400/90EE90/333?text=Spicy+Hot+Pot", 
-        images: ["https://via.placeholder.com/600x400/90EE90/333?text=Spicy+Hot+Pot"],
+        img: "/static/img/food-hero.jpg", 
+        images: ["/static/img/food-hero.jpg"],
         status: "passed",
         tags: ["推荐", "西区食堂", "麻辣烫"],
         canteen: "西区食堂",
@@ -195,6 +194,14 @@ const mockAdminData = {
 // ==========================================
 
 const MockLoader = {
+    normalizeImageUrl: function(src) {
+        const value = String(src || '').trim();
+        if (!value) return '/static/img/food-hero.jpg';
+        if (value.startsWith('http://') || value.startsWith('https://')) return value;
+        if (value.startsWith('/')) return value;
+        return `/${value.replace(/^\.\//, '')}`;
+    },
+
     /**
      * 获取URL参数
      */
@@ -362,7 +369,8 @@ const MockLoader = {
             post.images.forEach(img => {
                 const slide = document.createElement('div');
                 slide.className = 'swiper-slide';
-                slide.innerHTML = `<img src="${img}" onclick="showBigImg('${img}')">`;
+                const imageUrl = this.normalizeImageUrl(img);
+                slide.innerHTML = `<img src="${imageUrl}" onclick="showBigImg('${imageUrl}')">`;
                 wrapper.appendChild(slide);
             });
             // 触发Swiper更新（如果有全局swiper实例）

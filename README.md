@@ -32,3 +32,7 @@ cd campus-dining-experience-system/dining_system
 pip install -r requirements.txt
 python app.py
 ```
+
+## 测试
+
+项目根目录执行 `pytest`，测试会自动定位到 `dining_system/tests`。

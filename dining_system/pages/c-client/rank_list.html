@@ -8,6 +8,95 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <link href="css/rank_list.css" rel="stylesheet">
+    <style>
+        .recommend-strip {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding: 4px 2px 2px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .recommend-card-mini {
+            flex: 0 0 160px;
+            border: 1px solid #f0f0f0;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .recommend-card-mini:active {
+            transform: scale(0.98);
+        }
+
+        .recommend-card-mini img {
+            width: 100%;
+            height: 102px;
+            object-fit: cover;
+            display: block;
+            background: #f5f5f5;
+        }
+
+        .recommend-card-body {
+            padding: 10px 10px 11px;
+        }
+
+        .recommend-card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #222;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .recommend-card-meta {
+            font-size: 11px;
+            color: #8b8b8b;
+            margin-top: 3px;
+            line-height: 1.4;
+        }
+
+        .recommend-card-score {
+            font-size: 12px;
+            color: #ff7f24;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        .recommend-card-reason {
+            font-size: 11px;
+            color: #8b8b8b;
+            margin-top: 4px;
+            line-height: 1.35;
+            min-height: 30px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .campus-switch-wrap {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 14px 0;
+        }
+
+        .campus-switch {
+            border: 1px solid #f1d4bd;
+            border-radius: 999px;
+            background: #fff;
+            color: #b85d13;
+            font-size: 12px;
+            padding: 5px 10px;
+            box-shadow: 0 2px 6px rgba(255, 127, 36, 0.06);
+            min-width: 112px;
+            max-width: 180px;
+        }
+    </style>
 </head>
 <body>
     <header class="dashboard-header">
@@ -28,6 +117,9 @@
             <button class="time-pill active" data-range="today" type="button">今日</button>
             <button class="time-pill" data-range="week" type="button">近7天</button>
             <button class="time-pill" data-range="month" type="button">近30天</button>
+        </div>
+        <div class="campus-switch-wrap">
+            <select id="campusSwitch" class="campus-switch" aria-label="切换校区"></select>
         </div>
     </header>
 
@@ -83,6 +175,16 @@
 
         <section class="panel-card">
             <div class="panel-head">
+                <h2>个性化推荐榜</h2>
+                <span class="panel-note" id="recommendNote">基于收藏、评价和热度</span>
+            </div>
+            <div class="recommend-strip" id="recommendationStrip">
+                <div class="empty-inline">正在加载推荐内容...</div>
+            </div>
+        </section>
+
+        <section class="panel-card">
+            <div class="panel-head">
                 <h2>高峰时段分布</h2>
                 <span class="panel-note">不同时段就餐占比</span>
             </div>
@@ -130,5 +232,189 @@
     <script src="../../static/js/bootstrap.bundle.min.js"></script>
     <script src="js/api.js"></script>
     <script src="js/rank_list.js"></script>
+    <script>
+        const PUBLIC_CAMPUS_STORAGE_KEY = 'publicCampusId';
+        const publicCampusState = {
+            campusId: Number(localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || '0') || 0,
+            campusName: ''
+        };
+        window.publicCampusState = publicCampusState;
+        const recommendationMeta = {
+            requestId: '',
+            abVariant: 'A',
+            abStrategy: 'baseline'
+        };
+
+        async function applyCampusAwareCanteenLinks() {
+            const links = document.querySelectorAll('a[href^="canteen_detail.html?"]');
+            let targetName = '北区食堂';
+            try {
+                const res = await fetchApi(`${API.PUBLIC_CANTEENS}?campus_id=${encodeURIComponent(publicCampusState.campusId || 0)}`);
+                const list = res.code === 200 && res.data && Array.isArray(res.data.list) ? res.data.list : [];
+                if (list.length > 0) {
+                    targetName = String(list[0].name || targetName).trim() || targetName;
+                }
+            } catch (error) {
+                console.error('获取校区食堂列表失败:', error);
+            }
+
+            const targetHref = `canteen_detail.html?name=${encodeURIComponent(targetName)}&campus_id=${encodeURIComponent(publicCampusState.campusId || 0)}`;
+            links.forEach((node) => {
+                node.setAttribute('href', targetHref);
+            });
+        }
+
+        async function initCampusSwitch() {
+            const switcher = document.getElementById('campusSwitch');
+            if (!switcher) return;
+
+            switcher.disabled = true;
+            switcher.innerHTML = '<option>校区加载中...</option>';
+
+            try {
+                const res = await fetchApi(API.CAMPUSES);
+                if (res.code !== 200) {
+                    throw new Error(res.msg || '校区加载失败');
+                }
+
+                const payload = res.data || {};
+                const campuses = Array.isArray(payload.list) ? payload.list : [];
+                if (!campuses.length) {
+                    switcher.innerHTML = '<option>默认校区</option>';
+                    switcher.disabled = true;
+                    return;
+                }
+
+                const preferredId = publicCampusState.campusId || Number(payload.current_campus_id || 0) || Number(campuses[0].id || 0);
+                publicCampusState.campusId = campuses.some((item) => Number(item.id) === preferredId)
+                    ? preferredId
+                    : Number(payload.current_campus_id || campuses[0].id || 0);
+                publicCampusState.campusName = payload.current_campus_name || '';
+                localStorage.setItem(PUBLIC_CAMPUS_STORAGE_KEY, String(publicCampusState.campusId || ''));
+                await applyCampusAwareCanteenLinks();
+
+                switcher.innerHTML = campuses.map((campus) => {
+                    const selected = Number(campus.id) === Number(publicCampusState.campusId) ? 'selected' : '';
+                    return `<option value="${campus.id}" ${selected}>${escapeHtml(campus.name || '未命名校区')}</option>`;
+                }).join('');
+                switcher.disabled = false;
+
+                switcher.onchange = async () => {
+                    publicCampusState.campusId = Number(switcher.value || 0) || 0;
+                    localStorage.setItem(PUBLIC_CAMPUS_STORAGE_KEY, String(publicCampusState.campusId || ''));
+                    await applyCampusAwareCanteenLinks();
+                    await loadDashboard();
+                    await loadRecommendationBoard();
+                };
+
+                await loadDashboard();
+                await loadRecommendationBoard();
+            } catch (error) {
+                console.error('初始化校区切换失败:', error);
+                switcher.innerHTML = '<option>默认校区</option>';
+                switcher.disabled = true;
+                await applyCampusAwareCanteenLinks();
+            }
+        }
+
+        function normalizeImageUrl(src) {
+            const value = String(src || '').trim();
+            if (!value) return '/static/img/food-hero.jpg';
+            if (value.startsWith('http://') || value.startsWith('https://')) return value;
+            if (value.startsWith('/')) return value;
+            return `${window.location.origin}/${value.replace(/^\.\//, '')}`;
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function trackRecommendationBoardEvent(payload) {
+            if (!payload || typeof payload !== 'object') {
+                return;
+            }
+            fetchApi(API.RECOMMENDATION_TRACK, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).catch(() => {});
+        }
+
+        function trackRecommendationBoardClick(dishId, canteenId, position) {
+            trackRecommendationBoardEvent({
+                event_type: 'click',
+                request_id: recommendationMeta.requestId,
+                ab_variant: recommendationMeta.abVariant,
+                ab_strategy: recommendationMeta.abStrategy,
+                campus_id: publicCampusState.campusId,
+                page: 'rank',
+                dish_id: Number(dishId || 0),
+                canteen_id: Number(canteenId || 0),
+                position: Number(position || 0)
+            });
+            return true;
+        }
+
+        async function loadRecommendationBoard() {
+            const container = document.getElementById('recommendationStrip');
+            const note = document.getElementById('recommendNote');
+            try {
+                const campusQuery = publicCampusState.campusId ? `&campus_id=${encodeURIComponent(publicCampusState.campusId)}` : '';
+                const res = await fetchApi(`${API_BASE_URL}/public/recommendations?limit=8${campusQuery}`);
+                if (res.code !== 200) {
+                    throw new Error(res.msg || '推荐加载失败');
+                }
+                const payload = res.data || {};
+                const items = Array.isArray(payload.list) ? payload.list : [];
+                recommendationMeta.requestId = payload.request_id || '';
+                recommendationMeta.abVariant = payload.ab_variant || 'A';
+                recommendationMeta.abStrategy = payload.ab_strategy || 'baseline';
+                note.textContent = payload.personalized ? '按你的偏好动态排序' : '按校园热度动态排序';
+                if (!items.length) {
+                    container.innerHTML = '<div class="empty-inline">暂无推荐内容</div>';
+                    return;
+                }
+                const dishCampusQuery = publicCampusState.campusId ? `&campus_id=${encodeURIComponent(publicCampusState.campusId)}` : '';
+                container.innerHTML = items.map((item, index) => `
+                    <a class="recommend-card-mini" href="dish_detail.html?id=${item.dish_id}${dishCampusQuery}" onclick="trackRecommendationBoardClick(${Number(item.dish_id || 0)}, ${Number(item.canteen_id || 0)}, ${index + 1})">
+                        <img src="${normalizeImageUrl(item.img_url || '')}" alt="${escapeHtml(item.dish_name || '')}" onerror="this.onerror=null;this.src='/static/img/hero-bg.jpg'">
+                        <div class="recommend-card-body">
+                            <div class="recommend-card-title">${escapeHtml(item.dish_name || '未命名菜品')}</div>
+                            <div class="recommend-card-meta">${escapeHtml(item.canteen_name || '-')} · ${escapeHtml(item.window_name || '-')}</div>
+                            <div class="recommend-card-score">${Number(item.average_score || 0).toFixed(1)} 分</div>
+                            <div class="recommend-card-reason">${escapeHtml(item.reason_summary || '校园热度推荐')}</div>
+                        </div>
+                    </a>
+                `).join('');
+
+                trackRecommendationBoardEvent({
+                    event_type: 'exposure',
+                    request_id: recommendationMeta.requestId,
+                    ab_variant: recommendationMeta.abVariant,
+                    ab_strategy: recommendationMeta.abStrategy,
+                    campus_id: publicCampusState.campusId,
+                    page: 'rank',
+                    items: items.map((item, idx) => ({
+                        dish_id: Number(item.dish_id || 0),
+                        canteen_id: Number(item.canteen_id || 0),
+                        position: idx + 1
+                    }))
+                });
+            } catch (error) {
+                console.error(error);
+                note.textContent = '推荐加载失败';
+                container.innerHTML = '<div class="empty-inline">推荐加载失败，请稍后重试</div>';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCampusSwitch();
+        });
+    </script>
 </body>
 </html>

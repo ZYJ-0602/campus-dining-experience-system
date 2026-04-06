@@ -361,8 +361,10 @@
     <script src="../../static/js/bootstrap.bundle.min.js"></script>
     <script src="js/api.js"></script>
     <script>
+        const PUBLIC_CAMPUS_STORAGE_KEY = 'publicCampusId';
         const urlParams = new URLSearchParams(window.location.search);
         const canteenName = decodeURIComponent((urlParams.get('name') || '北区食堂').trim());
+        const campusId = Number(urlParams.get('campus_id') || localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || '0') || 0;
         let currentCanteenId = null;
         let radarChartInstance = null;
 
@@ -373,7 +375,8 @@
         });
 
         async function bootstrapPage() {
-            const detailRes = await fetchApi(`${API_BASE_URL}/canteens/detail?name=${encodeURIComponent(canteenName)}`);
+            const campusQuery = campusId ? `&campus_id=${encodeURIComponent(campusId)}` : '';
+            const detailRes = await fetchApi(`${API_BASE_URL}/canteens/detail?name=${encodeURIComponent(canteenName)}${campusQuery}`);
             if (detailRes.code !== 200 || !detailRes.data) {
                 renderLoadError(detailRes.msg || '食堂信息加载失败');
                 return;
@@ -481,7 +484,8 @@
                     </div>
                 `;
                 item.onclick = () => {
-                    window.location.href = `dish_detail.html?window_id=${w.id}&canteen_id=${w.canteen_id || currentCanteenId}`;
+                    const campusQuery = campusId ? `&campus_id=${encodeURIComponent(campusId)}` : '';
+                    window.location.href = `dish_detail.html?window_id=${w.id}&canteen_id=${w.canteen_id || currentCanteenId}${campusQuery}`;
                 };
                 list.appendChild(item);
             });

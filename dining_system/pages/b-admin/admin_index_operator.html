@@ -95,6 +95,107 @@
             height: 100%;
             background-color: #f8f9fa;
         }
+
+        .header-logout-btn {
+            border: 1px solid #dee2e6;
+            background: #fff;
+            color: #495057;
+            border-radius: 16px;
+            padding: 4px 10px;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .header-logout-btn:hover {
+            color: #dc3545;
+            border-color: #f1aeb5;
+            background: #fff5f5;
+        }
+
+        .logout-modal-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            backdrop-filter: blur(3px);
+        }
+
+        .logout-modal-mask.show {
+            display: flex;
+            animation: fadeIn 0.18s ease-out;
+        }
+
+        .logout-modal-card {
+            width: min(92vw, 400px);
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(2, 8, 23, 0.25);
+            overflow: hidden;
+            transform: translateY(8px);
+            animation: liftIn 0.2s ease-out forwards;
+        }
+
+        .logout-modal-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 18px 12px;
+            font-weight: 700;
+            color: #212529;
+        }
+
+        .logout-modal-head i {
+            color: #dc3545;
+            font-size: 20px;
+        }
+
+        .logout-modal-body {
+            padding: 0 18px 16px;
+            color: #495057;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .logout-modal-foot {
+            display: flex;
+            gap: 10px;
+            padding: 12px 18px 18px;
+        }
+
+        .logout-modal-foot button {
+            flex: 1;
+            border-radius: 10px;
+            height: 38px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .logout-cancel-btn {
+            background: #eef2f7;
+            color: #495057;
+        }
+
+        .logout-confirm-btn {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: #fff;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes liftIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
@@ -118,10 +219,19 @@
             <a href="dish_evaluation_admin.html" target="contentFrame" class="nav-link" onclick="setActive(this)">
                 <i class="bi bi-chat-square-text"></i> 菜品评价管理
             </a>
+            <a href="admin_guest_evaluation_review.html" target="contentFrame" class="nav-link" onclick="setActive(this)">
+                <i class="bi bi-person-check"></i> 游客评价审核
+            </a>
+            <a href="admin_risk_review.html" target="contentFrame" class="nav-link" onclick="setActive(this)">
+                <i class="bi bi-exclamation-diamond"></i> 异常评价复核
+            </a>
+            <a href="admin_work_orders.html" target="contentFrame" class="nav-link" onclick="setActive(this)">
+                <i class="bi bi-list-task"></i> 整改工单中心
+            </a>
         </div>
 
         <div class="mt-auto p-3">
-            <a href="/admin/login" class="btn btn-outline-light w-100 btn-sm">
+            <a href="#" class="btn btn-outline-light w-100 btn-sm" onclick="openLogoutModal(); return false;">
                 <i class="bi bi-box-arrow-right"></i> 退出登录
             </a>
         </div>
@@ -138,9 +248,29 @@
                 <span class="badge bg-primary text-white">Operator</span>
                 <img src="https://ui-avatars.com/api/?name=Operator&background=0d6efd&color=fff" alt="operator" class="rounded-circle" width="32" height="32">
                 <span class="fw-bold">食堂运营</span>
+                <button class="header-logout-btn" type="button" onclick="logoutFromHeader()">
+                    <i class="bi bi-box-arrow-right"></i>
+                    退出账号
+                </button>
             </div>
         </div>
         <iframe src="admin_dashboard.html" name="contentFrame" class="content-frame"></iframe>
+    </div>
+
+    <div class="logout-modal-mask" id="logoutModal" onclick="closeLogoutModalByMask(event)">
+        <div class="logout-modal-card" role="dialog" aria-modal="true" aria-labelledby="logoutModalTitle">
+            <div class="logout-modal-head" id="logoutModalTitle">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                退出登录确认
+            </div>
+            <div class="logout-modal-body">
+                确定要退出当前账号吗？退出后将返回登录页。
+            </div>
+            <div class="logout-modal-foot">
+                <button type="button" class="logout-cancel-btn" onclick="closeLogoutModal()">取消</button>
+                <button type="button" class="logout-confirm-btn" id="logoutConfirmBtn" onclick="confirmLogout()">确认退出</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -157,6 +287,46 @@
             } else {
                 sidebar.style.width = '0px';
                 sidebar.style.overflow = 'hidden';
+            }
+        });
+
+        function logoutFromHeader() {
+            openLogoutModal();
+        }
+
+        function openLogoutModal() {
+            document.getElementById('logoutModal').classList.add('show');
+        }
+
+        function closeLogoutModal() {
+            document.getElementById('logoutModal').classList.remove('show');
+        }
+
+        function closeLogoutModalByMask(event) {
+            if (event.target && event.target.id === 'logoutModal') {
+                closeLogoutModal();
+            }
+        }
+
+        async function confirmLogout() {
+            const confirmBtn = document.getElementById('logoutConfirmBtn');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '退出中...';
+            try {
+                await fetch('/api/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } finally {
+                localStorage.removeItem('isLogin');
+                localStorage.removeItem('user');
+                window.location.href = '/admin/login';
+            }
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeLogoutModal();
             }
         });
     </script>

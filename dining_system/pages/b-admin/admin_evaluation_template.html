@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>评价模板管理</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap { padding: 24px; min-height: 100vh; }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .page-desc {
+            margin-top: 6px;
+            color: #8e95a3;
+            font-size: 13px;
+        }
+
+        .editor-card,
+        .list-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .editor-card { margin-bottom: 16px; }
+
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .form-item { display: grid; gap: 6px; }
+
+        .form-label {
+            margin: 0;
+            color: #4e5969;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .form-select,
+        .form-control {
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .form-select:focus,
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .toolbar-actions {
+            display: inline-flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary-blue,
+        .btn-outline-gray,
+        .btn-success-outline,
+        .btn-warning-outline,
+        .btn-danger-outline {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-outline-gray {
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-outline-gray:hover { background: #f8fafc; }
+
+        .btn-success-outline {
+            color: #389e0d;
+            border-color: #95de64;
+            background: #f6ffed;
+        }
+
+        .btn-success-outline:hover { background: #ecffe0; }
+
+        .btn-warning-outline {
+            color: #ad6800;
+            border-color: #ffecb5;
+            background: #fffbe6;
+        }
+
+        .btn-warning-outline:hover { background: #fff7d6; }
+
+        .btn-danger-outline {
+            color: #ff4d4f;
+            border-color: #ff4d4f;
+        }
+
+        .btn-danger-outline:hover { background: #fff1f0; }
+
+        .meta-text {
+            margin-top: 10px;
+            color: #8c8c8c;
+            font-size: 13px;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .section-title {
+            margin: 0;
+            color: #1f2329;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .item-header,
+        .item-row {
+            display: grid;
+            grid-template-columns: 120px 120px 1fr 90px 90px 90px 56px;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .item-header {
+            color: #303133;
+            font-weight: 700;
+            font-size: 13px;
+            padding: 8px 10px;
+            background: #f7f8fa;
+            border: 1px solid #edf0f5;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .item-row {
+            padding: 8px 10px;
+            border: 1px solid #edf0f5;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+
+        .empty-box {
+            text-align: center;
+            color: #909399;
+            padding: 28px 0;
+            line-height: 1.5;
+            border: 1px dashed #d9dfe8;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 1100px) {
+            .editor-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar-actions { justify-content: flex-start; }
+
+            .item-header,
+            .item-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">评价模板管理</h1>
+            <div class="page-desc">版本化维护评价模板细项，支持草稿保存与一键发布。</div>
+        </div>
+        <div class="toolbar-actions">
+            <button class="btn-outline-gray" type="button" onclick="loadTemplates()"><i class="bi bi-arrow-clockwise"></i>刷新</button>
+            <button class="btn-primary-blue" type="button" onclick="createDraftTemplate()"><i class="bi bi-plus-circle"></i>新建草稿模板</button>
+        </div>
+    </div>
+
+    <div class="editor-card">
+        <div class="editor-grid">
+            <div class="form-item">
+                <label class="form-label" for="templateSelect">模板版本</label>
+                <select id="templateSelect" class="form-select" onchange="onTemplateChange()"></select>
+            </div>
+            <div class="form-item">
+                <label class="form-label" for="templateName">模板名称</label>
+                <input id="templateName" class="form-control" maxlength="100">
+            </div>
+            <div class="toolbar-actions">
+                <button class="btn-success-outline" type="button" onclick="saveTemplate()"><i class="bi bi-check-circle"></i>保存草稿</button>
+                <button class="btn-warning-outline" type="button" onclick="publishTemplate()"><i class="bi bi-send-check"></i>发布版本</button>
+            </div>
+        </div>
+        <div class="meta-text" id="templateMeta">-</div>
+    </div>
+
+    <div class="list-card">
+        <div class="section-head">
+            <h2 class="section-title">模板细项</h2>
+            <button class="btn-primary-blue" type="button" onclick="addItemRow()"><i class="bi bi-plus"></i>新增细项</button>
+        </div>
+        <div class="item-header">
+            <div>类别</div>
+            <div>键</div>
+            <div>名称</div>
+            <div>排序</div>
+            <div>最小分</div>
+            <div>最大分</div>
+            <div>删除</div>
+        </div>
+        <div id="itemsBox"></div>
+    </div>
+</div>
+
+<script src="../c-client/js/api.js"></script>
+<script>
+let templates = [];
+let currentTemplate = null;
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+async function ensureAdmin() {
+    const me = await fetchApi(API.AUTH_ME, { method: 'GET' });
+    if (me.code !== 200) {
+        window.top.location.href = 'admin_login.html';
+        return false;
+    }
+    if (String(me.data.role || '').toLowerCase() !== 'admin') {
+        alert('仅系统管理员可管理评价模板');
+        window.top.location.href = 'admin_index_sys.html';
+        return false;
+    }
+    return true;
+}
+
+function flattenItems(template) {
+    const items = [];
+    const groups = (template && template.items) || {};
+    ['food', 'service', 'env', 'safety'].forEach((cat) => {
+        const arr = Array.isArray(groups[cat]) ? groups[cat] : [];
+        arr.forEach((item) => items.push({ ...item, category: cat }));
+    });
+    return items;
+}
+
+function renderItems(items) {
+    const box = document.getElementById('itemsBox');
+    if (!items.length) {
+        box.innerHTML = '<div class="empty-box">暂无细项，请点击新增细项。</div>';
+        return;
+    }
+
+    box.innerHTML = items.map((item, idx) => `
+        <div class="item-row" data-index="${idx}">
+            <select class="form-select item-category">
+                <option value="food" ${item.category === 'food' ? 'selected' : ''}>food</option>
+                <option value="service" ${item.category === 'service' ? 'selected' : ''}>service</option>
+                <option value="env" ${item.category === 'env' ? 'selected' : ''}>env</option>
+                <option value="safety" ${item.category === 'safety' ? 'selected' : ''}>safety</option>
+            </select>
+            <input class="form-control item-key" value="${escapeHtml(item.item_key || '')}">
+            <input class="form-control item-label" value="${escapeHtml(item.item_label || '')}">
+            <input type="number" class="form-control item-sort" value="${Number(item.sort_order || idx + 1)}">
+            <input type="number" class="form-control item-min" value="${Number(item.score_min || 1)}">
+            <input type="number" class="form-control item-max" value="${Number(item.score_max || 10)}">
+            <button class="btn-danger-outline" type="button" onclick="removeItemRow(${idx})"><i class="bi bi-trash"></i></button>
+        </div>
+    `).join('');
+}
+
+function collectItemsFromUI() {
+    const rows = document.querySelectorAll('#itemsBox .item-row');
+    const items = [];
+    rows.forEach((row, i) => {
+        const category = row.querySelector('.item-category').value;
+        const itemKey = row.querySelector('.item-key').value.trim();
+        const itemLabel = row.querySelector('.item-label').value.trim();
+        const sortOrder = Number(row.querySelector('.item-sort').value || (i + 1));
+        const scoreMin = Number(row.querySelector('.item-min').value || 1);
+        const scoreMax = Number(row.querySelector('.item-max').value || 10);
+        if (!itemKey || !itemLabel) return;
+        items.push({
+            category,
+            item_key: itemKey,
+            item_label: itemLabel,
+            sort_order: sortOrder,
+            score_min: scoreMin,
+            score_max: scoreMax,
+            enabled: true,
+        });
+    });
+    return items;
+}
+
+function removeItemRow(index) {
+    const items = flattenItems(currentTemplate);
+    items.splice(index, 1);
+    currentTemplate.items = { food: [], service: [], env: [], safety: [] };
+    items.forEach((item) => currentTemplate.items[item.category].push(item));
+    renderItems(flattenItems(currentTemplate));
+}
+
+function addItemRow() {
+    if (!currentTemplate) return;
+    const items = flattenItems(currentTemplate);
+    items.push({
+        category: 'service',
+        item_key: 'new_key',
+        item_label: '新细项',
+        sort_order: items.length + 1,
+        score_min: 1,
+        score_max: 10,
+    });
+    currentTemplate.items = { food: [], service: [], env: [], safety: [] };
+    items.forEach((item) => currentTemplate.items[item.category].push(item));
+    renderItems(flattenItems(currentTemplate));
+}
+
+function renderTemplateOptions() {
+    const select = document.getElementById('templateSelect');
+    select.innerHTML = templates.map((item) => `
+        <option value="${item.id}">v${item.version_no} - ${escapeHtml(item.name)} (${item.status})</option>
+    `).join('');
+}
+
+function onTemplateChange() {
+    const id = Number(document.getElementById('templateSelect').value || 0);
+    currentTemplate = templates.find((item) => Number(item.id) === id) || null;
+    if (!currentTemplate) return;
+
+    document.getElementById('templateName').value = currentTemplate.name || '';
+    document.getElementById('templateMeta').textContent = `状态: ${currentTemplate.status}，发布时间: ${currentTemplate.publish_time || '-'}`;
+    renderItems(flattenItems(currentTemplate));
+}
+
+async function loadTemplates() {
+    const res = await fetchApi(`${API_BASE_URL}/admin/evaluation_templates`, { method: 'GET' });
+    if (res.code !== 200) {
+        alert(res.msg || '加载模板失败');
+        return;
+    }
+    templates = (res.data && Array.isArray(res.data.list)) ? res.data.list : [];
+    if (!templates.length) {
+        document.getElementById('templateSelect').innerHTML = '';
+        document.getElementById('itemsBox').innerHTML = '<div class="empty-box">暂无模板</div>';
+        return;
+    }
+    renderTemplateOptions();
+    onTemplateChange();
+}
+
+async function createDraftTemplate() {
+    const name = prompt('请输入草稿模板名称：', `模板草稿 ${new Date().toLocaleString()}`);
+    if (name === null) return;
+    const res = await fetchApi(`${API_BASE_URL}/admin/evaluation_templates`, {
+        method: 'POST',
+        body: JSON.stringify({ name })
+    });
+    if (res.code !== 200) {
+        alert(res.msg || '创建失败');
+        return;
+    }
+    await loadTemplates();
+    document.getElementById('templateSelect').value = String(res.data.id);
+    onTemplateChange();
+}
+
+async function saveTemplate() {
+    if (!currentTemplate) return;
+    const payload = {
+        name: document.getElementById('templateName').value.trim(),
+        items: collectItemsFromUI(),
+    };
+    const res = await fetchApi(`${API_BASE_URL}/admin/evaluation_templates/${currentTemplate.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+    });
+    if (res.code !== 200) {
+        alert(res.msg || '保存失败');
+        return;
+    }
+    alert('草稿已保存');
+    await loadTemplates();
+    document.getElementById('templateSelect').value = String(currentTemplate.id);
+    onTemplateChange();
+}
+
+async function publishTemplate() {
+    if (!currentTemplate) return;
+    if (!confirm('确认发布该模板？发布后将成为新的生效版本。')) return;
+    const res = await fetchApi(`${API_BASE_URL}/admin/evaluation_templates/${currentTemplate.id}/publish`, {
+        method: 'POST',
+        body: JSON.stringify({})
+    });
+    if (res.code !== 200) {
+        alert(res.msg || '发布失败');
+        return;
+    }
+    alert('模板已发布');
+    await loadTemplates();
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const ok = await ensureAdmin();
+    if (!ok) return;
+    await loadTemplates();
+});
+</script>
+</body>
+</html>

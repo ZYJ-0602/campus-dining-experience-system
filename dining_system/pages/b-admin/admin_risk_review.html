@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>异常评价复核</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap { padding: 24px; min-height: 100vh; }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .page-desc {
+            margin-top: 6px;
+            color: #8e95a3;
+            font-size: 13px;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 180px 180px auto;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toolbar-actions {
+            display: inline-flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .form-select,
+        .form-control {
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .form-select:focus,
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .btn-primary-blue,
+        .btn-outline-gray {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-outline-gray {
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-outline-gray:hover { background: #f8fafc; }
+
+        .table-card {
+            margin-top: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-responsive-wrap { overflow-x: auto; }
+
+        .risk-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1050px;
+        }
+
+        .risk-table th,
+        .risk-table td {
+            padding: 12px 16px;
+            line-height: 48px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .risk-table thead th {
+            background: #f7f8fa;
+            font-weight: 700;
+            color: #303133;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .risk-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .risk-table tbody tr:hover td { background: #fafafa; }
+
+        .risk-level {
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .risk-critical { color: #b91c1c; }
+        .risk-high { color: #dc2626; }
+        .risk-medium { color: #d97706; }
+        .risk-low { color: #059669; }
+
+        .remark-cell {
+            max-width: 280px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 28px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            color: #4e5969;
+            background: #f3f4f6;
+        }
+
+        .action-links {
+            display: inline-flex;
+            gap: 14px;
+            align-items: center;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .action-link.pass { color: #389e0d; }
+        .action-link.watch { color: #d48806; }
+        .action-link.reject { color: var(--danger); }
+        .action-link.order { color: var(--primary); }
+
+        .action-link:hover { text-decoration: underline; }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            padding: 28px 0;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 1100px) {
+            .toolbar-card { grid-template-columns: 1fr 1fr; }
+            .toolbar-actions { grid-column: 1 / -1; justify-content: flex-start; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">异常评价复核</h1>
+            <div class="page-desc">识别高风险评价，支持快速通过、观察、驳回和一键转工单。</div>
+        </div>
+        <button class="btn-outline-gray" type="button" onclick="loadRiskList()"><i class="bi bi-arrow-clockwise"></i>刷新</button>
+    </div>
+
+    <div class="toolbar-card">
+        <select id="statusFilter" class="form-select" onchange="loadRiskList()">
+            <option value="">全部状态</option>
+            <option value="pending">待复核</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已驳回</option>
+            <option value="watch">观察中</option>
+        </select>
+        <select id="scoreFilter" class="form-select" onchange="loadRiskList()">
+            <option value="0">风险分>=0</option>
+            <option value="45">风险分>=45</option>
+            <option value="70">风险分>=70</option>
+            <option value="85">风险分>=85</option>
+        </select>
+        <div class="toolbar-actions">
+            <button class="btn-primary-blue" type="button" onclick="scanRisk()"><i class="bi bi-search"></i>重新扫描</button>
+            <span id="summaryText" class="text-muted small" style="align-self:center;">-</span>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-responsive-wrap">
+            <table class="risk-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">ID</th>
+                        <th style="width: 130px;">用户</th>
+                        <th style="width: 220px;">食堂/窗口</th>
+                        <th style="width: 100px;">风险</th>
+                        <th style="width: 100px;">评分</th>
+                        <th style="width: 280px;">备注</th>
+                        <th style="width: 110px;">状态</th>
+                        <th style="width: 220px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="riskBody">
+                    <tr><td colspan="8" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function levelClass(level) {
+    const risk = String(level || 'low').toLowerCase();
+    if (risk === 'critical') return 'risk-critical';
+    if (risk === 'high') return 'risk-high';
+    if (risk === 'medium') return 'risk-medium';
+    return 'risk-low';
+}
+
+async function requestJson(url, options = {}) {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.code !== 200) {
+        throw new Error(data.msg || '请求失败');
+    }
+    return data;
+}
+
+async function loadRiskList() {
+    const status = document.getElementById('statusFilter').value;
+    const minScore = document.getElementById('scoreFilter').value || '0';
+    const query = new URLSearchParams({ limit: '50', min_score: minScore });
+    if (status) query.set('status', status);
+
+    const body = document.getElementById('riskBody');
+    body.innerHTML = '<tr><td colspan="8" class="empty-row">加载中...</td></tr>';
+    try {
+        const result = await requestJson(`/api/admin/risk_evaluations?${query.toString()}`);
+        const rows = (result.data && result.data.list) || [];
+        document.getElementById('summaryText').textContent = `共 ${result.data.total || 0} 条`;
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="8" class="empty-row">暂无数据</td></tr>';
+            return;
+        }
+        body.innerHTML = rows.map((row) => {
+            const remark = row.remark || '';
+            return `
+            <tr>
+                <td>#${row.id}</td>
+                <td>${row.username || '-'}</td>
+                <td>${row.canteen_name || '-'} / ${row.window_name || '-'}</td>
+                <td><span class="risk-level ${levelClass(row.risk_level)}">${row.risk_score}</span></td>
+                <td>${Number(row.comprehensive_score || 0).toFixed(1)}</td>
+                <td><span class="remark-cell" title="${remark.replace(/"/g, '&quot;')}">${remark || '-'}</span></td>
+                <td><span class="status-pill">${row.status || '-'}</span></td>
+                <td>
+                    <div class="action-links">
+                        <button class="action-link pass" onclick="reviewRisk(${row.id}, 'approved')">通过</button>
+                        <button class="action-link watch" onclick="reviewRisk(${row.id}, 'watch')">观察</button>
+                        <button class="action-link reject" onclick="reviewRisk(${row.id}, 'rejected')">驳回</button>
+                        <button class="action-link order" onclick="createOrder(${row.id})">建单</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (err) {
+        body.innerHTML = `<tr><td colspan="8" class="empty-row">${err.message}</td></tr>`;
+    }
+}
+
+async function scanRisk() {
+    try {
+        await requestJson('/api/admin/risk_evaluations/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+        });
+        await loadRiskList();
+        alert('扫描完成');
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function reviewRisk(id, decision) {
+    const note = prompt('请输入复核备注（可选）') || '';
+    try {
+        await requestJson(`/api/admin/risk_evaluations/${id}/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, note })
+        });
+        await loadRiskList();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function createOrder(id) {
+    try {
+        await requestJson(`/api/admin/risk_evaluations/${id}/work_order`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        alert('已创建整改工单');
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+loadRiskList();
+</script>
+</body>
+</html>

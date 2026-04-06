@@ -1,0 +1,555 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>整改工单中心</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --danger: #ff4d4f;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap { padding: 24px; min-height: 100vh; }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .page-desc {
+            margin-top: 6px;
+            color: #8e95a3;
+            font-size: 13px;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 180px 180px auto;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toolbar-actions {
+            display: inline-flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .form-select,
+        .form-control,
+        .form-input,
+        .form-textarea {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            color: #1f2329;
+            outline: none;
+        }
+
+        .form-select,
+        .form-control,
+        .form-input { height: 40px; padding: 0 12px; }
+
+        .form-textarea {
+            min-height: 96px;
+            padding: 10px 12px;
+            resize: vertical;
+        }
+
+        .form-select:focus,
+        .form-control:focus,
+        .form-input:focus,
+        .form-textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .btn-primary-blue,
+        .btn-outline-gray,
+        .btn-ghost-blue,
+        .btn-danger-outline {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary-blue {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+        }
+
+        .btn-outline-gray {
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-outline-gray:hover { background: #f8fafc; }
+
+        .btn-ghost-blue {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-ghost-blue:hover { background: #eef4ff; }
+
+        .btn-danger-outline {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .btn-danger-outline:hover { background: #fff1f0; }
+
+        .table-card {
+            margin-top: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-responsive-wrap { overflow-x: auto; }
+
+        .order-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1080px;
+        }
+
+        .order-table th,
+        .order-table td {
+            padding: 12px 16px;
+            line-height: 48px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .order-table thead th {
+            background: #f7f8fa;
+            font-weight: 700;
+            color: #303133;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .order-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .order-table tbody tr:hover td { background: #fafafa; }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 28px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .chip-pending { background: #fff7ed; color: #c2410c; }
+        .chip-processing { background: #eff6ff; color: #1d4ed8; }
+        .chip-review { background: #ecfeff; color: #0e7490; }
+        .chip-completed { background: #ecfdf5; color: #047857; }
+        .chip-archived { background: #f3f4f6; color: #4b5563; }
+
+        .overdue { color: #dc2626; font-weight: 700; }
+
+        .action-links {
+            display: inline-flex;
+            gap: 12px;
+            align-items: center;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .action-link.start { color: #1677ff; }
+        .action-link.review { color: #0891b2; }
+        .action-link.complete { color: #389e0d; }
+        .action-link.archive { color: #6b7280; }
+
+        .action-link:hover { text-decoration: underline; }
+
+        .empty-row {
+            text-align: center;
+            color: #909399;
+            padding: 28px 0;
+            line-height: 1.5;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 3000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show { display: flex; }
+
+        .modal-panel {
+            width: min(560px, 100%);
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+            overflow: hidden;
+        }
+
+        .modal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            margin: 0;
+            color: #1f2329;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: #909399;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .modal-body { padding: 16px; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .form-item {
+            display: grid;
+            gap: 6px;
+        }
+
+        .form-item.full { grid-column: 1 / -1; }
+
+        .form-label {
+            margin: 0;
+            color: #4e5969;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .modal-foot {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        @media (max-width: 1100px) {
+            .toolbar-card { grid-template-columns: 1fr 1fr; }
+            .toolbar-actions { grid-column: 1 / -1; justify-content: flex-start; }
+        }
+
+        @media (max-width: 768px) {
+            .form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">整改工单中心</h1>
+            <div class="page-desc">统一查看工单状态与SLA，支持接单、送审、完成和归档流转。</div>
+        </div>
+        <button class="btn-outline-gray" type="button" onclick="loadOrders()"><i class="bi bi-arrow-clockwise"></i>刷新</button>
+    </div>
+
+    <div class="toolbar-card">
+        <select id="statusFilter" class="form-select" onchange="loadOrders()">
+            <option value="">全部状态</option>
+            <option value="pending">待处理</option>
+            <option value="processing">处理中</option>
+            <option value="review">待复核</option>
+            <option value="completed">已完成</option>
+            <option value="archived">已归档</option>
+        </select>
+        <select id="overdueFilter" class="form-select" onchange="loadOrders()">
+            <option value="">全部</option>
+            <option value="1">仅逾期</option>
+        </select>
+        <div class="toolbar-actions">
+            <button class="btn-ghost-blue" type="button" onclick="scanSla()"><i class="bi bi-shield-check"></i>SLA扫描</button>
+            <button class="btn-primary-blue" type="button" onclick="showCreateModal()"><i class="bi bi-plus-circle"></i>新建工单</button>
+            <span id="summaryText" class="text-muted small" style="align-self:center;">-</span>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-responsive-wrap">
+            <table class="order-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">ID</th>
+                        <th style="width: 220px;">标题</th>
+                        <th style="width: 220px;">食堂/窗口</th>
+                        <th style="width: 140px;">负责人</th>
+                        <th style="width: 110px;">优先级</th>
+                        <th style="width: 110px;">状态</th>
+                        <th style="width: 190px;">截止时间</th>
+                        <th style="width: 230px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="orderBody">
+                    <tr><td colspan="8" class="empty-row">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="createModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="createModalTitle">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-head">
+            <h3 class="modal-title" id="createModalTitle">新建整改工单</h3>
+            <button class="modal-close" type="button" onclick="closeCreateModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-grid">
+                <div class="form-item full">
+                    <label class="form-label" for="newTitle">标题</label>
+                    <input id="newTitle" class="form-input" placeholder="如：北区一号窗口服务整改">
+                </div>
+                <div class="form-item full">
+                    <label class="form-label" for="newDesc">问题描述</label>
+                    <textarea id="newDesc" class="form-textarea"></textarea>
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="newCanteenId">食堂ID</label>
+                    <input id="newCanteenId" class="form-input" type="number" min="1">
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="newWindowId">窗口ID</label>
+                    <input id="newWindowId" class="form-input" type="number" min="1">
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-outline-gray" type="button" onclick="closeCreateModal()">取消</button>
+            <button class="btn-primary-blue" type="button" onclick="createOrder()">提交</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function chipClass(status) {
+    return `chip chip-${status || 'pending'}`;
+}
+
+async function requestJson(url, options = {}) {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.code !== 200) {
+        throw new Error(data.msg || '请求失败');
+    }
+    return data;
+}
+
+async function loadStats() {
+    const result = await requestJson('/api/admin/work_orders/stats');
+    const data = result.data || {};
+    document.getElementById('summaryText').textContent = `总工单 ${data.total || 0}，逾期 ${data.overdue || 0}`;
+}
+
+async function loadOrders() {
+    const status = document.getElementById('statusFilter').value;
+    const overdue = document.getElementById('overdueFilter').value;
+    const query = new URLSearchParams({ limit: '50' });
+    if (status) query.set('status', status);
+    if (overdue) query.set('overdue', overdue);
+
+    const body = document.getElementById('orderBody');
+    body.innerHTML = '<tr><td colspan="8" class="empty-row">加载中...</td></tr>';
+    try {
+        const result = await requestJson(`/api/admin/work_orders?${query.toString()}`);
+        const rows = (result.data && result.data.list) || [];
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="8" class="empty-row">暂无工单</td></tr>';
+            await loadStats();
+            return;
+        }
+        body.innerHTML = rows.map((row) => {
+            const overdueCls = row.is_overdue ? 'overdue' : '';
+            return `
+            <tr>
+                <td>#${row.id}</td>
+                <td>${row.title || '-'}</td>
+                <td>${row.canteen_name || '-'} / ${row.window_name || '-'}</td>
+                <td>${row.assignee_name || '-'}</td>
+                <td>${row.priority || 'medium'}</td>
+                <td><span class="${chipClass(row.status)}">${row.status || '-'}</span></td>
+                <td class="${overdueCls}">${row.due_time || '-'}</td>
+                <td>
+                    <div class="action-links">
+                        <button class="action-link start" onclick="transition(${row.id}, 'start')">接单</button>
+                        <button class="action-link review" onclick="transition(${row.id}, 'to_review')">送审</button>
+                        <button class="action-link complete" onclick="transition(${row.id}, 'complete')">完成</button>
+                        <button class="action-link archive" onclick="transition(${row.id}, 'archive')">归档</button>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+        await loadStats();
+    } catch (err) {
+        body.innerHTML = `<tr><td colspan="8" class="empty-row">${err.message}</td></tr>`;
+    }
+}
+
+async function transition(id, action) {
+    const note = prompt('流转备注（可选）') || '';
+    try {
+        await requestJson(`/api/admin/work_orders/${id}/transition`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, note })
+        });
+        await loadOrders();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+async function scanSla() {
+    try {
+        await requestJson('/api/admin/work_orders/sla_scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+        });
+        await loadOrders();
+        alert('SLA扫描完成');
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+function showCreateModal() {
+    document.getElementById('createModalOverlay').classList.add('show');
+}
+
+function closeCreateModal() {
+    document.getElementById('createModalOverlay').classList.remove('show');
+}
+
+async function createOrder() {
+    const title = document.getElementById('newTitle').value.trim();
+    if (!title) {
+        alert('请输入标题');
+        return;
+    }
+    const issueDesc = document.getElementById('newDesc').value.trim();
+    const canteenId = Number(document.getElementById('newCanteenId').value || 0);
+    const windowId = Number(document.getElementById('newWindowId').value || 0);
+
+    try {
+        await requestJson('/api/admin/work_orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title,
+                issue_desc: issueDesc,
+                canteen_id: canteenId || null,
+                window_id: windowId || null
+            })
+        });
+        closeCreateModal();
+        await loadOrders();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+document.getElementById('createModalOverlay').addEventListener('click', (event) => {
+    if (event.target.id === 'createModalOverlay') {
+        closeCreateModal();
+    }
+});
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeCreateModal();
+    }
+});
+
+loadOrders();
+</script>
+</body>
+</html>
+

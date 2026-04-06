@@ -68,11 +68,14 @@
 <script>
     // 获取URL参数中的id
     const urlParams = new URLSearchParams(window.location.search);
+    const PUBLIC_CAMPUS_STORAGE_KEY = 'publicCampusId';
     const DISH_ID = urlParams.get('id') || 1; // 默认ID为1
+    const CAMPUS_ID = Number(urlParams.get('campus_id') || localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || '0') || 0;
 
     async function loadDishEvaluations() {
         try {
-            const res = await fetchApi(`${API.DISH_EVALUATIONS}?dish_id=${DISH_ID}`);
+            const campusQuery = CAMPUS_ID ? `&campus_id=${encodeURIComponent(CAMPUS_ID)}` : '';
+            const res = await fetchApi(`${API.DISH_EVALUATIONS}?dish_id=${DISH_ID}${campusQuery}`);
             
             if (res.code === 200) {
                 renderStats(res.data.stats);

@@ -77,11 +77,12 @@ async function handleLogin(e) {
         });
 
         if (res.code === 200) {
-            // 存储登录状态
-            localStorage.setItem('user', JSON.stringify(res.data));
-            localStorage.setItem('isLogin', 'true');
+            // 以服务端会话为准，避免多标签页身份缓存错乱
+            const meState = await syncUserFromAuthMe(false);
+            const userData = meState.ok ? meState.data : (res.data || {});
+            persistAuthUser(userData);
             if (window.Common && typeof window.Common.setStorage === 'function') {
-                window.Common.setStorage('currentUser', res.data);
+                window.Common.setStorage('currentUser', userData);
             }
             
             // 修复：跳转路径可能需要根据部署环境调整，这里使用相对路径
@@ -130,10 +131,11 @@ async function handleRegister(e) {
 
         if (res.code === 200) {
             alert('注册成功！已自动登录');
-            localStorage.setItem('user', JSON.stringify(res.data));
-            localStorage.setItem('isLogin', 'true');
+            const meState = await syncUserFromAuthMe(false);
+            const userData = meState.ok ? meState.data : (res.data || {});
+            persistAuthUser(userData);
             if (window.Common && typeof window.Common.setStorage === 'function') {
-                window.Common.setStorage('currentUser', res.data);
+                window.Common.setStorage('currentUser', userData);
             }
             location.href = 'index.html';
         } else {

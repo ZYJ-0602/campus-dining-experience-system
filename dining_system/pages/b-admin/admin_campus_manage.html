@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>校区管理</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --success: #52c41a;
+            --danger: #ff4d4f;
+            --warning: #faad14;
+            --bg: #f5f7fa;
+            --surface: #ffffff;
+            --border: #e5e6eb;
+            --text: #606266;
+            --text-dark: #1f2329;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .page-wrap {
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-weight: 700;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+
+        .page-desc {
+            margin-top: 6px;
+            color: #8e95a3;
+            font-size: 13px;
+        }
+
+        .btn-ghost-blue,
+        .btn-primary-blue,
+        .btn-gray,
+        .btn-danger-outline,
+        .btn-outline-gray,
+        .btn-primary {
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            line-height: 1;
+            border: 1px solid transparent;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary,
+        .btn-primary-blue {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover,
+        .btn-primary-blue:hover {
+            background: #0958d9;
+            border-color: #0958d9;
+            color: #fff;
+        }
+
+        .btn-ghost-blue {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-ghost-blue:hover {
+            background: #eef4ff;
+        }
+
+        .btn-gray {
+            background: #f2f3f5;
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-gray:hover {
+            background: #e8eaef;
+        }
+
+        .btn-outline-gray {
+            background: #fff;
+            color: #4e5969;
+            border-color: #dcdfe6;
+        }
+
+        .btn-danger-outline {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .btn-danger-outline:hover {
+            background: #fff1f0;
+        }
+
+        .btn-warning-outline {
+            color: #ad6800;
+            border-color: #ffecb5;
+            background: #fffbe6;
+        }
+
+        .btn-warning-outline:hover {
+            background: #fff7d6;
+        }
+
+        .stats-grid {
+            margin-bottom: 16px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+
+        .stat-label {
+            color: #8e95a3;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            color: var(--text-dark);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            display: grid;
+            grid-template-columns: minmax(280px, 1.2fr) minmax(220px, 1fr) auto;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #a0a5b0;
+        }
+
+        .search-input,
+        .filter-select,
+        .form-input,
+        .form-select {
+            width: 100%;
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            color: var(--text-dark);
+            background: #fff;
+            outline: none;
+        }
+
+        .search-input {
+            padding-left: 36px;
+        }
+
+        .search-input:focus,
+        .filter-select:focus,
+        .form-input:focus,
+        .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+        }
+
+        .toolbar-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .table-card {
+            margin-top: 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table-responsive-wrap {
+            overflow-x: auto;
+        }
+
+        .campus-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .campus-table th,
+        .campus-table td {
+            padding: 12px 16px;
+            line-height: 48px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .campus-table thead th {
+            background: #f7f8fa;
+            font-weight: 700;
+            color: #303133;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .campus-table tbody td {
+            border-bottom: 1px solid #f0f1f5;
+            color: #4e5969;
+        }
+
+        .campus-table tbody tr:hover td {
+            background: #fafafa;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 72px;
+            height: 28px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .status-on {
+            color: #0f7b2d;
+            background: #ecfdf3;
+        }
+
+        .status-off {
+            color: #5e6470;
+            background: #f3f4f6;
+        }
+
+        .action-links {
+            display: inline-flex;
+            gap: 14px;
+            align-items: center;
+            line-height: 1;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .action-link.edit {
+            color: var(--primary);
+        }
+
+        .action-link.toggle {
+            color: #ad6800;
+        }
+
+        .action-link.delete {
+            color: var(--danger);
+        }
+
+        .action-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-row {
+            color: #909399;
+            text-align: center;
+            padding: 28px 0;
+            line-height: 1.5;
+        }
+
+        .code-cell {
+            color: #425466;
+            font-family: Consolas, "SFMono-Regular", Menlo, Monaco, monospace;
+            font-size: 13px;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 3000;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-panel {
+            width: min(560px, 100%);
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+            overflow: hidden;
+        }
+
+        .modal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            border: none;
+            background: transparent;
+            color: #909399;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 16px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .form-item {
+            display: grid;
+            gap: 6px;
+        }
+
+        .form-item.full {
+            grid-column: 1 / -1;
+        }
+
+        .form-label {
+            color: #4e5969;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .required {
+            color: var(--danger);
+            margin-left: 2px;
+        }
+
+        .modal-foot {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        @media (max-width: 1100px) {
+            .toolbar-card {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar-actions {
+                justify-content: flex-start;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .page-wrap {
+                padding: 16px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, minmax(120px, 1fr));
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">校区管理</h1>
+            <div class="page-desc">统一管理校区编码、启停状态和排序，支持多校区隔离与可视化筛选。</div>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">校区总数</div>
+            <div class="stat-value" id="totalCampus">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">已启用</div>
+            <div class="stat-value" id="activeCampus">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">已停用</div>
+            <div class="stat-value" id="inactiveCampus">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">默认校区</div>
+            <div class="stat-value" id="defaultCampus">-</div>
+        </div>
+    </div>
+
+    <div class="toolbar-card">
+        <div class="search-box">
+            <i class="bi bi-search search-icon"></i>
+            <input id="keywordInput" class="search-input" type="text" placeholder="搜索校区名称或编码...">
+        </div>
+        <select id="statusFilter" class="filter-select">
+            <option value="all">全部状态</option>
+            <option value="active">仅启用</option>
+            <option value="inactive">仅停用</option>
+        </select>
+        <div class="toolbar-actions">
+            <button class="btn-ghost-blue" type="button" id="resetBtn"><i class="bi bi-arrow-counterclockwise"></i>重置筛选</button>
+            <button class="btn-outline-gray" type="button" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i>刷新</button>
+            <button class="btn-primary-blue" type="button" id="newBtn"><i class="bi bi-plus-circle"></i>新建校区</button>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-responsive-wrap">
+            <table class="campus-table">
+                <thead>
+                    <tr>
+                        <th style="width: 70px;">ID</th>
+                        <th>校区名称</th>
+                        <th style="width: 170px;">校区编码</th>
+                        <th style="width: 120px;">状态</th>
+                        <th style="width: 100px;">排序</th>
+                        <th style="width: 190px;">创建时间</th>
+                        <th style="width: 220px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="7" class="empty-row">正在加载校区数据...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="campusModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="campusModalTitle">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-head">
+            <h3 class="modal-title" id="campusModalTitle">新建校区</h3>
+            <button class="modal-close" type="button" id="closeModalBtn" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+            <input id="campusId" type="hidden">
+            <div class="form-grid">
+                <div class="form-item full">
+                    <label class="form-label" for="campusName">校区名称<span class="required">*</span></label>
+                    <input id="campusName" class="form-input" maxlength="100" placeholder="例如：南区校区">
+                </div>
+                <div class="form-item full">
+                    <label class="form-label" for="campusCode">校区编码<span class="required">*</span></label>
+                    <input id="campusCode" class="form-input" maxlength="50" placeholder="例如：campus-2">
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="campusSort">排序值</label>
+                    <input id="campusSort" class="form-input" type="number" value="0">
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="campusActive">状态</label>
+                    <select id="campusActive" class="form-select">
+                        <option value="1">启用</option>
+                        <option value="0">停用</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-outline-gray" type="button" id="cancelBtn">取消</button>
+            <button class="btn-primary-blue" type="button" id="saveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="../c-client/js/api.js"></script>
+<script>
+let allCampuses = [];
+let currentRows = [];
+let editingId = 0;
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+async function ensureAdmin() {
+    const res = await fetchApi(API.AUTH_ME, { method: 'GET' });
+    if (res.code !== 200) {
+        window.top.location.href = 'admin_login.html';
+        return false;
+    }
+    if (String(res.data.role || '').toLowerCase() !== 'admin') {
+        alert('仅系统管理员可管理校区');
+        window.top.location.href = 'admin_index_sys.html';
+        return false;
+    }
+    return true;
+}
+
+function updateStats(list) {
+    const rows = Array.isArray(list) ? list : [];
+    const active = rows.filter((item) => !!item.is_active).length;
+    const inactive = rows.length - active;
+    const defaultCampus = rows.find((item) => Number(item.id) === 1);
+
+    document.getElementById('totalCampus').textContent = String(rows.length);
+    document.getElementById('activeCampus').textContent = String(active);
+    document.getElementById('inactiveCampus').textContent = String(inactive);
+    document.getElementById('defaultCampus').textContent = defaultCampus ? (defaultCampus.name || '默认校区') : '-';
+}
+
+function renderRows(list) {
+    const tbody = document.getElementById('tbody');
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">暂无匹配校区</td></tr>';
+        return;
+    }
+
+    const html = list.map((item) => {
+        const statusClass = item.is_active ? 'status-on' : 'status-off';
+        const statusText = item.is_active ? '启用' : '停用';
+        const toggleText = item.is_active ? '停用' : '启用';
+        const nameEscaped = String(item.name || '').replace(/'/g, "\\'");
+        const payload = encodeURIComponent(JSON.stringify(item));
+
+        return `
+            <tr>
+                <td>${Number(item.id || 0)}</td>
+                <td>${escapeHtml(item.name || '-')}</td>
+                <td class="code-cell">${escapeHtml(item.code || '-')}</td>
+                <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+                <td>${Number(item.sort_order || 0)}</td>
+                <td>${escapeHtml(item.create_time || '-')}</td>
+                <td>
+                    <div class="action-links">
+                        <button class="action-link edit" type="button" onclick="editCampusByPayload('${payload}')">编辑</button>
+                        <button class="action-link toggle" type="button" onclick="toggleCampus(${Number(item.id || 0)}, ${item.is_active ? 0 : 1})">${toggleText}</button>
+                        ${Number(item.id || 0) === 1 ? '' : `<button class="action-link delete" type="button" onclick="deleteCampus(${Number(item.id || 0)}, '${nameEscaped}')">删除</button>`}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    tbody.innerHTML = html;
+}
+
+function applyFilters() {
+    const keyword = String(document.getElementById('keywordInput').value || '').trim().toLowerCase();
+    const status = String(document.getElementById('statusFilter').value || 'all');
+
+    let rows = allCampuses.slice();
+    if (status === 'active') {
+        rows = rows.filter((item) => !!item.is_active);
+    } else if (status === 'inactive') {
+        rows = rows.filter((item) => !item.is_active);
+    }
+
+    if (keyword) {
+        rows = rows.filter((item) => {
+            const name = String(item.name || '').toLowerCase();
+            const code = String(item.code || '').toLowerCase();
+            return name.includes(keyword) || code.includes(keyword);
+        });
+    }
+
+    currentRows = rows;
+    renderRows(rows);
+}
+
+async function loadCampuses() {
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-row">正在加载校区数据...</td></tr>';
+
+    const res = await fetchApi(`${API_BASE_URL}/admin/campuses`, { method: 'GET' });
+    if (res.code !== 200) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-row">${escapeHtml(res.msg || '加载失败')}</td></tr>`;
+        return;
+    }
+
+    allCampuses = Array.isArray(res.data && res.data.list) ? res.data.list : [];
+    updateStats(allCampuses);
+    applyFilters();
+}
+
+function openModal() {
+    document.getElementById('campusModalOverlay').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('campusModalOverlay').classList.remove('show');
+}
+
+function openCreateModal() {
+    editingId = 0;
+    document.getElementById('campusModalTitle').textContent = '新建校区';
+    document.getElementById('campusId').value = '';
+    document.getElementById('campusName').value = '';
+    document.getElementById('campusCode').value = '';
+    document.getElementById('campusSort').value = '0';
+    document.getElementById('campusActive').value = '1';
+    openModal();
+}
+
+function editCampusByPayload(payload) {
+    try {
+        const item = JSON.parse(decodeURIComponent(payload));
+        editingId = Number(item.id || 0);
+        document.getElementById('campusModalTitle').textContent = `编辑校区 #${editingId}`;
+        document.getElementById('campusId').value = String(editingId);
+        document.getElementById('campusName').value = item.name || '';
+        document.getElementById('campusCode').value = item.code || '';
+        document.getElementById('campusSort').value = String(item.sort_order || 0);
+        document.getElementById('campusActive').value = item.is_active ? '1' : '0';
+        openModal();
+    } catch (error) {
+        alert('读取校区信息失败，请刷新重试');
+    }
+}
+
+async function saveCampus() {
+    const name = String(document.getElementById('campusName').value || '').trim();
+    const code = String(document.getElementById('campusCode').value || '').trim();
+    const sortOrder = Number(document.getElementById('campusSort').value || 0);
+    const isActive = document.getElementById('campusActive').value === '1';
+
+    if (!name || !code) {
+        alert('请填写校区名称和编码');
+        return;
+    }
+
+    const payload = {
+        name,
+        code,
+        sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+        is_active: isActive,
+    };
+
+    const url = editingId ? `${API_BASE_URL}/admin/campuses/${editingId}` : `${API_BASE_URL}/admin/campuses`;
+    const method = editingId ? 'PUT' : 'POST';
+    const res = await fetchApi(url, { method, body: JSON.stringify(payload) });
+    if (res.code !== 200) {
+        alert(res.msg || '保存失败');
+        return;
+    }
+
+    closeModal();
+    await loadCampuses();
+}
+
+async function toggleCampus(id, isActive) {
+    const res = await fetchApi(`${API_BASE_URL}/admin/campuses/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: !!isActive })
+    });
+    if (res.code !== 200) {
+        alert(res.msg || '操作失败');
+        return;
+    }
+    await loadCampuses();
+}
+
+async function deleteCampus(id, name) {
+    if (!confirm(`确认删除校区 "${name}" 吗？`)) {
+        return;
+    }
+    const res = await fetchApi(`${API_BASE_URL}/admin/campuses/${id}`, { method: 'DELETE' });
+    if (res.code !== 200) {
+        alert(res.msg || '删除失败');
+        return;
+    }
+    await loadCampuses();
+}
+
+function bindEvents() {
+    document.getElementById('keywordInput').addEventListener('input', applyFilters);
+    document.getElementById('statusFilter').addEventListener('change', applyFilters);
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        document.getElementById('keywordInput').value = '';
+        document.getElementById('statusFilter').value = 'all';
+        applyFilters();
+    });
+    document.getElementById('refreshBtn').addEventListener('click', loadCampuses);
+    document.getElementById('newBtn').addEventListener('click', openCreateModal);
+
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('cancelBtn').addEventListener('click', closeModal);
+    document.getElementById('saveBtn').addEventListener('click', saveCampus);
+
+    const overlay = document.getElementById('campusModalOverlay');
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const ok = await ensureAdmin();
+    if (!ok) {
+        return;
+    }
+    bindEvents();
+    await loadCampuses();
+});
+</script>
+</body>
+</html>

@@ -23,9 +23,14 @@ const API = {
     USER_PROFILE: `${API_BASE_URL}/user/profile`,
     AUTH_ME: `${API_BASE_URL}/auth/me`,
     CANTEENS: `${API_BASE_URL}/canteens`,
+    CAMPUSES: `${API_BASE_URL}/public/campuses`,
     WINDOWS: `${API_BASE_URL}/windows`,
     DISHES: `${API_BASE_URL}/dishes`,
     SUBMIT_EVALUATION: `${API_BASE_URL}/submit_evaluation`,
+    RECOMMENDATIONS: `${API_BASE_URL}/public/recommendations`,
+    RECOMMENDATION_TRACK: `${API_BASE_URL}/public/recommendations/track`,
+    RECOMMENDATION_AB_METRICS: `${API_BASE_URL}/admin/recommendation_ab_metrics`,
+    PUBLIC_CANTEENS: `${API_BASE_URL}/public/canteens`,
     MY_EVALUATIONS: `${API_BASE_URL}/my_evaluations`,
     MY_NOTES: `${API_BASE_URL}/my_notes`,
     FAVORITES: `${API_BASE_URL}/favorites`,
@@ -35,6 +40,47 @@ const API = {
     SEND_SMS: `${API_BASE_URL}/send_sms`,
     RESET_PASSWORD: `${API_BASE_URL}/reset_password`
 };
+
+function parseStoredUser() {
+    try {
+        const raw = localStorage.getItem('user');
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function persistAuthUser(userData) {
+    if (!userData || typeof userData !== 'object') {
+        localStorage.removeItem('user');
+        localStorage.removeItem('isLogin');
+        return;
+    }
+
+    const oldUser = parseStoredUser();
+    if (oldUser && oldUser.id && userData.id && Number(oldUser.id) !== Number(userData.id)) {
+        sessionStorage.setItem('auth_user_switched', '1');
+    }
+
+    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('isLogin', 'true');
+}
+
+async function syncUserFromAuthMe(showSwitchAlert = false) {
+    const res = await fetchApi(API.AUTH_ME, { method: 'GET', skipAuthAutoClear: true });
+    if (res.code !== 200) {
+        localStorage.removeItem('user');
+        localStorage.removeItem('isLogin');
+        return { ok: false, data: null };
+    }
+
+    persistAuthUser(res.data || {});
+    if (showSwitchAlert && sessionStorage.getItem('auth_user_switched') === '1') {
+        sessionStorage.removeItem('auth_user_switched');
+        alert('检测到当前浏览器登录账号发生变化，页面身份已自动同步为最新登录账号。');
+    }
+    return { ok: true, data: res.data || {} };
+}
 
 // 简单的请求封装
 async function fetchApi(url, options = {}) {
@@ -62,6 +108,10 @@ async function fetchApi(url, options = {}) {
 
         // 统一返回格式，优先使用后端返回的 msg
         if (!response.ok) {
+            if (response.status === 401 && !options.skipAuthAutoClear) {
+                localStorage.removeItem('user');
+                localStorage.removeItem('isLogin');
+            }
             return { 
                 code: response.status, 
                 msg: data.msg || `服务器错误 (${response.status})` 

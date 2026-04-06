@@ -20,6 +20,56 @@
             border-radius: 0 0 20px 20px;
             margin-bottom: 18px;
             box-shadow: 0 4px 10px rgba(255, 127, 36, 0.3);
+            position: relative;
+        }
+
+        .header-logout-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            border: none;
+            background: rgba(255, 255, 255, 0.24);
+            color: #fff;
+            border-radius: 16px;
+            padding: 5px 12px;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .header-logout-btn:hover {
+            background: rgba(255, 255, 255, 0.34);
+        }
+
+        .role-entry-wrap {
+            margin: 12px 15px 16px 15px;
+            display: none;
+        }
+
+        .role-entry-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .role-entry-item {
+            padding: 14px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #333;
+            text-decoration: none;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .role-entry-item:last-child {
+            border-bottom: none;
+        }
+
+        .role-entry-item:active {
+            background: #f8f9fa;
         }
 
         .avatar-container {
@@ -82,6 +132,123 @@
             padding: 14px 10px;
             margin: 0 15px 16px 15px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .insight-section {
+            background: linear-gradient(135deg, #fffaf2 0%, #ffffff 100%);
+            border-radius: 14px;
+            margin: 0 15px 16px 15px;
+            box-shadow: 0 2px 10px rgba(255, 127, 36, 0.08);
+            overflow: hidden;
+            border: 1px solid rgba(255, 127, 36, 0.12);
+        }
+
+        .insight-head {
+            padding: 14px 15px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .insight-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #333;
+            margin: 0;
+        }
+
+        .insight-subtitle {
+            font-size: 12px;
+            color: #8a8a8a;
+        }
+
+        .insight-refresh {
+            border: none;
+            background: rgba(255, 127, 36, 0.08);
+            color: #FF7F24;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .insight-body {
+            padding: 0 15px 15px;
+        }
+
+        .insight-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .insight-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: #fff;
+            border: 1px solid #f2d2ba;
+            color: #b85d13;
+            font-size: 12px;
+        }
+
+        .insight-scroll {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .insight-card {
+            flex: 0 0 150px;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #f1f1f1;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .insight-card:active {
+            transform: scale(0.98);
+        }
+
+        .insight-card-img {
+            width: 100%;
+            height: 96px;
+            object-fit: cover;
+            display: block;
+            background: #f6f6f6;
+        }
+
+        .insight-card-body {
+            padding: 8px 9px 10px;
+        }
+
+        .insight-card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .insight-card-meta {
+            margin-top: 3px;
+            font-size: 11px;
+            color: #999;
+            line-height: 1.4;
+        }
+
+        .insight-empty {
+            color: #999;
+            font-size: 13px;
+            padding: 8px 0 2px;
         }
 
         .grid-item {
@@ -209,6 +376,29 @@
             color: #FF7F24;
         }
 
+        .note-preview-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .note-inline-thumb {
+            width: 72px;
+            height: 72px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #eee;
+            border: 1px solid #f0f0f0;
+            flex-shrink: 0;
+        }
+
+        .note-inline-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
         .empty-state {
             text-align: center;
             padding: 40px 0;
@@ -291,11 +481,97 @@
             font-size: 20px;
             margin-bottom: 2px;
         }
+
+        .logout-modal-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            backdrop-filter: blur(3px);
+        }
+
+        .logout-modal-mask.show {
+            display: flex;
+            animation: fadeIn 0.18s ease-out;
+        }
+
+        .logout-modal-card {
+            width: min(92vw, 380px);
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(2, 8, 23, 0.25);
+            overflow: hidden;
+            transform: translateY(8px);
+            animation: liftIn 0.2s ease-out forwards;
+        }
+
+        .logout-modal-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 18px 12px;
+            font-weight: 700;
+            color: #212529;
+        }
+
+        .logout-modal-head i {
+            color: #FF7F24;
+            font-size: 20px;
+        }
+
+        .logout-modal-body {
+            padding: 0 18px 16px;
+            color: #495057;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .logout-modal-foot {
+            display: flex;
+            gap: 10px;
+            padding: 12px 18px 18px;
+        }
+
+        .logout-modal-foot button {
+            flex: 1;
+            border-radius: 10px;
+            height: 38px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .logout-cancel-btn {
+            background: #eef2f7;
+            color: #495057;
+        }
+
+        .logout-confirm-btn {
+            background: linear-gradient(135deg, #ff8b2b 0%, #ff6f00 100%);
+            color: #fff;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes liftIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
     <link href="../../static/css/common.css" rel="stylesheet">
 </head>
 <body>
     <div class="user-header-card" id="userInfoSection">
+        <button id="headerLogoutBtn" class="header-logout-btn" onclick="logout(); return false;" style="display: none;">
+            <i class="bi bi-box-arrow-right"></i>
+            退出账号
+        </button>
         <div id="notLoginState" class="login-placeholder" style="display: none;">
             <div class="avatar-container mx-auto mb-2">
                 <img src="https://via.placeholder.com/80/cccccc/ffffff?text=User" class="user-avatar" alt="默认头像">
@@ -320,6 +596,10 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <div class="role-entry-wrap" id="roleEntryWrap">
+        <div class="role-entry-card" id="roleEntryContainer"></div>
     </div>
 
     <div class="function-grid">
@@ -347,6 +627,24 @@
                     <i class="bi bi-envelope-fill grid-icon text-success"></i>
                     <span class="grid-label">意见反馈</span>
                 </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="insight-section">
+        <div class="insight-head">
+            <div>
+                <h5 class="insight-title">个性化推荐</h5>
+                <div class="insight-subtitle" id="insightSubtitle">根据收藏、历史评价和校区偏好自动生成</div>
+            </div>
+            <button class="insight-refresh" type="button" onclick="loadPersonalizedInsights(true)">
+                <i class="bi bi-arrow-clockwise me-1"></i>换一批
+            </button>
+        </div>
+        <div class="insight-body">
+            <div class="insight-tags" id="insightTags"></div>
+            <div class="insight-scroll" id="insightList">
+                <div class="insight-empty">正在加载推荐内容...</div>
             </div>
         </div>
     </div>
@@ -407,6 +705,22 @@
         </a>
     </div>
 
+    <div class="logout-modal-mask" id="logoutModal" onclick="closeLogoutModalByMask(event)">
+        <div class="logout-modal-card" role="dialog" aria-modal="true" aria-labelledby="logoutModalTitle">
+            <div class="logout-modal-head" id="logoutModalTitle">
+                <i class="bi bi-exclamation-circle-fill"></i>
+                退出登录确认
+            </div>
+            <div class="logout-modal-body">
+                确定要退出登录吗？退出后需要重新登录才能继续使用个人功能。
+            </div>
+            <div class="logout-modal-foot">
+                <button type="button" class="logout-cancel-btn" onclick="closeLogoutModal()">取消</button>
+                <button type="button" class="logout-confirm-btn" id="logoutConfirmBtn" onclick="confirmLogout()">确认退出</button>
+            </div>
+        </div>
+    </div>
+
     <script src="../../static/js/bootstrap.bundle.min.js"></script>
     <script src="js/api.js"></script>
     <script>
@@ -415,6 +729,12 @@
         let currentItems = [];
         let currentRenderedCount = 0;
         const PAGE_SIZE = 10;
+        const PUBLIC_CAMPUS_STORAGE_KEY = 'publicCampusId';
+        const recommendationMeta = {
+            requestId: '',
+            abVariant: 'A',
+            abStrategy: 'baseline'
+        };
 
         const titleMap = {
             evaluations: '我的评价',
@@ -423,14 +743,44 @@
         };
 
         document.addEventListener('DOMContentLoaded', async function() {
+            await applyCampusAwareCanteenLinks();
             await bootstrapPage();
         });
 
+        async function applyCampusAwareCanteenLinks() {
+            const campusId = Number(localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || '0') || 0;
+            const links = document.querySelectorAll('a[href^="canteen_detail.html?"]');
+            let targetName = '北区食堂';
+            try {
+                const res = await fetchApi(`${API.PUBLIC_CANTEENS}?campus_id=${encodeURIComponent(campusId)}`);
+                const list = res.code === 200 && res.data && Array.isArray(res.data.list) ? res.data.list : [];
+                if (list.length > 0) {
+                    targetName = String(list[0].name || targetName).trim() || targetName;
+                }
+            } catch (error) {
+                console.error('获取校区食堂列表失败:', error);
+            }
+
+            const targetHref = `canteen_detail.html?name=${encodeURIComponent(targetName)}&campus_id=${encodeURIComponent(campusId)}`;
+            links.forEach((node) => {
+                node.setAttribute('href', targetHref);
+            });
+        }
+
         async function bootstrapPage() {
-            const meRes = await fetchApi(API.AUTH_ME);
+            let meRes = await fetchApi(API.AUTH_ME, { skipAuthAutoClear: true });
+            if (typeof syncUserFromAuthMe === 'function') {
+                const syncRes = await syncUserFromAuthMe(false);
+                if (syncRes.ok) {
+                    meRes = { code: 200, data: syncRes.data };
+                }
+            }
+
             if (meRes.code !== 200) {
                 document.getElementById('notLoginState').style.display = 'block';
                 document.getElementById('loginState').style.display = 'none';
+                document.getElementById('headerLogoutBtn').style.display = 'none';
+                document.getElementById('roleEntryWrap').style.display = 'none';
                 document.getElementById('contentContainer').innerHTML = `
                     <div class="empty-state">
                         <i class="bi bi-person-x"></i>
@@ -445,6 +795,7 @@
             localStorage.setItem('user', JSON.stringify(currentUser));
             localStorage.setItem('isLogin', 'true');
             renderUserProfile(currentUser);
+            renderRoleEntries(currentUser);
 
             const url = new URL(window.location.href);
             const tab = (url.searchParams.get('tab') || '').toLowerCase();
@@ -452,6 +803,7 @@
                 currentSection = tab;
             }
             await switchSection(currentSection);
+            await loadPersonalizedInsights();
         }
 
         function goLogin() {
@@ -478,15 +830,230 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function extractFirstImageUrl(text) {
+            const raw = String(text || '');
+            const markdownMatch = raw.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)\)/i);
+            if (markdownMatch) {
+                return markdownMatch[1];
+            }
+            const markdownRelativeMatch = raw.match(/!\[[^\]]*\]\(((?:\/[^\s)]+\.(?:png|jpe?g|gif|webp))(?:\?[^\s)]*)?)\)/i);
+            if (markdownRelativeMatch) {
+                return markdownRelativeMatch[1];
+            }
+            const plainMatch = raw.match(/(https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"'<>]*)?)/i);
+            if (plainMatch) {
+                return plainMatch[1];
+            }
+            const plainRelativeMatch = raw.match(/((?:\/[^\s"'<>]+\.(?:png|jpe?g|gif|webp))(?:\?[^\s"'<>]*)?)/i);
+            return plainRelativeMatch ? plainRelativeMatch[1] : '';
+        }
+
+        function stripImageUrls(text) {
+            const raw = String(text || '');
+            return raw
+                .replace(/!\[[^\]]*\]\(https?:\/\/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?\)/gi, '')
+                .replace(/!\[[^\]]*\]\(\/[\s\S]*?\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?\)/gi, '')
+                .replace(/https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"'<>]*)?/gi, '')
+                .replace(/\/[\w\-./?=&%]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"'<>]*)?/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
         function renderUserProfile(user) {
             document.getElementById('notLoginState').style.display = 'none';
             document.getElementById('loginState').style.display = 'flex';
+            document.getElementById('headerLogoutBtn').style.display = 'inline-flex';
             const displayName = user.nickname || user.username || '未命名用户';
             const cachedAvatar = localStorage.getItem('user_avatar_local') || '';
             document.getElementById('userName').textContent = displayName;
             document.getElementById('userPhone').textContent = maskPhone(user.phone || '');
-            document.getElementById('userRole').textContent = user.role || '用户';
+            document.getElementById('userRole').textContent = roleLabel(user.role || '');
             document.getElementById('userAvatar').src = cachedAvatar || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=FF7F24&color=fff`;
+        }
+
+        function normalizeRole(roleRaw) {
+            const role = String(roleRaw || '').trim().toLowerCase();
+            if (role === '1' || role === 'admin' || role === '管理员') return 'admin';
+            if (role === '3' || role === 'operator' || role === '食堂运营') return 'operator';
+            if (role === '4' || role === 'teacher' || role === '教师') return 'teacher';
+            if (role === '2' || role === 'student' || role === '用户' || role === '学生') return 'student';
+            return role;
+        }
+
+        function roleLabel(roleRaw) {
+            const role = normalizeRole(roleRaw);
+            if (role === 'admin') return '管理员';
+            if (role === 'operator') return '食堂运营';
+            if (role === 'teacher') return '教师';
+            if (role === 'student') return '普通用户';
+            return roleRaw || '用户';
+        }
+
+        function normalizeImageUrl(src) {
+            const value = String(src || '').trim();
+            if (!value) {
+                return '/static/img/food-hero.jpg';
+            }
+            if (value.startsWith('http://') || value.startsWith('https://')) {
+                return value;
+            }
+            if (value.startsWith('/')) {
+                return value;
+            }
+            return `${window.location.origin}/${value.replace(/^\.\//, '')}`;
+        }
+
+        function renderReasonTags(list) {
+            const container = document.getElementById('insightTags');
+            if (!Array.isArray(list) || list.length === 0) {
+                container.innerHTML = '<span class="insight-tag">暂无偏好数据</span>';
+                return;
+            }
+            container.innerHTML = list.slice(0, 4).map((item) => `
+                <span class="insight-tag"><i class="bi bi-stars"></i>${escapeHtml(item)}</span>
+            `).join('');
+        }
+
+        function renderRecommendationItems(items) {
+            const container = document.getElementById('insightList');
+            if (!Array.isArray(items) || items.length === 0) {
+                container.innerHTML = '<div class="insight-empty">暂无推荐内容，去收藏或评价一些菜品后会更准</div>';
+                return;
+            }
+
+            container.innerHTML = items.map((item, index) => {
+                const reasonText = item.reason_summary || (Array.isArray(item.reasons) ? item.reasons.slice(0, 2).join(' · ') : '');
+                const imageUrl = normalizeImageUrl(item.img_url || '');
+                const campusId = Number(localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || currentUser?.campus_id || 0) || 0;
+                const dishCampusQuery = campusId ? `&campus_id=${encodeURIComponent(campusId)}` : '';
+                return `
+                    <a class="insight-card" href="dish_detail.html?id=${item.dish_id}${dishCampusQuery}" onclick="trackInsightRecommendationClick(${Number(item.dish_id || 0)}, ${Number(item.canteen_id || 0)}, ${index + 1})">
+                        <img class="insight-card-img" src="${imageUrl}" alt="${escapeHtml(item.dish_name || '')}" onerror="this.onerror=null;this.src='/static/img/hero-bg.jpg'">
+                        <div class="insight-card-body">
+                            <div class="insight-card-title">${escapeHtml(item.dish_name || '未命名菜品')}</div>
+                            <div class="insight-card-meta">${escapeHtml(item.canteen_name || '-')} · ${Number(item.average_score || 0).toFixed(1)}分</div>
+                            <div class="insight-card-meta">${escapeHtml(reasonText || '校园热度推荐')}</div>
+                        </div>
+                    </a>
+                `;
+            }).join('');
+        }
+
+        async function loadPersonalizedInsights(forceRefresh = false) {
+            const subtitle = document.getElementById('insightSubtitle');
+            const listContainer = document.getElementById('insightList');
+            if (forceRefresh) {
+                listContainer.innerHTML = '<div class="insight-empty">正在刷新推荐...</div>';
+            }
+
+            try {
+                const res = await fetchApi(API.RECOMMENDATIONS + '?limit=4');
+                if (res.code !== 200) {
+                    subtitle.textContent = '推荐加载失败，请稍后重试';
+                    renderReasonTags([]);
+                    renderRecommendationItems([]);
+                    return;
+                }
+
+                const payload = res.data || {};
+                recommendationMeta.requestId = payload.request_id || '';
+                recommendationMeta.abVariant = payload.ab_variant || 'A';
+                recommendationMeta.abStrategy = payload.ab_strategy || 'baseline';
+                subtitle.textContent = payload.personalized
+                    ? '根据你的收藏、评价和偏好动态排序'
+                    : '根据校园热度和高分菜品动态排序';
+                const tagSource = [];
+                if (payload.reason) {
+                    tagSource.push(payload.reason === 'personalized' ? '个性化推荐' : '热门推荐');
+                }
+                if (currentUser && currentUser.campus_name) {
+                    tagSource.push(currentUser.campus_name);
+                }
+                const items = Array.isArray(payload.list) ? payload.list : [];
+                renderReasonTags(tagSource);
+                renderRecommendationItems(items);
+                trackInsightRecommendationExposure(items);
+            } catch (error) {
+                console.error('loadPersonalizedInsights failed', error);
+                subtitle.textContent = '推荐加载失败';
+                renderReasonTags([]);
+                renderRecommendationItems([]);
+            }
+        }
+
+        function trackInsightRecommendationExposure(items) {
+            const campusId = Number(localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || currentUser?.campus_id || 0) || 0;
+            fetchApi(API.RECOMMENDATION_TRACK, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    event_type: 'exposure',
+                    request_id: recommendationMeta.requestId,
+                    ab_variant: recommendationMeta.abVariant,
+                    ab_strategy: recommendationMeta.abStrategy,
+                    campus_id: campusId,
+                    page: 'user_center',
+                    items: (items || []).map((item, idx) => ({
+                        dish_id: Number(item.dish_id || 0),
+                        canteen_id: Number(item.canteen_id || 0),
+                        position: idx + 1
+                    }))
+                })
+            }).catch(() => {});
+        }
+
+        function trackInsightRecommendationClick(dishId, canteenId, position) {
+            const campusId = Number(localStorage.getItem(PUBLIC_CAMPUS_STORAGE_KEY) || currentUser?.campus_id || 0) || 0;
+            fetchApi(API.RECOMMENDATION_TRACK, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    event_type: 'click',
+                    request_id: recommendationMeta.requestId,
+                    ab_variant: recommendationMeta.abVariant,
+                    ab_strategy: recommendationMeta.abStrategy,
+                    campus_id: campusId,
+                    page: 'user_center',
+                    dish_id: Number(dishId || 0),
+                    canteen_id: Number(canteenId || 0),
+                    position: Number(position || 0)
+                })
+            }).catch(() => {});
+            return true;
+        }
+
+        function renderRoleEntries(user) {
+            const role = normalizeRole(user.role || '');
+            const wrap = document.getElementById('roleEntryWrap');
+            const container = document.getElementById('roleEntryContainer');
+            let entries = [];
+
+            if (role === 'admin') {
+                entries = [
+                    { href: '../b-admin/admin_index_sys.html', icon: 'bi-shield-lock', label: '进入系统管理后台' }
+                ];
+            } else if (role === 'operator') {
+                entries = [
+                    { href: '../b-admin/admin_index_operator.html', icon: 'bi-building', label: '进入食堂运营后台' }
+                ];
+            }
+
+            if (entries.length === 0) {
+                wrap.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = entries.map(item => `
+                <a class="role-entry-item" href="${item.href}">
+                    <div>
+                        <i class="bi ${item.icon} setting-icon"></i>
+                        <span>${item.label}</span>
+                    </div>
+                    <i class="bi bi-chevron-right text-secondary small"></i>
+                </a>
+            `).join('');
+            wrap.style.display = 'block';
         }
 
         async function switchSection(section) {
@@ -564,16 +1131,23 @@
                 }
 
                 if (currentSection === 'notes') {
+                    const noteImageUrl = extractFirstImageUrl(item.content || '');
+                    const noteSummary = stripImageUrls(item.content || '') || '（无正文）';
                     html += `
                         <li class="list-item" id="item-${item.id}">
                             <div class="item-main">
-                                <div class="item-title">${escapeHtml(item.title)}</div>
-                                <div class="item-meta">
-                                    <span class="item-status status-success">${escapeHtml(item.status || '已发布')}</span>
-                                    <span>${escapeHtml(item.create_time || '')}</span>
-                                    <span><i class="bi bi-heart-fill text-danger small"></i> ${Number(item.like_count || 0)}</span>
+                                <div class="note-preview-row">
+                                    ${noteImageUrl ? `<div class="note-inline-thumb"><img src="${noteImageUrl}" alt="笔记图片"></div>` : ''}
+                                    <div class="flex-grow-1 overflow-hidden">
+                                        <div class="item-title text-truncate">${escapeHtml(item.title)}</div>
+                                        <div class="item-meta">
+                                            <span class="item-status status-success">${escapeHtml(item.status || '已发布')}</span>
+                                            <span>${escapeHtml(item.create_time || '')}</span>
+                                            <span><i class="bi bi-heart-fill text-danger small"></i> ${Number(item.like_count || 0)}</span>
+                                        </div>
+                                        <div class="small text-secondary mt-1 text-truncate">${escapeHtml(noteSummary)}</div>
+                                    </div>
                                 </div>
-                                <div class="small text-secondary mt-1 text-truncate">${escapeHtml(item.content || '')}</div>
                             </div>
                             <div class="item-actions">
                                 <button class="action-btn" onclick="goEditNote(${item.id})" title="编辑"><i class="bi bi-pencil"></i></button>
@@ -622,6 +1196,7 @@
             if (currentSection === 'favorites') {
                 await switchSection('favorites');
             }
+            await loadPersonalizedInsights();
         }
 
         async function deleteItem(type, id) {
@@ -640,6 +1215,7 @@
 
             if (res && res.code === 200) {
                 await switchSection(currentSection);
+                await loadPersonalizedInsights();
             } else {
                 alert((res && res.msg) || '删除失败');
             }
@@ -660,15 +1236,39 @@
             }
         }
 
-        async function logout() {
-            if (!confirm('确定要退出登录吗？')) {
-                return;
+        function logout() {
+            openLogoutModal();
+        }
+
+        function openLogoutModal() {
+            document.getElementById('logoutModal').classList.add('show');
+        }
+
+        function closeLogoutModal() {
+            document.getElementById('logoutModal').classList.remove('show');
+        }
+
+        function closeLogoutModalByMask(event) {
+            if (event.target && event.target.id === 'logoutModal') {
+                closeLogoutModal();
             }
+        }
+
+        async function confirmLogout() {
+            const confirmBtn = document.getElementById('logoutConfirmBtn');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '退出中...';
             await fetchApi(API.LOGOUT || '/api/logout', { method: 'POST' });
             localStorage.removeItem('isLogin');
             localStorage.removeItem('user');
             window.location.href = '/login';
         }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeLogoutModal();
+            }
+        });
     </script>
     <script src="../../static/js/common.js"></script>
 </body>
