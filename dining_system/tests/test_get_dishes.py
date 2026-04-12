@@ -4,4 +4,6 @@ def test_get_dishes_returns_list(client):
     assert resp.status_code == 200
     assert body['code'] == 200
     assert isinstance(body['data'], list)
-    assert any(item['name'] == '测试菜品' for item in body['data'])
+    target = next((item for item in body['data'] if item['name'] == '测试菜品'), None)
+    assert target is not None
+    assert 'img_url' in target

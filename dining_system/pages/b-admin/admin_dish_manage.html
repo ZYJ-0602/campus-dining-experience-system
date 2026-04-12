@@ -187,7 +187,7 @@
         .dish-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 980px;
+            min-width: 1140px;
         }
 
         .dish-table th,
@@ -426,6 +426,140 @@
             margin-top: 6px;
         }
 
+        .dish-img-cell {
+            line-height: 1;
+        }
+
+        .dish-thumb-wrap {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            overflow: visible;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f7fa;
+            border: 1px solid #e5e6eb;
+        }
+
+        .dish-thumb {
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            object-fit: cover;
+            display: block;
+            cursor: zoom-in;
+        }
+
+        .dish-thumb-pop {
+            position: absolute;
+            left: 112px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 220px;
+            height: 220px;
+            border-radius: 10px;
+            border: 1px solid #dbe2f1;
+            background: #fff;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+            object-fit: cover;
+            display: none;
+            z-index: 50;
+        }
+
+        .dish-thumb-wrap:hover .dish-thumb-pop {
+            display: block;
+        }
+
+        .dish-thumb-empty {
+            color: #a0a5b0;
+            font-size: 12px;
+            line-height: 1.4;
+            text-align: center;
+            padding: 0 8px;
+        }
+
+        .dish-image-box {
+            border: 1px solid #e5e6eb;
+            border-radius: 10px;
+            padding: 12px;
+            background: #fafcff;
+        }
+
+        .dish-upload-zone {
+            min-height: 116px;
+        }
+
+        .dish-image-preview {
+            margin-top: 10px;
+            display: none;
+        }
+
+        .dish-image-preview.show {
+            display: block;
+        }
+
+        .dish-image-preview-card {
+            width: 180px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #dfe3ed;
+            background: #fff;
+        }
+
+        .dish-image-preview-card img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+            cursor: zoom-in;
+        }
+
+        .dish-image-preview-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px;
+        }
+
+        .btn-link-action {
+            border: none;
+            background: transparent;
+            color: var(--primary);
+            font-size: 12px;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .btn-link-danger {
+            color: var(--danger);
+        }
+
+        .image-viewer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 6000;
+            padding: 24px;
+        }
+
+        .image-viewer-overlay.show {
+            display: flex;
+        }
+
+        .image-viewer-overlay img {
+            max-width: min(92vw, 1100px);
+            max-height: 88vh;
+            border-radius: 12px;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+            object-fit: contain;
+        }
+
         .toast-wrap {
             position: fixed;
             top: 18px;
@@ -536,6 +670,7 @@
                 <tr>
                     <th>ID</th>
                     <th>菜品名称</th>
+                    <th>菜品图片</th>
                     <th>窗口</th>
                     <th>价格</th>
                     <th>分类</th>
@@ -546,7 +681,7 @@
                 </tr>
                 </thead>
                 <tbody id="dishTableBody">
-                <tr><td colspan="9" class="empty-row">加载中...</td></tr>
+                <tr><td colspan="10" class="empty-row">加载中...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -590,6 +725,18 @@
                         <option value="大份">大份</option>
                         <option value="小份">小份</option>
                     </select>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>菜品图片（选填）</label>
+                <div class="dish-image-box">
+                    <div class="upload-zone dish-upload-zone" id="dishImageUploadZone">
+                        <i class="bi bi-image"></i>
+                        <div>点击上传或拖拽图片到此处</div>
+                        <div class="helper-line">仅支持 jpg/png/webp，单张 ≤ 2MB</div>
+                        <input id="dishImageFileInput" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" hidden>
+                    </div>
+                    <div class="dish-image-preview" id="dishImagePreview"></div>
                 </div>
             </div>
             <div class="form-check switch-row">
@@ -648,6 +795,9 @@
 </div>
 
 <div class="toast-wrap" id="toastWrap"></div>
+<div class="image-viewer-overlay" id="imageViewerOverlay">
+    <img id="imageViewerTarget" alt="preview">
+</div>
 
 <script src="../../static/js/bootstrap.bundle.min.js"></script>
 <script src="../c-client/js/api.js"></script>
@@ -658,6 +808,12 @@
         editing: false,
         deletingId: null,
         importFile: null,
+        dishImage: {
+            file: null,
+            objectUrl: '',
+            remoteUrl: '',
+            removeRequested: false
+        },
         query: {
             keyword: '',
             status: ''
@@ -669,6 +825,8 @@
         add: ['/api/dish/add', '/api/admin/dishes'],
         update: (id) => [`/api/dish/${id}`, `/api/admin/dishes/${id}`],
         remove: (id) => [`/api/dish/${id}`, `/api/admin/dishes/${id}`],
+        uploadImage: (id) => [`/api/admin/dishes/${id}/image`],
+        deleteImage: (id) => [`/api/admin/dishes/${id}/image`],
         template: ['/api/dish/download-template'],
         import: ['/api/dish/batch-import', '/api/admin/dishes/batch_import']
     };
@@ -790,6 +948,8 @@
         document.getElementById('dishCategoryInput').value = '';
         document.getElementById('dishPortionInput').value = '常规';
         document.getElementById('dishStatusInput').checked = true;
+        resetDishImageState();
+        renderDishImagePreview();
     }
 
     function fillDishForm(item) {
@@ -800,7 +960,114 @@
         document.getElementById('dishCategoryInput').value = item.category || '';
         document.getElementById('dishPortionInput').value = item.portion || '常规';
         document.getElementById('dishStatusInput').checked = !!item.is_active;
+        resetDishImageState();
+        state.dishImage.remoteUrl = item.img_url || '';
+        renderDishImagePreview();
     }
+
+    function revokeDishImageObjectUrl() {
+        if (state.dishImage.objectUrl) {
+            URL.revokeObjectURL(state.dishImage.objectUrl);
+            state.dishImage.objectUrl = '';
+        }
+    }
+
+    function resetDishImageState() {
+        revokeDishImageObjectUrl();
+        state.dishImage.file = null;
+        state.dishImage.remoteUrl = '';
+        state.dishImage.removeRequested = false;
+        const fileInput = document.getElementById('dishImageFileInput');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+    }
+
+    function validateDishImage(file) {
+        if (!file) {
+            return { ok: false, msg: '未选择图片文件' };
+        }
+        const lower = (file.name || '').toLowerCase();
+        const ext = lower.includes('.') ? lower.split('.').pop() : '';
+        if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+            return { ok: false, msg: '仅支持 jpg/png/webp 格式图片' };
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            return { ok: false, msg: '图片大小不能超过 2MB' };
+        }
+        return { ok: true };
+    }
+
+    function setDishImageFile(file) {
+        const checked = validateDishImage(file);
+        if (!checked.ok) {
+            showToast(checked.msg, 'error');
+            return;
+        }
+        revokeDishImageObjectUrl();
+        state.dishImage.file = file;
+        state.dishImage.objectUrl = URL.createObjectURL(file);
+        state.dishImage.removeRequested = false;
+        renderDishImagePreview();
+    }
+
+    function getDishImagePreviewUrl() {
+        if (state.dishImage.objectUrl) {
+            return state.dishImage.objectUrl;
+        }
+        if (state.dishImage.remoteUrl && !state.dishImage.removeRequested) {
+            return state.dishImage.remoteUrl;
+        }
+        return '';
+    }
+
+    function renderDishImagePreview() {
+        const box = document.getElementById('dishImagePreview');
+        const previewUrl = getDishImagePreviewUrl();
+        if (!previewUrl) {
+            box.classList.remove('show');
+            box.innerHTML = '';
+            return;
+        }
+
+        box.classList.add('show');
+        box.innerHTML = `
+            <div class="dish-image-preview-card">
+                <img src="${previewUrl}" alt="菜品图片" onclick="openImageViewer('${previewUrl}')" onerror="this.onerror=null;this.src='../../static/img/hero-bg.jpg'">
+                <div class="dish-image-preview-actions">
+                    <button class="btn-link-action" type="button" onclick="triggerDishImageSelect()">替换</button>
+                    <button class="btn-link-action btn-link-danger" type="button" onclick="clearDishImage()">删除</button>
+                </div>
+            </div>
+        `;
+    }
+
+    window.triggerDishImageSelect = function triggerDishImageSelect() {
+        const fileInput = document.getElementById('dishImageFileInput');
+        if (fileInput) {
+            fileInput.click();
+        }
+    };
+
+    window.clearDishImage = function clearDishImage() {
+        revokeDishImageObjectUrl();
+        state.dishImage.file = null;
+        if (state.dishImage.remoteUrl) {
+            state.dishImage.removeRequested = true;
+        }
+        const fileInput = document.getElementById('dishImageFileInput');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        renderDishImagePreview();
+    };
+
+    window.openImageViewer = function openImageViewer(src) {
+        const overlay = document.getElementById('imageViewerOverlay');
+        const target = document.getElementById('imageViewerTarget');
+        target.src = src;
+        overlay.classList.add('show');
+    };
 
     function normalizeListPayload(data) {
         if (Array.isArray(data)) {
@@ -821,7 +1088,7 @@
     function renderTable() {
         const body = document.getElementById('dishTableBody');
         if (!state.rows.length) {
-            body.innerHTML = '<tr><td colspan="9" class="empty-row">暂无菜品数据，请新增或导入菜品</td></tr>';
+            body.innerHTML = '<tr><td colspan="10" class="empty-row">暂无菜品数据，请新增或导入菜品</td></tr>';
             document.getElementById('tableCountText').textContent = '共 0 条';
             return;
         }
@@ -830,10 +1097,20 @@
             const statusText = item.is_active ? '上架' : '下架';
             const score = Number(item.avg_score || item.average_score || 0).toFixed(2);
             const evalCount = Number(item.eval_count || item.review_count || 0);
+            const imageUrl = item.img_url || '';
+            const imageCell = imageUrl
+                ? `
+                    <div class="dish-thumb-wrap">
+                        <img class="dish-thumb" src="${imageUrl}" alt="菜品图" onclick="openImageViewer('${imageUrl}')" onerror="this.onerror=null;this.src='../../static/img/hero-bg.jpg'">
+                        <img class="dish-thumb-pop" src="${imageUrl}" alt="放大图" onerror="this.onerror=null;this.src='../../static/img/hero-bg.jpg'">
+                    </div>
+                `
+                : '<div class="dish-thumb-wrap"><div class="dish-thumb-empty">暂无图片</div></div>';
             return `
                 <tr>
                     <td>${item.id}</td>
                     <td>${item.name || '-'}</td>
+                    <td class="dish-img-cell">${imageCell}</td>
                     <td>${item.window_name || item.window_id || '-'}</td>
                     <td>￥${Number(item.price || 0).toFixed(2)}</td>
                     <td>${item.category || '-'}</td>
@@ -854,7 +1131,7 @@
 
     async function loadDishList() {
         const body = document.getElementById('dishTableBody');
-        body.innerHTML = '<tr><td colspan="9" class="empty-row">加载中...</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="empty-row">加载中...</td></tr>';
 
         const params = new URLSearchParams();
         if (state.query.keyword) params.set('keyword', state.query.keyword);
@@ -863,14 +1140,14 @@
         const paths = endpointPreference.list.map((path) => `${path}?${params.toString()}`);
         const result = await requestWithFallback(paths);
         if (!result.ok) {
-            body.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            body.innerHTML = '<tr><td colspan="10" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
             showToast('菜品列表加载失败', 'error');
             return;
         }
 
         const payload = result.data;
         if (payload.code && payload.code !== 200) {
-            body.innerHTML = '<tr><td colspan="9" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
+            body.innerHTML = '<tr><td colspan="10" class="empty-row" style="color:#ff4d4f;">加载失败，请稍后重试</td></tr>';
             showToast(payload.msg || '菜品列表加载失败', 'error');
             return;
         }
@@ -929,7 +1206,31 @@
             return;
         }
 
+        const dishId = id || Number(body.data?.id || body.id || 0);
+        if (dishId) {
+            if (state.dishImage.removeRequested) {
+                const removeResult = await requestWithFallback(endpointPreference.deleteImage(dishId), { method: 'DELETE' });
+                if (!removeResult.ok || (removeResult.data.code && removeResult.data.code !== 200)) {
+                    showToast(removeResult.data?.msg || '菜品信息已保存，但图片删除失败', 'error');
+                }
+            }
+
+            if (state.dishImage.file) {
+                const formData = new FormData();
+                formData.append('file', state.dishImage.file);
+                const uploadResult = await requestWithFallback(endpointPreference.uploadImage(dishId), {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!uploadResult.ok || (uploadResult.data.code && uploadResult.data.code !== 200)) {
+                    showToast(uploadResult.data?.msg || '菜品信息已保存，但图片上传失败', 'error');
+                }
+            }
+        }
+
         closeModal('dish');
+        resetDishImageState();
+        renderDishImagePreview();
         await loadDishList();
         showToast('操作成功');
     }
@@ -1223,10 +1524,53 @@
         });
     }
 
+    function bindDishImageUpload() {
+        const zone = document.getElementById('dishImageUploadZone');
+        const fileInput = document.getElementById('dishImageFileInput');
+        if (!zone || !fileInput) {
+            return;
+        }
+
+        zone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files && fileInput.files[0];
+            if (file) {
+                setDishImageFile(file);
+            }
+        });
+
+        zone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            zone.classList.add('dragover');
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('dragover');
+        });
+
+        zone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            zone.classList.remove('dragover');
+            const file = event.dataTransfer.files && event.dataTransfer.files[0];
+            if (!file) {
+                return;
+            }
+            setDishImageFile(file);
+            fileInput.files = event.dataTransfer.files;
+        });
+    }
+
     function bindEvents() {
         document.querySelectorAll('[data-close]').forEach((el) => {
             el.addEventListener('click', () => closeModal(el.getAttribute('data-close')));
         });
+
+        const viewerOverlay = document.getElementById('imageViewerOverlay');
+        if (viewerOverlay) {
+            viewerOverlay.addEventListener('click', () => {
+                viewerOverlay.classList.remove('show');
+            });
+        }
 
         document.getElementById('filterBtn').addEventListener('click', async () => {
             const btn = document.getElementById('filterBtn');
@@ -1281,6 +1625,8 @@
     document.addEventListener('DOMContentLoaded', async () => {
         bindEvents();
         bindUploadZone();
+        bindDishImageUpload();
+        renderDishImagePreview();
         await loadDishList();
     });
 </script>

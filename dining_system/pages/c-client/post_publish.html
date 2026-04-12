@@ -4,674 +4,781 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>发布笔记</title>
-    <!-- 引入 Bootstrap 5 CDN -->
     <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css" rel="stylesheet">
-    <!-- 引入 SortableJS 实现拖拽排序 -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #FF69B4; /* 粉色主色调 */
-            --bg-color: #f8f9fa;
+            --primary: #ff8a00;
+            --bg: #f6f7fb;
+            --card: #ffffff;
+            --text: #2d2f33;
+            --muted: #7c8493;
+            --border: #d9deea;
         }
-        
+
+        * { box-sizing: border-box; }
+
         body {
-            background-color: var(--bg-color);
-            padding-top: 50px; /* 顶部栏高度 */
-            padding-bottom: 30px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            padding: 56px 0 20px;
         }
 
-        /* 1. 顶部栏 */
-        .navbar-custom {
-            background-color: #fff;
-            height: 50px;
-            border-bottom: 1px solid #eee;
-            z-index: 1000;
-        }
-        
-        .nav-btn {
-            font-size: 16px;
-            padding: 5px 15px;
-            color: #333;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        
-        .publish-btn {
-            background-color: var(--primary-color);
-            color: #fff;
-            border-radius: 20px;
-            padding: 5px 18px;
-            font-size: 14px;
-            border: none;
-        }
-        
-        .publish-btn:disabled {
-            background-color: #ffb6c1; /* 浅粉色禁用态 */
-            opacity: 0.8;
-        }
-
-        /* 2. 关联对象选择 (级联) */
-        .select-group {
-            background: #fff;
-            padding: 15px;
-            margin-bottom: 10px;
-        }
-        
-        .select-label {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 8px;
-        }
-        
-        .cascade-select {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .form-select-sm {
-            border-radius: 8px;
-            border-color: #eee;
-        }
-
-        /* 3. 图文编辑模块 */
-        .editor-section {
-            background: #fff;
-            padding: 15px;
-            margin-bottom: 10px;
-        }
-
-        /* 图片上传区 */
-        .upload-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .upload-btn {
-            width: 100%;
-            padding-bottom: 100%; /* 正方形 */
-            position: relative;
-            background: #f8f8f8;
-            border: 1px dashed #ddd;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        
-        .upload-icon-wrapper {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            color: #999;
-        }
-        
-        .preview-item {
-            width: 100%;
-            padding-bottom: 100%;
-            position: relative;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #fff;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            cursor: grab;
-        }
-        
-        .preview-img {
-            position: absolute;
-            top: 0;
+        .topbar {
+            position: fixed;
             left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .delete-btn {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: rgba(0,0,0,0.5);
-            color: #fff;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            text-align: center;
-            line-height: 18px;
-            font-size: 12px;
-            cursor: pointer;
-            z-index: 10;
+            right: 0;
+            top: 0;
+            height: 52px;
+            background: #fff;
+            border-bottom: 1px solid #eceff6;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
         }
 
-        /* 文本输入 */
-        .title-input {
-            border: none;
-            border-bottom: 1px solid #eee;
-            border-radius: 0;
-            padding: 10px 0;
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
+        .topbar .title {
+            font-size: 16px;
+            font-weight: 700;
         }
-        
-        .title-input:focus {
-            box-shadow: none;
-            border-color: var(--primary-color);
-        }
-        
-        .content-input {
+
+        .topbar .cancel-btn {
+            color: #5d6472;
             border: none;
-            resize: none;
+            background: transparent;
+            font-size: 14px;
             padding: 0;
-            font-size: 15px;
-            min-height: 150px;
-        }
-        
-        .content-input:focus {
-            box-shadow: none;
         }
 
-        /* 标签 */
-        .tags-wrapper {
+        .page-wrap {
+            width: min(980px, 100%);
+            margin: 0 auto;
+            padding: 12px;
+        }
+
+        .editor-card {
+            background: var(--card);
+            border: 1px solid #e7eaf3;
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 6px 20px rgba(28, 37, 67, 0.06);
+            overflow: hidden;
+        }
+
+        .section-title {
+            margin: 0 0 10px;
+            font-size: 14px;
+            color: #5f6778;
+            font-weight: 700;
+        }
+
+        .input-title {
+            width: 100%;
+            height: 46px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            background: #fcfdff;
+            padding: 0 12px;
+            font-size: 16px;
+            font-weight: 700;
+            outline: none;
+        }
+
+        .input-body {
+            width: 100%;
+            height: 40vh;
+            min-height: 260px;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            background: #fcfdff;
+            padding: 12px;
+            resize: vertical;
+            outline: none;
+            line-height: 1.65;
+            font-size: 15px;
+        }
+
+        .input-title:focus,
+        .input-body:focus,
+        .select-base:focus,
+        .search-base:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.12);
+        }
+
+        .section-block { margin-top: 16px; }
+
+        .image-strip {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .tag-pill {
-            padding: 5px 12px;
-            background: #f0f0f0;
-            border-radius: 20px;
-            font-size: 13px;
-            color: #666;
-            cursor: pointer;
-            border: 1px solid transparent;
-        }
-        
-        .tag-pill.active {
-            background: #fff0f6;
-            color: var(--primary-color);
-            border-color: var(--primary-color);
-        }
-        
-        .custom-tag-input {
-            width: 100px;
-            border: none;
-            background: transparent;
-            font-size: 13px;
-            outline: none;
-            color: var(--primary-color);
         }
 
-        /* 底部预览按钮 */
-        .preview-bar {
-            text-align: center;
-            padding: 15px;
-            color: #666;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        
-        .preview-bar:hover {
-            color: var(--primary-color);
-        }
-
-        /* 预览弹窗 */
-        .preview-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 2000;
-            display: none;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .preview-card {
-            width: 90%;
-            max-width: 375px;
-            background: #fff;
-            border-radius: 12px;
+        .thumb,
+        .thumb-upload {
+            width: 82px;
+            height: 82px;
+            border-radius: 10px;
             overflow: hidden;
             position: relative;
-        }
-        
-        .preview-header {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .preview-close {
-            font-size: 24px;
-            cursor: pointer;
-        }
-        
-        .preview-body {
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        
-        .preview-cover {
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-        }
-        
-        .preview-content {
-            padding: 15px;
+            border: 1px solid #dbe1ef;
+            background: #fff;
+            flex: 0 0 auto;
         }
 
-        /* Toast */
+        .thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            cursor: zoom-in;
+        }
+
+        .thumb-delete {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, 0.56);
+            color: #fff;
+            font-size: 12px;
+            line-height: 20px;
+            padding: 0;
+        }
+
+        .thumb-upload {
+            border-style: dashed;
+            background: #fafbff;
+            color: #8890a1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .thumb-upload i {
+            font-size: 22px;
+            display: block;
+            color: var(--primary);
+        }
+
+        .thumb-upload small {
+            font-size: 11px;
+            display: block;
+            margin-top: 4px;
+        }
+
+        .tip-line {
+            margin-top: 8px;
+            color: #9aa1b1;
+            font-size: 12px;
+        }
+
+        .tags-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tag-pill {
+            border: 1px solid #d7dbe7;
+            color: #60697b;
+            background: #f8f9fd;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tag-pill.active {
+            color: #c26500;
+            border-color: #ffc07a;
+            background: #fff4e8;
+        }
+
+        .custom-tag {
+            border: 1px dashed #cdd3e2;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 13px;
+            color: #7f8798;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .custom-tag input {
+            border: none;
+            outline: none;
+            width: 92px;
+            font-size: 13px;
+        }
+
+        .select-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .search-base,
+        .select-base {
+            width: 100%;
+            height: 42px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 0 10px;
+            outline: none;
+            background: #fff;
+        }
+
+        .publish-wrap {
+            margin-top: 18px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .publish-btn {
+            width: min(360px, 100%);
+            border: none;
+            height: 44px;
+            border-radius: 999px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            background: linear-gradient(90deg, #ff8a00, #ffab2f);
+        }
+
+        .publish-btn:disabled {
+            background: #c9cfdb;
+            color: #f7f8fb;
+        }
+
+        .image-preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 16px;
+        }
+
+        .image-preview-overlay.show { display: flex; }
+
+        .image-preview-overlay img {
+            max-width: 92vw;
+            max-height: 90vh;
+            border-radius: 12px;
+            object-fit: contain;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+        }
+
         .toast-custom {
             position: fixed;
-            top: 50%;
             left: 50%;
+            top: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.8);
+            background: rgba(17, 20, 29, 0.88);
             color: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
+            font-size: 13px;
+            border-radius: 10px;
+            padding: 10px 16px;
             display: none;
-            z-index: 3000;
+            z-index: 120;
         }
 
+        @media (max-width: 768px) {
+            .select-grid { grid-template-columns: 1fr; }
+            .input-body { height: 42vh; }
+        }
     </style>
-    <link href="../../static/css/common.css" rel="stylesheet">
 </head>
 <body>
+<nav class="topbar">
+    <button class="cancel-btn" type="button" onclick="goBack()">取消</button>
+    <div class="title" id="pageTitle">发布笔记</div>
+    <div style="width:36px;"></div>
+</nav>
 
-    <!-- 1. 顶部栏 -->
-    <nav class="navbar navbar-custom fixed-top px-3 d-flex justify-content-between align-items-center">
-        <div class="nav-btn" onclick="goBack()">取消</div>
-        <div class="fw-bold">发布笔记</div>
-        <button class="publish-btn" id="publishBtn" onclick="publishPost()" disabled>发布</button>
-    </nav>
-
-    <!-- 2. 级联选择 -->
-    <div class="select-group">
-        <div class="select-label"><i class="bi bi-geo-alt me-1"></i>关联位置</div>
-        <div class="cascade-select">
-            <select class="form-select form-select-sm" id="canteenSelect" onchange="loadWindows()">
-                <option value="">选择食堂</option>
-                <!-- 动态加载 -->
-            </select>
-            <select class="form-select form-select-sm" id="windowSelect" onchange="loadDishes()" disabled>
-                <option value="">选择窗口</option>
-            </select>
-            <select class="form-select form-select-sm" id="dishSelect" onchange="autoSave()" disabled>
-                <option value="">选择菜品</option>
-            </select>
-        </div>
-    </div>
-
-    <!-- 3. 图文编辑 -->
-    <div class="editor-section">
-        <!-- 图片上传 -->
-        <div class="upload-grid" id="imageGrid">
-            <!-- 预览图将插入到这里 -->
-            <label class="upload-btn" id="uploadBtn">
-                <div class="upload-icon-wrapper">
-                    <i class="bi bi-camera fs-3"></i>
-                    <div style="font-size:12px">添加图片</div>
-                </div>
-                <input type="file" id="fileInput" multiple accept="image/*" style="display: none;" onchange="handleFiles(this.files)">
-            </label>
+<div class="page-wrap">
+    <div class="editor-card">
+        <div class="section-block" style="margin-top:0;">
+            <p class="section-title">标题</p>
+            <input id="postTitle" class="input-title" type="text" maxlength="200" placeholder="先写一个清晰标题（2-200字）">
         </div>
 
-        <!-- 文字编辑 -->
-        <input type="text" class="form-control title-input" id="postTitle" placeholder="填写标题会有更多赞哦～" maxlength="20" oninput="checkPublish()">
-        <textarea class="form-control content-input" id="postContent" placeholder="分享你的用餐体验，推荐必点菜/避雷..." oninput="autoSave()"></textarea>
+        <div class="section-block">
+            <p class="section-title">正文</p>
+            <textarea id="postContent" class="input-body" maxlength="5000" placeholder="写下真实用餐体验、推荐理由或避雷点（至少5字）"></textarea>
+        </div>
 
-        <!-- 标签 -->
-        <div class="tags-wrapper">
-            <div class="tag-pill" onclick="toggleTag(this)">#推荐</div>
-            <div class="tag-pill" onclick="toggleTag(this)">#避雷</div>
-            <div class="tag-pill" onclick="toggleTag(this)">#故事分享</div>
-            <div class="tag-pill" style="background:#fff; border:1px dashed #ccc; padding:5px 8px;">
-                # <input type="text" class="custom-tag-input" placeholder="自定义标签" onblur="addCustomTag(this)">
+        <div class="section-block">
+            <p class="section-title">图片（最多9张）</p>
+            <div id="imageStrip" class="image-strip"></div>
+            <div class="tip-line">支持多图上传、缩略展示、点击预览和删除，上传后自动压缩。</div>
+            <input id="fileInput" type="file" accept="image/*" multiple hidden>
+        </div>
+
+        <div class="section-block">
+            <p class="section-title">标签</p>
+            <div class="tags-row" id="tagsRow">
+                <div class="tag-pill" onclick="toggleTag(this)">#推荐</div>
+                <div class="tag-pill" onclick="toggleTag(this)">#避雷</div>
+                <div class="tag-pill" onclick="toggleTag(this)">#故事分享</div>
+                <label class="custom-tag">#<input id="customTagInput" type="text" placeholder="自定义" maxlength="12"></label>
             </div>
         </div>
-    </div>
 
-    <!-- 4. 底部预览 -->
-    <div class="preview-bar" onclick="showPreview()">
-        <i class="bi bi-eye me-1"></i> 预览笔记效果
-    </div>
-
-    <!-- 预览弹窗 -->
-    <div class="preview-modal" id="previewModal">
-        <div class="preview-card">
-            <div class="preview-header">
-                <span class="fw-bold">笔记预览</span>
-                <span class="preview-close" onclick="closePreview()">&times;</span>
+        <div class="section-block">
+            <p class="section-title" id="canteenSectionTitle">选择评价食堂（必填）</p>
+            <div class="select-grid" style="margin-bottom:10px;">
+                <select id="campusFilter" class="select-base"></select>
+                <input id="canteenSearch" class="search-base" type="text" placeholder="搜索食堂名称...">
             </div>
-            <div class="preview-body">
-                <img src="" class="preview-cover" id="previewCover">
-                <div class="preview-content">
-                    <h5 class="fw-bold mb-2" id="previewTitle"></h5>
-                    <div class="d-flex align-items-center mb-3">
-                        <img src="https://via.placeholder.com/30" class="rounded-circle me-2" style="width:25px;height:25px;">
-                        <span class="text-muted" style="font-size:12px;">用户名</span>
-                    </div>
-                    <p class="text-secondary" style="font-size:14px; white-space: pre-wrap;" id="previewText"></p>
-                    <div class="text-muted" style="font-size:12px;" id="previewTags"></div>
-                </div>
+            <div class="select-grid">
+                <select id="canteenSelect" class="select-base"></select>
+                <select id="windowSelect" class="select-base" disabled></select>
             </div>
         </div>
+
+        <div class="publish-wrap">
+            <button id="publishBtn" class="publish-btn" type="button" disabled>发布笔记</button>
+        </div>
     </div>
+</div>
 
-    <div class="toast-custom" id="toast">已保存草稿</div>
+<div id="imagePreviewOverlay" class="image-preview-overlay"><img id="imagePreviewTarget" alt="preview"></div>
+<div id="toast" class="toast-custom"></div>
 
-    <script>
-        // ==========================================
-        // 模拟数据 (Mock Data)
-        // ==========================================
-        const mockData = {
-            canteens: ["北区食堂", "南区食堂", "西区食堂"],
-            windows: {
-                "北区食堂": [{id:1, name:"1号窗口"}, {id:2, name:"2号窗口"}],
-                "南区食堂": [{id:3, name:"特色小炒"}, {id:4, name:"面食档"}]
-            },
-            dishes: {
-                "1": [{id:1, name:"番茄炒蛋"}, {id:2, name:"红烧肉"}],
-                "3": [{id:3, name:"宫保鸡丁"}, {id:4, name:"麻婆豆腐"}]
-            }
-        };
+<script src="../../static/js/bootstrap.bundle.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+    let editId = null;
+    const DRAFT_KEY = 'post_publish_draft';
 
-        // 全局状态
-        let uploadedImages = []; // 存储 Base64 或 File 对象
-        let autoSaveTimer = null;
+    const state = {
+        images: [],
+        campuses: [],
+        canteens: [],
+        filteredCanteens: [],
+        windows: []
+    };
 
-        document.addEventListener('DOMContentLoaded', function() {
-            initCascade();
-            initSortable();
-            loadDraft();
-            
-            // 自动保存定时器 (每3秒)
-            autoSaveTimer = setInterval(autoSave, 3000);
+    function showToast(msg) {
+        const node = document.getElementById('toast');
+        node.textContent = msg;
+        node.style.display = 'block';
+        clearTimeout(node._timer);
+        node._timer = setTimeout(() => { node.style.display = 'none'; }, 1800);
+    }
+
+    function normalizeCampusList(payload) {
+        if (Array.isArray(payload?.data?.list)) return payload.data.list;
+        if (Array.isArray(payload?.list)) return payload.list;
+        return [];
+    }
+
+    function normalizeCanteenList(payload) {
+        if (Array.isArray(payload?.data?.list)) return payload.data.list;
+        if (Array.isArray(payload?.data)) return payload.data;
+        if (Array.isArray(payload)) return payload;
+        return [];
+    }
+
+    function normalizeWindowList(payload) {
+        if (Array.isArray(payload?.data)) return payload.data;
+        if (Array.isArray(payload)) return payload;
+        return [];
+    }
+
+    function buildTagList() {
+        const tags = [];
+        document.querySelectorAll('#tagsRow .tag-pill.active').forEach((item) => {
+            const value = String(item.textContent || '').trim().replace(/^#/, '');
+            if (value) tags.push(value);
+        });
+        return tags;
+    }
+
+    function isPublishReady() {
+        const title = document.getElementById('postTitle').value.trim();
+        const content = document.getElementById('postContent').value.trim();
+        const canteenId = Number(document.getElementById('canteenSelect').value || 0);
+        if (editId) {
+            return title.length >= 2 && content.length >= 5;
+        }
+        return title.length >= 2 && content.length >= 5 && canteenId > 0;
+    }
+
+    function checkPublishEnabled() {
+        document.getElementById('publishBtn').disabled = !isPublishReady();
+    }
+
+    function renderImages() {
+        const wrap = document.getElementById('imageStrip');
+        wrap.innerHTML = '';
+
+        state.images.forEach((src, index) => {
+            const cell = document.createElement('div');
+            cell.className = 'thumb';
+            cell.innerHTML = `
+                <img src="${src}" alt="img-${index}" onclick="openPreview('${src}')">
+                <button class="thumb-delete" type="button" onclick="removeImage(${index})">×</button>
+            `;
+            wrap.appendChild(cell);
         });
 
-        // 1. 级联选择逻辑
-        function initCascade() {
-            const canteenSel = document.getElementById('canteenSelect');
-            mockData.canteens.forEach(c => {
-                canteenSel.add(new Option(c, c));
+        if (state.images.length < 9) {
+            const upload = document.createElement('label');
+            upload.className = 'thumb-upload';
+            upload.innerHTML = '<div><i class="bi bi-plus-lg"></i><small>上传</small></div>';
+            upload.addEventListener('click', () => document.getElementById('fileInput').click());
+            wrap.appendChild(upload);
+        }
+
+        saveDraft();
+    }
+
+    function removeImage(index) {
+        state.images.splice(index, 1);
+        renderImages();
+    }
+
+    function openPreview(src) {
+        const overlay = document.getElementById('imagePreviewOverlay');
+        document.getElementById('imagePreviewTarget').src = src;
+        overlay.classList.add('show');
+    }
+
+    async function loadCampuses() {
+        const res = await fetchApi(API.CAMPUSES);
+        if (res.code !== 200) {
+            showToast(res.msg || '加载校区失败');
+            return;
+        }
+
+        const list = normalizeCampusList(res);
+        state.campuses = list;
+        const select = document.getElementById('campusFilter');
+        const currentCampusId = Number(res.data?.current_campus_id || list[0]?.id || 0);
+        select.innerHTML = list.map((item) => `<option value="${Number(item.id || 0)}">${String(item.name || '-')}</option>`).join('');
+        if (currentCampusId) select.value = String(currentCampusId);
+
+        await loadCanteens();
+    }
+
+    async function loadCanteens() {
+        const campusId = Number(document.getElementById('campusFilter').value || 0);
+        const res = await fetchApi(`${API.PUBLIC_CANTEENS}?campus_id=${encodeURIComponent(campusId || 0)}`);
+        if (res.code !== 200) {
+            showToast(res.msg || '加载食堂失败');
+            return;
+        }
+
+        state.canteens = normalizeCanteenList(res);
+        filterCanteens();
+    }
+
+    function filterCanteens() {
+        const keyword = String(document.getElementById('canteenSearch').value || '').trim().toLowerCase();
+        state.filteredCanteens = state.canteens.filter((item) => String(item.name || '').toLowerCase().includes(keyword));
+
+        const select = document.getElementById('canteenSelect');
+        select.innerHTML = '<option value="">请选择评价的食堂</option>' +
+            state.filteredCanteens.map((item) => `<option value="${Number(item.id || 0)}">${String(item.name || '-')}</option>`).join('');
+
+        const draft = editId ? {} : JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+        if (draft.canteen_id && state.filteredCanteens.some((i) => Number(i.id) === Number(draft.canteen_id))) {
+            select.value = String(draft.canteen_id);
+        }
+
+        loadWindows();
+    }
+
+    async function loadWindows() {
+        const canteenId = Number(document.getElementById('canteenSelect').value || 0);
+        const windowSelect = document.getElementById('windowSelect');
+        windowSelect.innerHTML = '<option value="">选择具体窗口（选填）</option>';
+        windowSelect.disabled = true;
+        state.windows = [];
+
+        if (!canteenId) {
+            checkPublishEnabled();
+            saveDraft();
+            return;
+        }
+
+        const res = await fetchApi(`${API.WINDOWS}?canteen_id=${encodeURIComponent(canteenId)}`);
+        if (res.code !== 200) {
+            showToast(res.msg || '加载窗口失败');
+            checkPublishEnabled();
+            return;
+        }
+
+        state.windows = normalizeWindowList(res);
+        windowSelect.innerHTML = '<option value="">选择具体窗口（选填）</option>' +
+            state.windows.map((item) => `<option value="${Number(item.id || 0)}">${String(item.name || '-')}</option>`).join('');
+        windowSelect.disabled = state.windows.length === 0;
+
+        const draft = editId ? {} : JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+        if (draft.window_id && state.windows.some((i) => Number(i.id) === Number(draft.window_id))) {
+            windowSelect.value = String(draft.window_id);
+        }
+
+        checkPublishEnabled();
+        saveDraft();
+    }
+
+    function saveDraft() {
+        if (editId) {
+            checkPublishEnabled();
+            return;
+        }
+        const draft = {
+            title: document.getElementById('postTitle').value,
+            content: document.getElementById('postContent').value,
+            images: state.images,
+            tags: buildTagList(),
+            campus_id: Number(document.getElementById('campusFilter').value || 0),
+            canteen_id: Number(document.getElementById('canteenSelect').value || 0),
+            window_id: Number(document.getElementById('windowSelect').value || 0)
+        };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        checkPublishEnabled();
+    }
+
+    function applyDraft() {
+        const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+        if (draft.title) document.getElementById('postTitle').value = draft.title;
+        if (draft.content) document.getElementById('postContent').value = draft.content;
+        if (Array.isArray(draft.images)) state.images = draft.images.slice(0, 9);
+        renderImages();
+
+        if (Array.isArray(draft.tags)) {
+            const set = new Set(draft.tags.map((t) => String(t || '').trim()));
+            document.querySelectorAll('#tagsRow .tag-pill').forEach((item) => {
+                const val = String(item.textContent || '').trim().replace(/^#/, '');
+                item.classList.toggle('active', set.has(val));
             });
         }
+    }
 
-        function loadWindows() {
-            const canteen = document.getElementById('canteenSelect').value;
-            const winSel = document.getElementById('windowSelect');
-            const dishSel = document.getElementById('dishSelect');
-            
-            winSel.innerHTML = '<option value="">选择窗口</option>';
-            dishSel.innerHTML = '<option value="">选择菜品</option>';
-            winSel.disabled = true;
-            dishSel.disabled = true;
+    function toggleTag(el) {
+        el.classList.toggle('active');
+        saveDraft();
+    }
 
-            if (canteen && mockData.windows[canteen]) {
-                mockData.windows[canteen].forEach(w => {
-                    winSel.add(new Option(w.name, w.id));
-                });
-                winSel.disabled = false;
-            }
-            autoSave();
-        }
+    function addCustomTag() {
+        const input = document.getElementById('customTagInput');
+        const val = String(input.value || '').trim();
+        if (!val) return;
 
-        function loadDishes() {
-            const winId = document.getElementById('windowSelect').value;
-            const dishSel = document.getElementById('dishSelect');
-            
-            dishSel.innerHTML = '<option value="">选择菜品</option>';
-            dishSel.disabled = true;
+        const row = document.getElementById('tagsRow');
+        const tag = document.createElement('div');
+        tag.className = 'tag-pill active';
+        tag.textContent = '#' + val;
+        tag.onclick = function () { toggleTag(this); };
+        row.insertBefore(tag, document.querySelector('.custom-tag'));
+        input.value = '';
+        saveDraft();
+    }
 
-            if (winId && mockData.dishes[winId]) {
-                mockData.dishes[winId].forEach(d => {
-                    dishSel.add(new Option(d.name, d.id));
-                });
-                dishSel.disabled = false;
-            }
-            autoSave();
-        }
+    function compressImageFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const maxSide = 1600;
+                    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+                    const w = Math.max(1, Math.round(img.width * scale));
+                    const h = Math.max(1, Math.round(img.height * scale));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
 
-        // 2. 图片处理 (上传 + 排序)
-        function handleFiles(files) {
-            if (uploadedImages.length + files.length > 9) {
-                alert("最多上传9张图片");
-                return;
-            }
-
-            Array.from(files).forEach(file => {
-                // 简单压缩模拟：直接读取
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    addImageToGrid(e.target.result);
+                    let quality = 0.88;
+                    let out = canvas.toDataURL('image/jpeg', quality);
+                    const maxBytes = 450 * 1024;
+                    while (out.length * 0.75 > maxBytes && quality > 0.5) {
+                        quality -= 0.08;
+                        out = canvas.toDataURL('image/jpeg', quality);
+                    }
+                    resolve(out);
                 };
-                reader.readAsDataURL(file);
-            });
-        }
-
-        function addImageToGrid(base64) {
-            uploadedImages.push(base64);
-            renderImages();
-            checkPublish();
-            autoSave();
-        }
-
-        function renderImages() {
-            // 清除现有预览（除了上传按钮）
-            const grid = document.getElementById('imageGrid');
-            const btn = document.getElementById('uploadBtn');
-            
-            // 移除所有 preview-item
-            grid.querySelectorAll('.preview-item').forEach(el => el.remove());
-
-            // 重新插入
-            uploadedImages.forEach((img, index) => {
-                const div = document.createElement('div');
-                div.className = 'preview-item';
-                div.innerHTML = `
-                    <img src="${img}" class="preview-img">
-                    <div class="delete-btn" onclick="removeImage(${index})">&times;</div>
-                `;
-                grid.insertBefore(div, btn);
-            });
-
-            // 达到9张隐藏上传按钮
-            btn.style.display = uploadedImages.length >= 9 ? 'none' : 'block';
-        }
-
-        function removeImage(index) {
-            uploadedImages.splice(index, 1);
-            renderImages();
-            checkPublish();
-            autoSave();
-        }
-
-        function initSortable() {
-            new Sortable(document.getElementById('imageGrid'), {
-                animation: 150,
-                draggable: ".preview-item",
-                onEnd: function (evt) {
-                    // 更新数组顺序
-                    const item = uploadedImages.splice(evt.oldIndex, 1)[0];
-                    uploadedImages.splice(evt.newIndex, 0, item);
-                    autoSave();
-                }
-            });
-        }
-
-        // 3. 标签逻辑
-        function toggleTag(el) {
-            el.classList.toggle('active');
-            autoSave();
-        }
-
-        function addCustomTag(input) {
-            const val = input.value.trim();
-            if (val) {
-                const wrapper = document.querySelector('.tags-wrapper');
-                const newTag = document.createElement('div');
-                newTag.className = 'tag-pill active';
-                newTag.innerText = '#' + val;
-                newTag.onclick = function() { this.classList.toggle('active'); autoSave(); };
-                wrapper.insertBefore(newTag, input.parentElement);
-                input.value = '';
-                autoSave();
-            }
-        }
-
-        // 4. 发布校验
-        function checkPublish() {
-            const title = document.getElementById('postTitle').value.trim();
-            // 规则：标题必填 + (至少1张图 或 正文不为空)
-            const hasContent = document.getElementById('postContent').value.trim().length > 0;
-            const hasImg = uploadedImages.length > 0;
-            
-            const btn = document.getElementById('publishBtn');
-            btn.disabled = !(title.length > 0 && (hasImg || hasContent));
-        }
-
-        async function publishPost() {
-            const btn = document.getElementById('publishBtn');
-            btn.disabled = true;
-            btn.innerText = "发布中...";
-
-            const title = document.getElementById('postTitle').value;
-            const content = document.getElementById('postContent').value;
-            
-            const tags = [];
-            document.querySelectorAll('.tag-pill.active').forEach(t => {
-                tags.push(t.innerText.replace(/^#/, ''));
-            });
-
-            let userId = null;
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-                try {
-                    const user = JSON.parse(userStr);
-                    userId = user.id;
-                } catch(e) {}
-            }
-
-            const data = {
-                title: title,
-                content: content,
-                images: uploadedImages,
-                tags: tags,
-                canteen: document.getElementById('canteenSelect').value,
-                window: document.getElementById('windowSelect').value,
-                dish: document.getElementById('dishSelect').value,
-                user_id: userId
+                img.onerror = () => reject(new Error('图片读取失败'));
+                img.src = String(event.target.result || '');
             };
+            reader.onerror = () => reject(new Error('文件读取失败'));
+            reader.readAsDataURL(file);
+        });
+    }
 
+    async function handleFiles(files) {
+        const selected = Array.from(files || []);
+        if (!selected.length) return;
+        if (state.images.length + selected.length > 9) {
+            showToast('最多上传9张图片');
+            return;
+        }
+
+        for (const file of selected) {
+            if (!String(file.type || '').startsWith('image/')) {
+                continue;
+            }
             try {
-                const response = await fetch('http://127.0.0.1:5001/api/notes', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                const resData = await response.json();
-                if (resData.code !== 200) {
-                    throw new Error(resData.msg || '发布失败');
-                }
-
-                showToast("发布成功，待审核");
-                localStorage.removeItem('post_draft'); // 清除草稿
-                setTimeout(() => {
-                    window.location.href = 'index.html';
-                }, 1500);
-            } catch (error) {
-                console.error(error);
-                showToast(error.message || "发布失败，请检查网络");
-                btn.innerText = "发布";
-                btn.disabled = false;
+                const compressed = await compressImageFile(file);
+                state.images.push(compressed);
+            } catch (e) {
+                showToast('有图片压缩失败，已跳过');
             }
         }
+        renderImages();
+    }
 
-        // 5. 草稿箱逻辑
-        function autoSave() {
-            const draft = {
-                canteen: document.getElementById('canteenSelect').value,
-                window: document.getElementById('windowSelect').value,
-                dish: document.getElementById('dishSelect').value,
-                title: document.getElementById('postTitle').value,
-                content: document.getElementById('postContent').value,
-                images: uploadedImages, // 注意：Base64可能会很大，真实场景建议仅保存核心文本或限制大小
-                // 标签暂略
-            };
-            localStorage.setItem('post_draft', JSON.stringify(draft));
-            // showToast("草稿已保存"); // 频繁提示会打扰，这里静默保存
+    async function publishPost() {
+        if (!isPublishReady()) {
+            showToast('请完善信息后发布');
+            return;
         }
 
-        function loadDraft() {
-            const draft = JSON.parse(localStorage.getItem('post_draft'));
-            if (draft) {
-                if (draft.canteen) {
-                    document.getElementById('canteenSelect').value = draft.canteen;
-                    loadWindows(); // 触发加载下级
-                    // 这是一个异步问题，简单演示可能无法立即回填下级
-                    // 真实场景需配合 Promise
-                }
-                document.getElementById('postTitle').value = draft.title || '';
-                document.getElementById('postContent').value = draft.content || '';
-                if (draft.images && draft.images.length > 0) {
-                    uploadedImages = draft.images;
-                    renderImages();
-                }
-                checkPublish();
+        const payload = {
+            title: document.getElementById('postTitle').value.trim(),
+            content: document.getElementById('postContent').value.trim(),
+            images: state.images,
+            tags: buildTagList(),
+            canteen_id: Number(document.getElementById('canteenSelect').value || 0),
+            window_id: Number(document.getElementById('windowSelect').value || 0) || null
+        };
+
+        const btn = document.getElementById('publishBtn');
+        btn.disabled = true;
+        btn.textContent = editId ? '保存中...' : '发布中...';
+
+        let res;
+        if (editId) {
+            res = await fetchApi(`${API.MY_NOTES}/${editId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+        } else {
+            res = await fetchApi(API.MY_NOTES, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+        }
+
+        btn.textContent = editId ? '保存笔记' : '发布笔记';
+        checkPublishEnabled();
+
+        if (res.code !== 200) {
+            showToast(res.msg || '发布失败');
+            return;
+        }
+
+        if (!editId) {
+            localStorage.removeItem(DRAFT_KEY);
+        }
+        showToast(editId ? '保存成功' : '发布成功');
+        setTimeout(() => {
+            window.location.href = 'user_center.html?tab=notes';
+        }, 900);
+    }
+
+    async function loadEditData(noteId) {
+        const res = await fetchApi(`${API.MY_NOTES}/${noteId}`);
+        if (res.code !== 200 || !res.data) {
+            showToast(res.msg || '加载笔记失败');
+            return false;
+        }
+        const note = res.data;
+        document.getElementById('postTitle').value = note.title || '';
+        document.getElementById('postContent').value = note.content || '';
+        state.images = Array.isArray(note.images) ? note.images.slice(0, 9) : [];
+        renderImages();
+        return true;
+    }
+
+    function goBack() {
+        const msg = editId ? '确定放弃本次编辑吗？未保存内容将丢失。' : '确定取消发布吗？已填写内容会保存为草稿。';
+        if (confirm(msg)) {
+            if (!editId) {
+                saveDraft();
             }
+            window.history.back();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const auth = await fetchApi(API.AUTH_ME);
+        if (auth.code !== 200) {
+            showToast('请先登录');
+            setTimeout(() => { window.location.href = '/login'; }, 900);
+            return;
         }
 
-        // 6. 预览逻辑
-        function showPreview() {
-            const title = document.getElementById('postTitle').value || "无标题";
-            const content = document.getElementById('postContent').value || "无正文内容";
-            const cover = uploadedImages.length > 0 ? uploadedImages[0] : "https://via.placeholder.com/300x200?text=No+Image";
-            
-            // 收集标签
-            const tags = [];
-            document.querySelectorAll('.tag-pill.active').forEach(t => tags.push(t.innerText));
-
-            document.getElementById('previewTitle').innerText = title;
-            document.getElementById('previewText').innerText = content;
-            document.getElementById('previewCover').src = cover;
-            document.getElementById('previewTags').innerText = tags.join(" ");
-
-            document.getElementById('previewModal').style.display = 'flex';
+        const editRaw = new URLSearchParams(window.location.search).get('edit');
+        if (editRaw && /^\d+$/.test(editRaw)) {
+            editId = Number(editRaw);
+            document.getElementById('pageTitle').textContent = '编辑笔记';
+            document.getElementById('publishBtn').textContent = '保存笔记';
+            document.getElementById('canteenSectionTitle').textContent = '食堂信息（编辑时可不改）';
         }
 
-        function closePreview() {
-            document.getElementById('previewModal').style.display = 'none';
+        if (!editId) {
+            applyDraft();
+        }
+        await loadCampuses();
+        if (editId) {
+            await loadEditData(editId);
         }
 
-        function goBack() {
-            if (confirm("确定要取消发布吗？草稿将保留。")) {
-                window.history.back();
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', async (event) => {
+            await handleFiles(event.target.files);
+            fileInput.value = '';
+        });
+
+        document.getElementById('publishBtn').addEventListener('click', publishPost);
+        document.getElementById('postTitle').addEventListener('input', saveDraft);
+        document.getElementById('postContent').addEventListener('input', saveDraft);
+        document.getElementById('campusFilter').addEventListener('change', async () => {
+            await loadCanteens();
+            saveDraft();
+        });
+        document.getElementById('canteenSearch').addEventListener('input', filterCanteens);
+        document.getElementById('canteenSelect').addEventListener('change', loadWindows);
+        document.getElementById('windowSelect').addEventListener('change', saveDraft);
+        document.getElementById('customTagInput').addEventListener('blur', addCustomTag);
+        document.getElementById('customTagInput').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addCustomTag();
             }
-        }
+        });
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.innerText = msg;
-            t.style.display = 'block';
-            setTimeout(() => t.style.display = 'none', 2000);
-        }
+        document.getElementById('imagePreviewOverlay').addEventListener('click', function () {
+            this.classList.remove('show');
+        });
 
-    </script>
-    <script src="../../static/js/common.js"></script>
-    <script src="../../static/js/mock_data.js"></script>
+        if (!editId) {
+            setInterval(saveDraft, 5000);
+        }
+        checkPublishEnabled();
+    });
+</script>
 </body>
 </html>

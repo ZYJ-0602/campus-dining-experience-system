@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 
 from app import app, db
-from models import User, EvaluationMain, SubmitGuard, GuestEvaluationSubmission, AdminActionLog, OperatorWarning, RectificationRecord
+from models import User, EvaluationMain, SubmitGuard, AdminActionLog, OperatorWarning, RectificationRecord
 
 
 def test_register_success(client):
@@ -13,9 +13,13 @@ def test_register_success(client):
     assert body['data']['username'] == 'new_user'
 
 
-def test_guest_status_page_is_public(client):
+def test_guest_status_page_offline_after_login(client):
     resp = client.get('/pages/c-client/guest_status.html')
-    assert resp.status_code == 200
+    assert resp.status_code == 302
+
+    client.post('/api/login', json={'username': 'tester', 'password': '123456'})
+    authed_resp = client.get('/pages/c-client/guest_status.html')
+    assert authed_resp.status_code == 404
 
 
 def test_login_and_auth_me(client):
@@ -225,50 +229,17 @@ def test_unbound_operator_cannot_access_operation_dashboard(client):
     assert resp.get_json()['msg'] == '当前运营账号未绑定食堂，请联系管理员配置'
 
 
-def test_guest_evaluation_submit_and_admin_approve(client):
+def test_guest_evaluation_submit_endpoint_disabled(client):
     payload = {
         'canteen_id': 1,
         'window_id': 1,
         'buy_time': '2026-03-22T18:00',
         'identity_type': 'visitor',
-        'dishes': [
-            {
-                'dish_id': 1,
-                'dish_name': '测试菜品',
-                'food_scores': {'taste': 8, 'color': 7},
-            }
-        ],
-        'env_scores': {'clean': 8},
-        'service_scores': {'attitude': 9},
-        'safety_scores': {'fresh': 8},
-        'remark': '游客评价测试',
+        'dishes': [{'dish_id': 1, 'dish_name': '测试菜品', 'food_scores': {'taste': 8}}],
     }
     submit_resp = client.post('/api/guest/evaluations', json=payload)
-    assert submit_resp.status_code == 200
-    submit_data = submit_resp.get_json()['data']
-    submission_id = submit_data['id']
-
-    with app.app_context():
-        admin = User(username='review_admin', password=generate_password_hash('123456'), role='admin')
-        db.session.add(admin)
-        db.session.commit()
-
-    client.post('/api/login', json={'username': 'review_admin', 'password': '123456'})
-
-    list_resp = client.get('/api/admin/guest_evaluations?status=pending')
-    assert list_resp.status_code == 200
-    assert any(item['id'] == submission_id for item in list_resp.get_json()['data']['list'])
-
-    approve_resp = client.post(f'/api/admin/guest_evaluations/{submission_id}/approve', json={})
-    assert approve_resp.status_code == 200
-    approve_data = approve_resp.get_json()['data']
-    assert approve_data['submission_id'] == submission_id
-    assert approve_data['evaluation_id'] > 0
-
-    with app.app_context():
-        latest = EvaluationMain.query.order_by(EvaluationMain.id.desc()).first()
-        assert latest is not None
-        assert latest.identity_type == 'visitor'
+    assert submit_resp.status_code == 403
+    assert submit_resp.get_json()['code'] == 403
 
 
 def test_get_current_evaluation_template(client):
@@ -281,80 +252,29 @@ def test_get_current_evaluation_template(client):
     assert isinstance(body['data']['items'].get('service', []), list)
 
 
-def test_admin_reject_guest_evaluation(client):
-    submit_resp = client.post(
-        '/api/guest/evaluations',
-        json={
-            'canteen_id': 1,
-            'window_id': 1,
-            'buy_time': '2026-03-22T18:20',
-            'identity_type': 'visitor',
-            'dishes': [{'dish_id': 1, 'dish_name': '测试菜品', 'food_scores': {'taste': 6}}],
-        },
-    )
-    submission_id = submit_resp.get_json()['data']['id']
-
+def test_admin_guest_review_endpoints_disabled(client):
     with app.app_context():
-        admin = User(username='reject_admin', password=generate_password_hash('123456'), role='admin')
+        admin = User(username='guest_closed_admin', password=generate_password_hash('123456'), role='admin')
         db.session.add(admin)
         db.session.commit()
 
-    client.post('/api/login', json={'username': 'reject_admin', 'password': '123456'})
-    reject_resp = client.post(
-        f'/api/admin/guest_evaluations/{submission_id}/reject',
-        json={'reason': '内容过于简短'},
-    )
-    assert reject_resp.status_code == 200
-    assert reject_resp.get_json()['code'] == 200
+    client.post('/api/login', json={'username': 'guest_closed_admin', 'password': '123456'})
 
-    with app.app_context():
-        row = db.session.get(GuestEvaluationSubmission, submission_id)
-        assert row is not None
-        assert row.status == 'rejected'
-        assert row.reject_reason == '内容过于简短'
+    list_resp = client.get('/api/admin/guest_evaluations?status=pending')
+    assert list_resp.status_code == 410
+    assert list_resp.get_json()['code'] == 410
 
+    approve_resp = client.post('/api/admin/guest_evaluations/1/approve', json={})
+    assert approve_resp.status_code == 410
+    assert approve_resp.get_json()['code'] == 410
 
-def test_admin_batch_approve_guest_evaluations(client):
-    payload_a = {
-        'canteen_id': 1,
-        'window_id': 1,
-        'buy_time': '2026-03-22T18:30',
-        'identity_type': 'visitor',
-        'dishes': [{'dish_id': 1, 'dish_name': '测试菜品', 'food_scores': {'taste': 8}}],
-    }
-    payload_b = {
-        'canteen_id': 1,
-        'window_id': 1,
-        'buy_time': '2026-03-22T18:31',
-        'identity_type': 'visitor',
-        'dishes': [{'dish_id': 1, 'dish_name': '测试菜品', 'food_scores': {'taste': 7}}],
-    }
-    sub_a = client.post('/api/guest/evaluations', json=payload_a, headers={'X-Forwarded-For': '10.0.0.1'}).get_json()['data']['id']
-    sub_b = client.post('/api/guest/evaluations', json=payload_b, headers={'X-Forwarded-For': '10.0.0.2'}).get_json()['data']['id']
+    reject_resp = client.post('/api/admin/guest_evaluations/1/reject', json={'reason': 'test'})
+    assert reject_resp.status_code == 410
+    assert reject_resp.get_json()['code'] == 410
 
-    with app.app_context():
-        admin = User(username='batch_admin', password=generate_password_hash('123456'), role='admin')
-        db.session.add(admin)
-        db.session.commit()
-
-    client.post('/api/login', json={'username': 'batch_admin', 'password': '123456'})
-    resp = client.post(
-        '/api/admin/guest_evaluations/batch_review',
-        json={'action': 'approve', 'ids': [sub_a, sub_b]},
-    )
-    assert resp.status_code == 200
-    body = resp.get_json()
-    assert body['code'] == 200
-    assert body['data']['processed_count'] == 2
-    assert body['data']['skipped_count'] == 0
-
-    with app.app_context():
-        row_a = db.session.get(GuestEvaluationSubmission, sub_a)
-        row_b = db.session.get(GuestEvaluationSubmission, sub_b)
-        assert row_a is not None and row_a.status == 'approved'
-        assert row_b is not None and row_b.status == 'approved'
-        visitor_count = EvaluationMain.query.filter_by(identity_type='visitor').count()
-        assert visitor_count == 2
+    batch_resp = client.post('/api/admin/guest_evaluations/batch_review', json={'action': 'approve', 'ids': [1]})
+    assert batch_resp.status_code == 410
+    assert batch_resp.get_json()['code'] == 410
 
 
 def test_operation_dashboard_contains_kpi_fields(client):
@@ -516,26 +436,10 @@ def test_admin_action_logs_time_filter_and_export(client):
     assert 'template_create' in text_body
 
 
-def test_guest_can_query_own_submission_status_by_ip(client):
-    submit_resp = client.post(
-        '/api/guest/evaluations',
-        json={
-            'canteen_id': 1,
-            'window_id': 1,
-            'buy_time': '2026-03-22T19:00',
-            'identity_type': 'visitor',
-            'dishes': [{'dish_id': 1, 'dish_name': '测试菜品', 'food_scores': {'taste': 7}}],
-        },
-        headers={'X-Forwarded-For': '10.0.0.9'},
-    )
-    submission_id = submit_resp.get_json()['data']['id']
-
-    ok_resp = client.get(f'/api/guest/evaluations/{submission_id}/status', headers={'X-Forwarded-For': '10.0.0.9'})
-    assert ok_resp.status_code == 200
-    assert ok_resp.get_json()['data']['status'] == 'pending'
-
-    forbidden_resp = client.get(f'/api/guest/evaluations/{submission_id}/status', headers={'X-Forwarded-For': '10.0.0.10'})
-    assert forbidden_resp.status_code == 403
+def test_guest_status_query_endpoint_disabled(client):
+    resp = client.get('/api/guest/evaluations/1/status', headers={'X-Forwarded-For': '10.0.0.9'})
+    assert resp.status_code == 403
+    assert resp.get_json()['code'] == 403
 
 
 def test_my_evaluations_returns_governance_status(client):

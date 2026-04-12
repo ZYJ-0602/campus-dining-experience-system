@@ -359,6 +359,9 @@
             border-radius: 8px;
             overflow: hidden;
             border: 1px solid var(--border);
+            max-height: calc(100vh - 40px);
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-head {
@@ -394,6 +397,8 @@
 
         .modal-body {
             padding: 16px;
+            overflow-y: auto;
+            flex: 1 1 auto;
         }
 
         .form-grid {
@@ -406,6 +411,13 @@
             display: grid;
             grid-template-columns: 1fr;
             gap: 8px;
+            justify-items: start;
+        }
+
+        .form-item .form-input,
+        .form-item .form-select {
+            max-width: 460px;
+            width: 100%;
         }
 
         .form-label {
@@ -432,12 +444,54 @@
             display: flex;
             justify-content: flex-end;
             gap: 10px;
+            background: #fff;
+            flex: 0 0 auto;
         }
 
         .top-note {
             margin-bottom: 6px;
             color: #909399;
             font-size: 12px;
+        }
+
+        .toast-wrap {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 4000;
+            pointer-events: none;
+        }
+
+        .toast {
+            min-width: 220px;
+            max-width: min(420px, 90vw);
+            background: #111827;
+            color: #fff;
+            border-radius: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 16px 34px rgba(17, 24, 39, 0.35);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+        }
+
+        .toast.error {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+
+        .toast.warning {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
         }
 
         @media (max-width: 1280px) {
@@ -477,6 +531,21 @@
             .pager {
                 width: 100%;
                 justify-content: flex-start;
+            }
+
+            .modal-overlay {
+                align-items: flex-start;
+                padding: 12px;
+            }
+
+            .modal-panel {
+                max-height: calc(100vh - 24px);
+                border-radius: 10px;
+            }
+
+            .form-item .form-input,
+            .form-item .form-select {
+                max-width: 100%;
             }
         }
     </style>
@@ -605,6 +674,10 @@
     </div>
 </div>
 
+<div class="toast-wrap" aria-live="polite" aria-atomic="true">
+    <div id="pageToast" class="toast"></div>
+</div>
+
 <script src="../c-client/js/api.js"></script>
 <script>
     const API_USER_LIST = `${API_BASE_URL}/admin/users`;
@@ -622,6 +695,19 @@
     const statusOverrides = new Map();
     let canteenOptions = [];
     let campusOptions = [];
+    let toastTimer = null;
+
+    function showToast(message, type = 'success', duration = 2200) {
+        const node = document.getElementById('pageToast');
+        if (!node) return;
+        node.textContent = String(message || '操作完成');
+        node.className = `toast ${type}`;
+        node.classList.add('show');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            node.classList.remove('show');
+        }, duration);
+    }
 
     function isSuccessResponse(res) {
         const code = Number(res && res.code);
@@ -762,7 +848,7 @@
             const data = readResponseData(res);
             const roleRaw = String(data.role || '').trim().toLowerCase();
             if (roleRaw !== 'admin' && roleRaw !== '管理员' && roleRaw !== '1') {
-                alert('当前账号不是管理员，请使用管理员账号登录。');
+                showToast('当前账号不是管理员，请使用管理员账号登录。', 'warning', 1800);
                 window.top.location.href = 'admin_login.html';
                 return false;
             }
@@ -1053,15 +1139,16 @@
                 body: JSON.stringify({ status: newStatus }),
             });
             if (!isSuccessResponse(res)) {
-                alert(res.msg || `${newStatus}失败`);
+                showToast(res.msg || `${newStatus}失败`, 'error');
                 return;
             }
             statusOverrides.set(id, newStatus);
             allUsers = allUsers.map((user) => (user.id === id ? { ...user, status: newStatus } : user));
             applyFiltersAndRender();
+            showToast(`用户已${newStatus}`, 'success');
         } catch (error) {
             console.error(error);
-            alert('网络错误');
+            showToast('网络错误', 'error');
         }
     }
 
@@ -1074,13 +1161,13 @@
                 body: JSON.stringify({ password: '123456' }),
             });
             if (!isSuccessResponse(res)) {
-                alert(res.msg || '重置失败');
+                showToast(res.msg || '重置失败', 'error');
                 return;
             }
-            alert(`重置成功！\n用户 "${username}" 的新密码为：123456`);
+            showToast(`重置成功，用户 ${username} 的新密码为 123456`, 'success', 3200);
         } catch (error) {
             console.error(error);
-            alert('网络错误');
+            showToast('网络错误', 'error');
         }
     }
 
@@ -1090,21 +1177,22 @@
         try {
             const res = await fetchApi(`${API_USER_LIST}/${id}`, { method: 'DELETE' });
             if (!isSuccessResponse(res)) {
-                alert(res.msg || '删除失败');
+                showToast(res.msg || '删除失败', 'error');
                 return;
             }
             selectedIds.delete(id);
             statusOverrides.delete(id);
             await fetchUsers();
+            showToast('用户已删除', 'success');
         } catch (error) {
             console.error(error);
-            alert('网络错误');
+            showToast('网络错误', 'error');
         }
     }
 
     async function batchOperate(action) {
         if (!selectedIds.size) {
-            alert('请先勾选要操作的用户');
+            showToast('请先勾选要操作的用户', 'warning');
             return;
         }
 
@@ -1145,10 +1233,10 @@
                 applyFiltersAndRender();
             }
 
-            alert(`${actionMap[action]}完成，成功 ${okCount} 项`);
+            showToast(`${actionMap[action]}完成，成功 ${okCount} 项`, 'success', 2600);
         } catch (error) {
             console.error(error);
-            alert('批量操作失败，请稍后重试');
+            showToast('批量操作失败，请稍后重试', 'error');
         }
     }
 
@@ -1176,7 +1264,7 @@
         try {
             const res = await fetchApi(`${API_USER_LIST}/${userId}`);
             if (!isSuccessResponse(res)) {
-                alert(res.msg || '加载用户详情失败');
+                showToast(res.msg || '加载用户详情失败', 'error');
                 return;
             }
             const data = readResponseData(res);
@@ -1198,7 +1286,7 @@
             showUserModal();
         } catch (error) {
             console.error(error);
-            alert('网络错误，无法加载用户详情');
+            showToast('网络错误，无法加载用户详情', 'error');
         }
     }
 
@@ -1228,11 +1316,11 @@
         const campusId = Number(document.getElementById('formCampus').value || 0);
 
         if (roleId === 3 && !operatorCanteenId) {
-            alert('食堂运营账号必须绑定食堂');
+            showToast('食堂运营账号必须绑定食堂', 'warning');
             return;
         }
         if (!campusId) {
-            alert('请选择所属校区');
+            showToast('请选择所属校区', 'warning');
             return;
         }
 
@@ -1254,7 +1342,7 @@
                 });
             } else {
                 if (password.length < 6) {
-                    alert('密码长度至少 6 位');
+                    showToast('密码长度至少 6 位', 'warning');
                     return;
                 }
                 res = await fetchApi(API_USER_LIST, {
@@ -1268,7 +1356,7 @@
             }
 
             if (!isSuccessResponse(res)) {
-                alert(res.msg || '保存失败');
+                showToast(res.msg || '保存失败', 'error');
                 return;
             }
 
@@ -1276,10 +1364,10 @@
             currentPage = 1;
             selectedIds.clear();
             await fetchUsers();
-            alert(editingUserId ? '用户信息更新成功！' : '用户新增成功！');
+            showToast(editingUserId ? '用户信息已更新' : '用户已新增', 'success');
         } catch (error) {
             console.error(error);
-            alert('网络错误');
+            showToast('网络错误', 'error');
         }
     }
 </script>

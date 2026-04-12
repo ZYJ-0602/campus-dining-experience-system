@@ -414,12 +414,84 @@
         // 全局变量
         let currentPage = 1;
         let mySwiper = null; // 全局引用
+        let mockPost = {
+            like_count: 0,
+            star_count: 0,
+            comment_count: 0,
+            is_liked: false,
+            is_starred: false,
+        };
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function normalizeImageUrl(src) {
+            const value = String(src || '').trim();
+            if (!value) return '/static/img/hero-bg.jpg';
+            if (value.startsWith('http://') || value.startsWith('https://')) return value;
+            if (value.startsWith('/')) return value;
+            return `${window.location.origin}/${value.replace(/^\.\//, '')}`;
+        }
+
+        async function loadPostDetail() {
+            const id = Number(new URLSearchParams(window.location.search).get('id') || 0);
+            if (!id) {
+                document.getElementById('postTitle').textContent = '笔记不存在';
+                document.getElementById('postContent').textContent = '缺少有效的笔记ID。';
+                return;
+            }
+
+            const res = await Common.apiFetch(`/notes/${id}`);
+            if (res.code !== 200 || !res.data) {
+                document.getElementById('postTitle').textContent = '笔记不存在';
+                document.getElementById('postContent').textContent = res.msg || '该笔记已删除或不可见';
+                return;
+            }
+
+            const note = res.data;
+            document.getElementById('postTitle').textContent = note.title || '-';
+            document.getElementById('postContent').textContent = note.content || '';
+            document.getElementById('authorName').textContent = note.username || ('用户' + (note.user_id || '-'));
+            document.getElementById('postTime').textContent = note.create_time || '-';
+            document.getElementById('authorAvatar').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(note.username || 'U')}&background=random`;
+            document.getElementById('locationText').textContent = '笔记详情';
+
+            const images = Array.isArray(note.images) ? note.images : [];
+            const wrapper = document.getElementById('imgWrapper');
+            if (images.length) {
+                wrapper.innerHTML = images.map((src) => {
+                    const url = normalizeImageUrl(src);
+                    return `<div class="swiper-slide"><img src="${escapeHtml(url)}" onclick="showBigImg('${escapeHtml(url)}')" onerror="this.onerror=null;this.src='/static/img/hero-bg.jpg'"></div>`;
+                }).join('');
+            } else {
+                wrapper.innerHTML = '<div class="swiper-slide d-flex align-items-center justify-content-center bg-light text-muted">无图片</div>';
+            }
+
+            if (mySwiper) {
+                mySwiper.update();
+            }
+            document.getElementById('imgCounter').innerText = images.length ? `1/${images.length}` : '1/1';
+
+            mockPost = {
+                like_count: Number(note.like_count || 0),
+                star_count: Number(note.star_count || 0),
+                comment_count: Number(note.comment_count || 0),
+                is_liked: false,
+                is_starred: false,
+            };
+            updateInteractionUI();
+        }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 数据加载已移交 mock_data.js 处理
-            // loadPostDetail(); 
-            // loadComments();
             initSwiper();
+            loadPostDetail();
+            loadComments();
         });
 
         // 2. 初始化轮播
@@ -436,7 +508,7 @@
             window.mySwiper = mySwiper;
         }
 
-        // 3. 加载评论 (保留此函数，以便 mock_data.js 或后续逻辑使用)
+        // 3. 加载评论 (占位示例)
         function loadComments() {
             const list = document.getElementById('commentList');
             // 模拟分页
@@ -580,6 +652,5 @@
 
     </script>
     <script src="../../static/js/common.js"></script>
-    <script src="../../static/js/mock_data.js"></script>
 </body>
 </html>

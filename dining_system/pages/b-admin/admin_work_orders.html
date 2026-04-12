@@ -414,12 +414,33 @@ function chipClass(status) {
 }
 
 async function requestJson(url, options = {}) {
-    const resp = await fetch(url, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok || data.code !== 200) {
-        throw new Error(data.msg || '请求失败');
+    const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10000;
+    const controller = new AbortController();
+    const externalSignal = options.signal;
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            controller.abort();
+        } else {
+            externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+        }
     }
-    return data;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const resp = await fetch(url, { ...options, signal: controller.signal });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || data.code !== 200) {
+            throw new Error(data.msg || '请求失败');
+        }
+        return data;
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error(`请求超时(${Math.ceil(timeoutMs / 1000)}秒)，请稍后重试`);
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 async function loadStats() {

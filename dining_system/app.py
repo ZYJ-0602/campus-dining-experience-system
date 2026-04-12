@@ -8,25 +8,35 @@ import random
 import shutil
 import smtplib
 import ssl
+import uuid
 from datetime import datetime, timedelta, date
 import math
 import json
 import re
 import hashlib
+import base64
+import binascii
+from time import perf_counter
 import urllib.request
 import urllib.error
 from email.message import EmailMessage
 
-from flask import Flask, request, jsonify, session, render_template, redirect, url_for, send_from_directory, send_file, Response
+from flask import Flask, request, jsonify, session, render_template, redirect, url_for, send_from_directory, send_file, Response, g
 from flask_cors import CORS
 from sqlalchemy import text, func
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+
+try:
+    from PIL import Image
+except Exception:
+    Image = None
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 pages_dir = os.path.join(basedir, 'pages')
 from extensions import db
-from models import User, Campus, Canteen, Window, Dish, EvaluationMain, EvaluationDish, SubmitGuard, Favorite, Feedback, Note, SensitiveWord, SensitiveRule, SystemConfig, NotificationConfig, BackupRecord, NotificationDispatchLog, NotificationMessage, OperatorWarning, SafetyNotice, RectificationRecord, GuestEvaluationSubmission, EvaluationTemplateVersion, EvaluationTemplateItem, AdminActionLog, EvaluationRiskFlag, RectificationWorkOrder, WorkOrderActionLog, RecommendationEvent, RecommendationAbTuning, RecommendationAbTuningLog, RecommendationAbPolicy
+from models import User, Campus, Canteen, Window, Dish, EvaluationMain, EvaluationDish, SubmitGuard, Favorite, Feedback, Note, SensitiveWord, SensitiveRule, SystemConfig, NotificationConfig, BackupRecord, NotificationDispatchLog, NotificationMessage, OperatorWarning, SafetyNotice, RectificationRecord, EvaluationTemplateVersion, EvaluationTemplateItem, AdminActionLog, EvaluationRiskFlag, RectificationWorkOrder, WorkOrderActionLog, RecommendationEvent, RecommendationAbTuning, RecommendationAbTuningLog, RecommendationAbPolicy
 from seed_defaults import ensure_default_admin_operator_accounts
 
 app = Flask(
@@ -48,8 +58,6 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 60 * 60 * 24
 
 PUBLIC_PAGE_PATHS = {
     'b-admin/admin_login.html',
-    'c-client/quick_evaluation.html',
-    'c-client/guest_status.html',
 }
 
 # 允许跨域请求（开发环境可通过 ALLOWED_ORIGINS 覆盖）
@@ -82,6 +90,13 @@ WORK_ORDER_DEFAULT_SLA_HOURS = int(os.getenv('WORK_ORDER_DEFAULT_SLA_HOURS', '48
 PUBLIC_MIN_ACTIVE_DISHES = int(os.getenv('PUBLIC_MIN_ACTIVE_DISHES', '10'))
 PUBLIC_MIN_ORDERS = int(os.getenv('PUBLIC_MIN_ORDERS', '80'))
 PUBLIC_MIN_REVIEWS = int(os.getenv('PUBLIC_MIN_REVIEWS', '40'))
+
+DISH_IMAGE_MAX_SIZE = 2 * 1024 * 1024
+DISH_IMAGE_ALLOWED_EXT = {'jpg', 'jpeg', 'png', 'webp'}
+DISH_IMAGE_ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/webp'}
+DISH_IMAGE_UPLOAD_DIR = os.path.join(app.static_folder, 'uploads', 'dishes')
+NOTE_IMAGE_MAX_SIZE = 2 * 1024 * 1024
+NOTE_IMAGE_UPLOAD_DIR = os.path.join(app.static_folder, 'uploads', 'notes')
 
 
 @app.route('/')
@@ -124,6 +139,23 @@ def api_error(msg='error', code=400, http_status=400, data=None):
     return jsonify({'code': code, 'msg': msg, 'data': data if data is not None else {}}), http_status
 
 
+@app.before_request
+def _track_request_start():
+    g._request_start = perf_counter()
+
+
+@app.after_request
+def _log_request_cost(response):
+    start = getattr(g, '_request_start', None)
+    if start is not None and request.path.startswith('/api/'):
+        cost_ms = (perf_counter() - start) * 1000
+        print(
+            f"[REQ] {request.method} {request.path} status={response.status_code} cost_ms={cost_ms:.1f}",
+            flush=True,
+        )
+    return response
+
+
 def _serialize_user(user):
     canteen_name = ''
     operator_canteen_id = _safe_int(getattr(user, 'operator_canteen_id', None))
@@ -156,6 +188,26 @@ def _serialize_campus(row):
         'is_active': bool(row.is_active),
         'sort_order': int(row.sort_order or 0),
         'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+    }
+
+
+def _serialize_canteen(row, metrics=None):
+    campus = db.session.get(Campus, _safe_int(getattr(row, 'campus_id', 1), 1) or 1)
+    metrics = metrics or {}
+    canteen_id = int(row.id or 0)
+    return {
+        'id': canteen_id,
+        'campus_id': int(_safe_int(getattr(row, 'campus_id', 1), 1) or 1),
+        'campus_name': campus.name if campus else '默认校区',
+        'name': row.name or '',
+        'address': row.address or '',
+        'business_hours': row.business_hours or '07:00-21:00',
+        'is_active': bool(getattr(row, 'is_active', True)),
+        'window_count': int(metrics.get('window_count', 0) or 0),
+        'dish_count': int(metrics.get('dish_count', 0) or 0),
+        'evaluation_count': int(metrics.get('evaluation_count', 0) or 0),
+        'operator_count': int(metrics.get('operator_count', 0) or 0),
+        'create_time': '-',
     }
 
 
@@ -201,6 +253,7 @@ def _extract_images_from_text(text):
         r'!\[[^\]]*\]\((/[^\s)]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s)]*)?)\)',
         r'(https?://[^\s"\'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"\'<>]*)?)',
         r'(/[^\s"\'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"\'<>]*)?)',
+        r'(data:image/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+)',
     ):
         matches = re.findall(pattern, raw_text, flags=re.IGNORECASE)
         for match in matches:
@@ -212,6 +265,36 @@ def _extract_images_from_text(text):
     return images
 
 
+def _strip_images_from_text(text):
+    raw_text = str(text or '')
+    if 'data:image/' in raw_text and len(raw_text) > 20000:
+        # 快速剔除超长 data URI，避免正则在超大文本中退化。
+        chunks = []
+        i = 0
+        marker = 'data:image/'
+        n = len(raw_text)
+        stop_chars = set(' \t\r\n)"\'<>')
+        while i < n:
+            pos = raw_text.find(marker, i)
+            if pos < 0:
+                chunks.append(raw_text[i:])
+                break
+            chunks.append(raw_text[i:pos])
+            j = pos
+            while j < n and raw_text[j] not in stop_chars:
+                j += 1
+            chunks.append('[图片已省略]')
+            i = j
+        raw_text = ''.join(chunks)
+
+    cleaned = re.sub(r'!\[[^\]]*\]\([^\s)]+\)', '', raw_text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'https?://[^\s"\'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"\'<>]*)?', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'/[^\s"\'<>]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s"\'<>]*)?', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'data:image/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+', '', cleaned, flags=re.IGNORECASE)
+    lines = [line.rstrip() for line in cleaned.splitlines()]
+    return '\n'.join(line for line in lines if line.strip()).strip()
+
+
 def _safe_scores(score_obj):
     return score_obj if isinstance(score_obj, dict) else {}
 
@@ -221,6 +304,136 @@ def _safe_int(value, default=None):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_local_upload_url(url):
+    prefix = '/static/uploads/dishes/'
+    value = (url or '').strip()
+    if not value.startswith(prefix):
+        return ''
+    filename = os.path.basename(value)
+    if not filename:
+        return ''
+    return os.path.join(DISH_IMAGE_UPLOAD_DIR, filename)
+
+
+def _delete_dish_image_file(image_url):
+    file_path = _normalize_local_upload_url(image_url)
+    if not file_path:
+        return
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+
+
+def _safe_image_extension(filename):
+    safe_name = secure_filename(filename or '')
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext == 'jpeg':
+        ext = 'jpg'
+    return ext
+
+
+def _compress_dish_image(file_bytes, src_ext):
+    if Image is None:
+        return None, '服务器缺少图片处理依赖，请安装 Pillow'
+
+    try:
+        image = Image.open(io.BytesIO(file_bytes))
+    except Exception:
+        return None, '图片文件损坏或格式不正确'
+
+    ext = src_ext if src_ext in {'jpg', 'png', 'webp'} else 'jpg'
+    max_side = 1920
+    try:
+        image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    except Exception:
+        image.thumbnail((max_side, max_side))
+
+    if ext in {'jpg', 'webp'} and image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+
+    if ext == 'jpg':
+        output = io.BytesIO()
+        quality = 90
+        while quality >= 55:
+            output.seek(0)
+            output.truncate(0)
+            image.save(output, format='JPEG', quality=quality, optimize=True)
+            if output.tell() <= DISH_IMAGE_MAX_SIZE:
+                return output.getvalue(), None
+            quality -= 10
+        return None, '图片压缩后仍超过 2MB，请上传分辨率更小的图片'
+
+    if ext == 'webp':
+        output = io.BytesIO()
+        quality = 90
+        while quality >= 55:
+            output.seek(0)
+            output.truncate(0)
+            image.save(output, format='WEBP', quality=quality, method=6)
+            if output.tell() <= DISH_IMAGE_MAX_SIZE:
+                return output.getvalue(), None
+            quality -= 10
+        return None, '图片压缩后仍超过 2MB，请上传分辨率更小的图片'
+
+    output = io.BytesIO()
+    try:
+        image.save(output, format='PNG', optimize=True)
+    except Exception:
+        try:
+            output.seek(0)
+            output.truncate(0)
+            image.save(output, format='PNG')
+        except Exception:
+            return None, 'PNG 图片处理失败'
+    if output.tell() > DISH_IMAGE_MAX_SIZE:
+        return None, '图片压缩后仍超过 2MB，请上传分辨率更小的图片'
+    return output.getvalue(), None
+
+
+def _save_dish_image_file(dish_id, image_bytes, ext):
+    os.makedirs(DISH_IMAGE_UPLOAD_DIR, exist_ok=True)
+    file_name = f'dish_{int(dish_id)}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{ext}'
+    file_path = os.path.join(DISH_IMAGE_UPLOAD_DIR, file_name)
+    with open(file_path, 'wb') as file_obj:
+        file_obj.write(image_bytes)
+    return f'/static/uploads/dishes/{file_name}'
+
+
+def _save_note_data_image(data_uri):
+    value = str(data_uri or '').strip()
+    match = re.match(r'^data:image/(png|jpe?g|webp);base64,', value, flags=re.IGNORECASE)
+    if not match:
+        return ''
+
+    ext = match.group(1).lower()
+    if ext == 'jpeg':
+        ext = 'jpg'
+
+    payload = value.split(',', 1)[1] if ',' in value else ''
+    if not payload:
+        return ''
+
+    try:
+        raw = base64.b64decode(payload, validate=True)
+    except (ValueError, binascii.Error):
+        return ''
+
+    if not raw or len(raw) > NOTE_IMAGE_MAX_SIZE:
+        return ''
+
+    os.makedirs(NOTE_IMAGE_UPLOAD_DIR, exist_ok=True)
+    file_name = f'note_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{ext}'
+    file_path = os.path.join(NOTE_IMAGE_UPLOAD_DIR, file_name)
+    try:
+        with open(file_path, 'wb') as file_obj:
+            file_obj.write(raw)
+    except Exception:
+        return ''
+    return f'/static/uploads/notes/{file_name}'
 
 
 def _extract_score_pack(data, prefix, keys):
@@ -1263,7 +1476,39 @@ def admin_get_campuses():
 
     _ensure_default_campuses()
     rows = Campus.query.order_by(Campus.sort_order.asc(), Campus.id.asc()).all()
-    return api_success({'list': [_serialize_campus(row) for row in rows]}, msg='查询成功')
+    campus_ids = [int(row.id or 0) for row in rows if int(row.id or 0) > 0]
+    canteen_count_map = {}
+    canteen_name_map = {}
+    if campus_ids:
+        canteen_rows = (
+            db.session.query(Canteen.campus_id, func.count(Canteen.id))
+            .filter(Canteen.campus_id.in_(campus_ids))
+            .group_by(Canteen.campus_id)
+            .all()
+        )
+        canteen_name_rows = (
+            Canteen.query
+            .filter(Canteen.campus_id.in_(campus_ids))
+            .order_by(Canteen.campus_id.asc(), Canteen.id.asc())
+            .all()
+        )
+        for campus_id, count_value in canteen_rows:
+            canteen_count_map[int(campus_id or 0)] = int(count_value or 0)
+        for canteen in canteen_name_rows:
+            key = int(canteen.campus_id or 0)
+            canteen_name_map.setdefault(key, []).append(canteen.name or '')
+
+    payload = []
+    for row in rows:
+        item = _serialize_campus(row)
+        key = int(row.id or 0)
+        canteen_names = [name for name in canteen_name_map.get(key, []) if name]
+        item['canteen_count'] = int(canteen_count_map.get(key, 0))
+        item['canteen_names'] = canteen_names
+        item['canteen_preview'] = canteen_names[:3]
+        item['canteen_preview_overflow'] = max(0, len(canteen_names) - len(item['canteen_preview']))
+        payload.append(item)
+    return api_success({'list': payload}, msg='查询成功')
 
 
 @app.route('/api/public/campuses', methods=['GET'])
@@ -1369,6 +1614,181 @@ def admin_delete_campus(campus_id):
     db.session.delete(row)
     db.session.commit()
     return api_success(msg='删除成功')
+
+
+@app.route('/api/admin/canteens', methods=['GET'])
+@admin_login_required
+def admin_get_canteens():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    query = Canteen.query
+    campus_id = _safe_int(request.args.get('campus_id'))
+    if campus_id:
+        query = query.filter(Canteen.campus_id == campus_id)
+
+    status = (request.args.get('status') or '').strip().lower()
+    if status == 'active':
+        query = query.filter(Canteen.is_active.is_(True))
+    elif status == 'inactive':
+        query = query.filter(Canteen.is_active.is_(False))
+
+    keyword = (request.args.get('keyword') or '').strip()
+    if keyword:
+        like_text = f'%{keyword}%'
+        query = query.filter(
+            db.or_(
+                Canteen.name.ilike(like_text),
+                Canteen.address.ilike(like_text),
+                Canteen.business_hours.ilike(like_text),
+            )
+        )
+
+    rows = query.order_by(Canteen.campus_id.asc(), Canteen.id.asc()).all()
+
+    canteen_ids = [int(row.id or 0) for row in rows if int(row.id or 0) > 0]
+    metrics_by_canteen = {}
+    if canteen_ids:
+        window_rows = (
+            db.session.query(Window.canteen_id, func.count(Window.id))
+            .filter(Window.canteen_id.in_(canteen_ids))
+            .group_by(Window.canteen_id)
+            .all()
+        )
+        dish_rows = (
+            db.session.query(Window.canteen_id, func.count(Dish.id))
+            .join(Dish, Dish.window_id == Window.id)
+            .filter(Window.canteen_id.in_(canteen_ids))
+            .group_by(Window.canteen_id)
+            .all()
+        )
+        evaluation_rows = (
+            db.session.query(EvaluationMain.canteen_id, func.count(EvaluationMain.id))
+            .filter(EvaluationMain.canteen_id.in_(canteen_ids))
+            .group_by(EvaluationMain.canteen_id)
+            .all()
+        )
+        operator_rows = (
+            db.session.query(User.operator_canteen_id, func.count(User.id))
+            .filter(User.operator_canteen_id.in_(canteen_ids))
+            .group_by(User.operator_canteen_id)
+            .all()
+        )
+
+        for canteen_id, count_value in window_rows:
+            key = int(canteen_id or 0)
+            metrics_by_canteen.setdefault(key, {})['window_count'] = int(count_value or 0)
+        for canteen_id, count_value in dish_rows:
+            key = int(canteen_id or 0)
+            metrics_by_canteen.setdefault(key, {})['dish_count'] = int(count_value or 0)
+        for canteen_id, count_value in evaluation_rows:
+            key = int(canteen_id or 0)
+            metrics_by_canteen.setdefault(key, {})['evaluation_count'] = int(count_value or 0)
+        for canteen_id, count_value in operator_rows:
+            key = int(canteen_id or 0)
+            metrics_by_canteen.setdefault(key, {})['operator_count'] = int(count_value or 0)
+
+    data = [_serialize_canteen(row, metrics_by_canteen.get(int(row.id or 0), {})) for row in rows]
+    return api_success({'list': data, 'total': len(data)}, msg='查询成功')
+
+
+@app.route('/api/admin/canteens', methods=['POST'])
+@admin_login_required
+def admin_create_canteen():
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    address = (data.get('address') or '').strip()
+    business_hours = (data.get('business_hours') or '').strip() or '07:00-21:00'
+    campus_id = _safe_int(data.get('campus_id')) or 1
+
+    if not name:
+        return api_error('食堂名称不能为空')
+    if not address:
+        return api_error('食堂地址不能为空')
+    campus = db.session.get(Campus, campus_id)
+    if not campus:
+        return api_error('所属校区不存在')
+
+    duplicate = Canteen.query.filter(Canteen.campus_id == campus_id, Canteen.name == name).first()
+    if duplicate:
+        return api_error('同校区下食堂名称已存在')
+
+    row = Canteen(
+        campus_id=campus_id,
+        name=name[:100],
+        address=address[:200],
+        business_hours=business_hours[:100],
+        is_active=_to_bool(data.get('is_active'), True),
+    )
+    db.session.add(row)
+    db.session.commit()
+    return api_success(_serialize_canteen(row), msg='创建成功')
+
+
+@app.route('/api/admin/canteens/<int:canteen_id>', methods=['PUT'])
+@admin_login_required
+def admin_update_canteen(canteen_id):
+    admin_only_error = _ensure_admin_only()
+    if admin_only_error:
+        return admin_only_error
+
+    row = db.session.get(Canteen, canteen_id)
+    if not row:
+        return api_error('食堂不存在', code=404, http_status=404)
+
+    data = request.get_json(silent=True) or {}
+    old_campus_id = int(_safe_int(row.campus_id, 1) or 1)
+
+    if 'campus_id' in data:
+        campus_id = _safe_int(data.get('campus_id'))
+        if not campus_id:
+            return api_error('所属校区不能为空')
+        campus = db.session.get(Campus, campus_id)
+        if not campus:
+            return api_error('所属校区不存在')
+        row.campus_id = campus_id
+
+    if 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not name:
+            return api_error('食堂名称不能为空')
+        duplicate = Canteen.query.filter(
+            Canteen.campus_id == row.campus_id,
+            Canteen.name == name,
+            Canteen.id != canteen_id,
+        ).first()
+        if duplicate:
+            return api_error('同校区下食堂名称已存在')
+        row.name = name[:100]
+
+    if 'address' in data:
+        address = (data.get('address') or '').strip()
+        if not address:
+            return api_error('食堂地址不能为空')
+        row.address = address[:200]
+
+    if 'business_hours' in data:
+        business_hours = (data.get('business_hours') or '').strip() or '07:00-21:00'
+        row.business_hours = business_hours[:100]
+
+    if 'is_active' in data:
+        row.is_active = _to_bool(data.get('is_active'), row.is_active)
+
+    updated_user_count = 0
+    if int(_safe_int(row.campus_id, 1) or 1) != old_campus_id:
+        updated_user_count = User.query.filter(User.operator_canteen_id == row.id).update(
+            {'campus_id': int(_safe_int(row.campus_id, 1) or 1)}, synchronize_session=False
+        )
+
+    db.session.commit()
+    payload = _serialize_canteen(row)
+    payload['updated_user_count'] = int(updated_user_count or 0)
+    return api_success(payload, msg='更新成功')
 
 
 def _resolve_canteen_scope(requested_canteen_id=None):
@@ -2344,37 +2764,6 @@ def _active_template_id():
     return row.id if row else None
 
 
-def _guest_guard_blocked(ip_address, seconds=45):
-    if not ip_address:
-        return False
-    threshold = datetime.now() - timedelta(seconds=seconds)
-    recent = (
-        GuestEvaluationSubmission.query.filter(
-            GuestEvaluationSubmission.submit_ip == ip_address,
-            GuestEvaluationSubmission.create_time >= threshold,
-        )
-        .order_by(GuestEvaluationSubmission.id.desc())
-        .first()
-    )
-    return recent is not None
-
-
-def _get_or_create_guest_shadow_user():
-    user = User.query.filter_by(username='guest_shadow_user').first()
-    if user:
-        return user
-    user = User(
-        username='guest_shadow_user',
-        password=generate_password_hash('guest-shadow-unsafe'),
-        role='student',
-        nickname='游客评价用户',
-        campus_id=1,
-    )
-    db.session.add(user)
-    db.session.flush()
-    return user
-
-
 def _create_evaluation_from_payload(payload, user_id, enforce_repeat_guard=True):
     data = payload if isinstance(payload, dict) else {}
     canteen_id = _safe_int(data.get('canteen_id'))
@@ -3270,6 +3659,7 @@ def get_dishes():
                 'name': row.name,
                 'window_id': row.window_id,
                 'price': float(row.price or 0),
+                'img_url': row.img_url or '',
             }
             for row in rows
         ],
@@ -5124,319 +5514,42 @@ def submit_evaluation_compat():
     return _submit_evaluation(enforce_repeat_guard=True)
 
 
-def _serialize_guest_submission(row):
-    canteen = db.session.get(Canteen, row.canteen_id) if row.canteen_id else None
-    window = db.session.get(Window, row.window_id) if row.window_id else None
-    reviewer = db.session.get(User, row.reviewed_by) if row.reviewed_by else None
-    return {
-        'id': row.id,
-        'canteen_id': int(row.canteen_id or 0),
-        'canteen_name': canteen.name if canteen else '-',
-        'window_id': int(row.window_id or 0),
-        'window_name': window.name if window else '-',
-        'identity_type': row.identity_type or 'visitor',
-        'comprehensive_score': float(row.comprehensive_score or 0),
-        'remark': row.remark or '',
-        'dishes': row.dishes_json if isinstance(row.dishes_json, list) else [],
-        'status': row.status,
-        'reject_reason': row.reject_reason or '',
-        'template_version': _safe_int(row.template_version),
-        'reviewed_by': reviewer.username if reviewer else '',
-        'reviewed_time': row.reviewed_time.strftime('%Y-%m-%d %H:%M:%S') if row.reviewed_time else '',
-        'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
-    }
-
-
 @app.route('/api/guest/evaluations', methods=['POST'])
 def guest_submit_evaluation():
-    payload = request.get_json(silent=True) or {}
-    identity_type = (payload.get('identity_type') or '').strip().lower()
-    if identity_type and identity_type not in ('visitor', 'guest'):
-        return api_error('游客模式仅支持 visitor 身份')
-
-    client_ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
-    if _guest_guard_blocked(client_ip, seconds=45):
-        return api_error('游客提交过于频繁，请稍后重试', code=429, http_status=429)
-
-    data = payload.copy() if isinstance(payload, dict) else {}
-    data['identity_type'] = 'visitor'
-    canteen_id = _safe_int(data.get('canteen_id'))
-    window_id = _safe_int(data.get('window_id'))
-    if not canteen_id or not window_id:
-        return api_error('缺少必填字段')
-    buy_time_str = data.get('buy_time') or datetime.now().strftime('%Y-%m-%dT%H:%M')
-    try:
-        buy_time = datetime.strptime(buy_time_str, '%Y-%m-%dT%H:%M')
-    except ValueError:
-        return api_error('时间格式错误')
-
-    dishes = data.get('dishes', [])
-    normalized_dishes = []
-    for raw_item in dishes:
-        normalized = _normalize_dish_payload(raw_item)
-        if normalized and (normalized['dish_id'] or normalized['dish_name']):
-            normalized_dishes.append(normalized)
-    if not normalized_dishes:
-        return api_error('请至少选择一个菜品')
-
-    env_scores = _extract_score_pack(data, 'env', ['clean', 'air', 'hygiene'])
-    service_scores = _extract_score_pack(data, 'service', ['attitude', 'speed', 'dress'])
-    safety_scores = _extract_score_pack(data, 'safety', ['fresh', 'info'])
-    score = _calc_comprehensive_score(normalized_dishes, env_scores, service_scores, safety_scores)
-
-    row = GuestEvaluationSubmission(
-        canteen_id=canteen_id,
-        window_id=window_id,
-        buy_time=buy_time,
-        identity_type='visitor',
-        grade=data.get('grade'),
-        age=_safe_int(data.get('age')),
-        dining_years=_safe_int(data.get('dining_years')),
-        env_scores=env_scores,
-        service_scores=service_scores,
-        safety_scores=safety_scores,
-        service_comment=(data.get('service_comment') or '').strip(),
-        service_images=_normalize_images(data.get('service_images')),
-        env_comment=(data.get('env_comment') or '').strip(),
-        env_images=_normalize_images(data.get('env_images')),
-        safety_comment=(data.get('safety_comment') or '').strip(),
-        safety_images=_normalize_images(data.get('safety_images')),
-        comprehensive_score=score,
-        images=_normalize_images(data.get('images')),
-        remark=(data.get('remark') or '').strip(),
-        dishes_json=normalized_dishes,
-        template_version=_safe_int(data.get('template_version')) or _active_template_id(),
-        status='pending',
-        submit_ip=client_ip,
-        user_agent=(request.headers.get('User-Agent') or '')[:255],
-    )
-    db.session.add(row)
-    db.session.commit()
-    return api_success({'id': row.id, 'status': row.status}, msg='游客评价已提交，待管理员审核后生效')
+    return api_error('游客提交已关闭，请登录后进行评价', code=403, http_status=403)
 
 
 @app.route('/api/guest/evaluations/<int:submission_id>/status', methods=['GET'])
 def guest_evaluation_status(submission_id):
-    row = db.session.get(GuestEvaluationSubmission, submission_id)
-    if not row:
-        return api_error('记录不存在', code=404, http_status=404)
+    return api_error('游客状态查询已关闭，请使用登录账号查看评价记录', code=403, http_status=403)
 
-    client_ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
-    if (row.submit_ip or '').strip() and client_ip != (row.submit_ip or '').strip():
-        return api_error('无权查看该记录', code=403, http_status=403)
 
-    return api_success(
-        {
-            'id': row.id,
-            'status': row.status,
-            'reject_reason': row.reject_reason or '',
-            'reviewed_time': row.reviewed_time.strftime('%Y-%m-%d %H:%M:%S') if row.reviewed_time else '',
-            'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
-        },
-        msg='查询成功',
-    )
+def _guest_feature_disabled():
+    return api_error('游客审核功能已下线', code=410, http_status=410)
 
 
 @app.route('/api/admin/guest_evaluations', methods=['GET'])
 @admin_login_required
 def admin_get_guest_evaluations():
-    status = (request.args.get('status') or 'pending').strip().lower()
-    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
-    limit = max(1, min(50, _safe_int(request.args.get('limit'), 10) or 10))
-    requested_canteen_id = _safe_int(request.args.get('canteen_id'))
-    scoped_canteen_id, scope_error = _resolve_canteen_scope(requested_canteen_id)
-    if scope_error:
-        return scope_error
-
-    query = GuestEvaluationSubmission.query
-    if status in ('pending', 'approved', 'rejected'):
-        query = query.filter(GuestEvaluationSubmission.status == status)
-    if scoped_canteen_id:
-        query = query.filter(GuestEvaluationSubmission.canteen_id == scoped_canteen_id)
-
-    total = query.count()
-    rows = query.order_by(GuestEvaluationSubmission.create_time.desc()).offset((page - 1) * limit).limit(limit).all()
-    return api_success(
-        {
-            'list': [_serialize_guest_submission(row) for row in rows],
-            'total': total,
-            'page': page,
-            'limit': limit,
-            'pages': math.ceil(total / limit) if total else 0,
-        },
-        msg='查询成功',
-    )
-
-
-def _guest_submission_to_payload(row):
-    return {
-        'canteen_id': row.canteen_id,
-        'window_id': row.window_id,
-        'buy_time': row.buy_time.strftime('%Y-%m-%dT%H:%M') if row.buy_time else datetime.now().strftime('%Y-%m-%dT%H:%M'),
-        'identity_type': 'visitor',
-        'grade': row.grade,
-        'age': row.age,
-        'dining_years': row.dining_years,
-        'env_scores': row.env_scores if isinstance(row.env_scores, dict) else {},
-        'service_scores': row.service_scores if isinstance(row.service_scores, dict) else {},
-        'safety_scores': row.safety_scores if isinstance(row.safety_scores, dict) else {},
-        'service_comment': row.service_comment or '',
-        'service_images': row.service_images if isinstance(row.service_images, list) else [],
-        'env_comment': row.env_comment or '',
-        'env_images': row.env_images if isinstance(row.env_images, list) else [],
-        'safety_comment': row.safety_comment or '',
-        'safety_images': row.safety_images if isinstance(row.safety_images, list) else [],
-        'images': row.images if isinstance(row.images, list) else [],
-        'remark': row.remark or '',
-        'dishes': row.dishes_json if isinstance(row.dishes_json, list) else [],
-        'template_version': _safe_int(row.template_version),
-    }
-
-
-def _approve_guest_submission(row, reviewer_id):
-    guest_user = _get_or_create_guest_shadow_user()
-    result, api_err = _create_evaluation_from_payload(_guest_submission_to_payload(row), guest_user.id, enforce_repeat_guard=False)
-    if api_err:
-        return None, api_err
-
-    row.status = 'approved'
-    row.reviewed_by = reviewer_id
-    row.reviewed_time = datetime.now()
-    row.reject_reason = ''
-    _audit_log(
-        'guest_evaluation_approve',
-        target_type='guest_submission',
-        target_id=row.id,
-        detail={'canteen_id': row.canteen_id, 'window_id': row.window_id, 'evaluation_id': result.get('evaluation_id')},
-    )
-    db.session.commit()
-    return result, None
-
-
-def _reject_guest_submission(row, reviewer_id, reason):
-    row.status = 'rejected'
-    row.reject_reason = (reason or '内容不符合发布要求').strip()[:255]
-    row.reviewed_by = reviewer_id
-    row.reviewed_time = datetime.now()
-    _audit_log(
-        'guest_evaluation_reject',
-        target_type='guest_submission',
-        target_id=row.id,
-        detail={'canteen_id': row.canteen_id, 'window_id': row.window_id, 'reason': row.reject_reason},
-    )
-    db.session.commit()
+    return _guest_feature_disabled()
 
 
 @app.route('/api/admin/guest_evaluations/<int:submission_id>/approve', methods=['POST'])
 @admin_login_required
 def admin_approve_guest_evaluation(submission_id):
-    row = db.session.get(GuestEvaluationSubmission, submission_id)
-    if not row:
-        return api_error('游客评价不存在', code=404, http_status=404)
-    access_error = _ensure_resource_canteen_access(row.canteen_id)
-    if access_error:
-        return access_error
-    if row.status != 'pending':
-        return api_error('该记录已审核，无需重复操作')
-
-    result, api_err = _approve_guest_submission(row, session.get('user_id'))
-    if api_err:
-        return api_err
-    return api_success({'submission_id': row.id, 'evaluation_id': result.get('evaluation_id')}, msg='审核通过并已入库')
+    return _guest_feature_disabled()
 
 
 @app.route('/api/admin/guest_evaluations/<int:submission_id>/reject', methods=['POST'])
 @admin_login_required
 def admin_reject_guest_evaluation(submission_id):
-    row = db.session.get(GuestEvaluationSubmission, submission_id)
-    if not row:
-        return api_error('游客评价不存在', code=404, http_status=404)
-    access_error = _ensure_resource_canteen_access(row.canteen_id)
-    if access_error:
-        return access_error
-    if row.status != 'pending':
-        return api_error('该记录已审核，无需重复操作')
-
-    data = request.get_json(silent=True) or {}
-    reason = (data.get('reason') or '内容不符合发布要求').strip()
-    _reject_guest_submission(row, session.get('user_id'), reason)
-    return api_success({'submission_id': row.id, 'status': row.status}, msg='已驳回')
+    return _guest_feature_disabled()
 
 
 @app.route('/api/admin/guest_evaluations/batch_review', methods=['POST'])
 @admin_login_required
 def admin_batch_review_guest_evaluations():
-    data = request.get_json(silent=True) or {}
-    action = (data.get('action') or '').strip().lower()
-    if action not in ('approve', 'reject'):
-        return api_error('批量操作类型无效')
-
-    raw_ids = data.get('ids') if isinstance(data.get('ids'), list) else []
-    ids = []
-    for item in raw_ids:
-        val = _safe_int(item)
-        if val and val not in ids:
-            ids.append(val)
-    if not ids:
-        return api_error('请至少选择一条记录')
-    if len(ids) > 100:
-        return api_error('单次最多处理100条记录')
-
-    reviewer_id = session.get('user_id')
-    reason = (data.get('reason') or '内容不符合发布要求').strip()
-    processed = []
-    skipped = []
-    created_eval_ids = []
-
-    for submission_id in ids:
-        row = db.session.get(GuestEvaluationSubmission, submission_id)
-        if not row:
-            skipped.append({'id': submission_id, 'reason': '记录不存在'})
-            continue
-        if row.status != 'pending':
-            skipped.append({'id': submission_id, 'reason': '已审核'})
-            continue
-        access_error = _ensure_resource_canteen_access(row.canteen_id)
-        if access_error:
-            skipped.append({'id': submission_id, 'reason': '无该食堂权限'})
-            continue
-
-        if action == 'approve':
-            result, api_err = _approve_guest_submission(row, reviewer_id)
-            if api_err:
-                db.session.rollback()
-                skipped.append({'id': submission_id, 'reason': api_err.get_json().get('msg', '入库失败')})
-                continue
-            if result and _safe_int(result.get('evaluation_id')):
-                created_eval_ids.append(int(result.get('evaluation_id')))
-            processed.append({'id': submission_id, 'status': 'approved'})
-        else:
-            _reject_guest_submission(row, reviewer_id, reason)
-            processed.append({'id': submission_id, 'status': 'rejected'})
-
-    _audit_log(
-        'guest_evaluation_batch_review',
-        target_type='guest_submission',
-        detail={
-            'action': action,
-            'requested_count': len(ids),
-            'processed_count': len(processed),
-            'skipped_count': len(skipped),
-        },
-    )
-    db.session.commit()
-
-    return api_success(
-        {
-            'action': action,
-            'processed_count': len(processed),
-            'skipped_count': len(skipped),
-            'processed': processed,
-            'skipped': skipped,
-            'created_evaluation_ids': created_eval_ids,
-        },
-        msg='批量审核完成',
-    )
+    return _guest_feature_disabled()
 
 
 @app.route('/api/evaluation/template/current', methods=['GET'])
@@ -5913,20 +6026,42 @@ def delete_my_evaluation(evaluation_id):
 @login_required()
 def get_my_notes():
     user_id = session.get('user_id')
-    rows = Note.query.filter_by(user_id=user_id).order_by(Note.create_time.desc()).all()
-    result = [
+    page = max(1, _safe_int(request.args.get('page'), 1) or 1)
+    limit = max(1, min(50, _safe_int(request.args.get('limit'), 20) or 20))
+
+    query = Note.query.filter_by(user_id=user_id)
+    total = query.count()
+    rows = query.order_by(Note.create_time.desc()).offset((page - 1) * limit).limit(limit).all()
+    result = []
+    for n in rows:
+        raw_content = str(n.content or '')
+        has_inline_data_image = 'data:image/' in raw_content
+        images = [] if has_inline_data_image else _extract_images_from_text(raw_content)
+        display_content = '' if has_inline_data_image else _strip_images_from_text(raw_content)
+        safe_raw_content = '' if has_inline_data_image else raw_content
+        result.append(
+            {
+                'id': n.id,
+                'title': n.title,
+                'content': display_content,
+                'raw_content': safe_raw_content,
+                'images': images,
+                'status': '已发布' if n.status == 'published' else n.status,
+                'like_count': int(n.like_count or 0),
+                'create_time': n.create_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'update_time': n.update_time.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+        )
+    return api_success(
         {
-            'id': n.id,
-            'title': n.title,
-            'content': n.content,
-            'status': '已发布' if n.status == 'published' else n.status,
-            'like_count': int(n.like_count or 0),
-            'create_time': n.create_time.strftime('%Y-%m-%d %H:%M:%S'),
-            'update_time': n.update_time.strftime('%Y-%m-%d %H:%M:%S'),
-        }
-        for n in rows
-    ]
-    return api_success(result, msg='查询成功')
+            'list': result,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'pages': math.ceil(total / limit) if total else 0,
+        },
+        msg='查询成功',
+    )
 
 
 @app.route('/api/my_notes', methods=['POST'])
@@ -5936,6 +6071,23 @@ def create_my_note():
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip()
     content = (data.get('content') or '').strip()
+    canteen_id = _safe_int(data.get('canteen_id'))
+    window_id = _safe_int(data.get('window_id'))
+    note_tags = _safe_tag_list(data.get('tags'))
+    note_images = _normalize_images(data.get('images'))
+
+    safe_note_images = []
+    for src in note_images:
+        value = str(src or '').strip()
+        if not value:
+            continue
+        if value.lower().startswith('data:image/'):
+            saved_url = _save_note_data_image(value)
+            if saved_url:
+                safe_note_images.append(saved_url)
+            continue
+        if value.startswith('/') or value.startswith('http://') or value.startswith('https://'):
+            safe_note_images.append(value[:1000])
 
     if len(title) < 2:
         return api_error('标题至少2个字')
@@ -5945,12 +6097,60 @@ def create_my_note():
         return api_error('内容至少5个字')
     if len(content) > 5000:
         return api_error('内容最多5000个字')
+    if 'data:image/' in content.lower():
+        return api_error('正文不支持内嵌base64图片，请先上传图片后再发布')
+
+    canteen = None
+    if canteen_id:
+        canteen = db.session.get(Canteen, canteen_id)
+        if not canteen:
+            return api_error('所选食堂不存在')
+        if _safe_int(canteen.campus_id, 0) != _current_campus_id():
+            return api_error('无权关联其他校区食堂', code=403, http_status=403)
+        if window_id:
+            window = db.session.get(Window, window_id)
+            if not window or _safe_int(window.canteen_id, 0) != canteen_id:
+                return api_error('所选窗口不属于该食堂')
 
     cfg = _get_or_create_system_config()
     note_status = 'pending' if cfg.audit_enabled else 'published'
-    row = Note(user_id=user_id, title=title, content=content, status=note_status)
+    metadata_lines = []
+    if note_tags:
+        metadata_lines.append('标签：' + '、'.join(note_tags[:8]))
+    if safe_note_images:
+        metadata_lines.append(f'配图：{len(safe_note_images)}张')
+    normalized_content = content
+    image_markdown_lines = [f'![配图{i + 1}]({src})' for i, src in enumerate(safe_note_images[:9])]
+    if metadata_lines or image_markdown_lines:
+        normalized_content = content + '\n\n' + '\n'.join(metadata_lines + image_markdown_lines)
+
+    row = Note(user_id=user_id, title=title, content=normalized_content, status=note_status)
     db.session.add(row)
     db.session.commit()
+
+    if canteen:
+        user = db.session.get(User, user_id)
+        username = (user.nickname if user else '') or (user.username if user else '校园用户')
+        share_content = f"{title}\n{content}".strip()
+        share_image = safe_note_images[0] if safe_note_images else ''
+        db.session.execute(
+            text(
+                '''
+                INSERT INTO user_shares(canteen_id, user_id, username, content, image_url, create_time)
+                VALUES(:canteen_id, :user_id, :username, :content, :image_url, :create_time)
+                '''
+            ),
+            {
+                'canteen_id': canteen_id,
+                'user_id': user_id,
+                'username': username,
+                'content': share_content,
+                'image_url': share_image,
+                'create_time': datetime.now(),
+            },
+        )
+        db.session.commit()
+
     if note_status == 'pending':
         try:
             _trigger_pending_audit_notifications(row.id)
@@ -5972,6 +6172,21 @@ def update_my_note(note_id):
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip()
     content = (data.get('content') or '').strip()
+    note_tags = _safe_tag_list(data.get('tags'))
+    note_images = _normalize_images(data.get('images'))
+
+    safe_note_images = []
+    for src in note_images:
+        value = str(src or '').strip()
+        if not value:
+            continue
+        if value.lower().startswith('data:image/'):
+            saved_url = _save_note_data_image(value)
+            if saved_url:
+                safe_note_images.append(saved_url)
+            continue
+        if value.startswith('/') or value.startswith('http://') or value.startswith('https://'):
+            safe_note_images.append(value[:1000])
 
     if len(title) < 2:
         return api_error('标题至少2个字')
@@ -5981,11 +6196,51 @@ def update_my_note(note_id):
         return api_error('内容至少5个字')
     if len(content) > 5000:
         return api_error('内容最多5000个字')
+    if 'data:image/' in content.lower():
+        return api_error('正文不支持内嵌base64图片，请先上传图片后再保存')
+
+    metadata_lines = []
+    if note_tags:
+        metadata_lines.append('标签：' + '、'.join(note_tags[:8]))
+    if safe_note_images:
+        metadata_lines.append(f'配图：{len(safe_note_images)}张')
+
+    image_markdown_lines = [f'![配图{i + 1}]({src})' for i, src in enumerate(safe_note_images[:9])]
+    normalized_content = content
+    if metadata_lines or image_markdown_lines:
+        normalized_content = content + '\n\n' + '\n'.join(metadata_lines + image_markdown_lines)
 
     row.title = title
-    row.content = content
+    row.content = normalized_content
     db.session.commit()
     return api_success({'id': row.id}, msg='更新成功')
+
+
+@app.route('/api/my_notes/<int:note_id>', methods=['GET'])
+@login_required()
+def get_my_note_detail(note_id):
+    user_id = session.get('user_id')
+    row = Note.query.filter_by(id=note_id, user_id=user_id).first()
+    if not row:
+        return api_error('笔记不存在', code=404, http_status=404)
+
+    raw_content = str(row.content or '')
+    has_inline_data_image = 'data:image/' in raw_content
+    images = [] if has_inline_data_image else _extract_images_from_text(raw_content)
+    return api_success(
+        {
+            'id': row.id,
+            'title': row.title,
+            'content': '' if has_inline_data_image else _strip_images_from_text(raw_content),
+            'raw_content': '' if has_inline_data_image else raw_content,
+            'images': images,
+            'status': '已发布' if row.status == 'published' else row.status,
+            'like_count': int(row.like_count or 0),
+            'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+            'update_time': row.update_time.strftime('%Y-%m-%d %H:%M:%S') if row.update_time else '-',
+        },
+        msg='查询成功',
+    )
 
 
 @app.route('/api/my_notes/<int:note_id>', methods=['DELETE'])
@@ -6636,13 +6891,15 @@ def admin_get_audit_notes():
     result = []
     for item in rows:
         user = db.session.get(User, item.user_id)
+        images = _extract_images_from_text(item.content)
         result.append(
             {
                 'id': item.id,
                 'title': item.title,
-                'content': item.content,
+                'content': _strip_images_from_text(item.content),
+                'raw_content': item.content,
                 'status': _note_status_to_code(item.status),
-                'images': json.dumps([], ensure_ascii=False),
+                'images': images,
                 'tags': json.dumps([], ensure_ascii=False),
                 'user_id': item.user_id,
                 'user_nickname': (user.nickname if user else '') or (user.username if user else '未知用户'),
@@ -6669,13 +6926,15 @@ def admin_get_audit_note_detail(note_id):
     if not item:
         return api_error('笔记不存在', code=404, http_status=404)
     user = db.session.get(User, item.user_id)
+    images = _extract_images_from_text(item.content)
     return api_success(
         {
             'id': item.id,
             'title': item.title,
-            'content': item.content,
+            'content': _strip_images_from_text(item.content),
+            'raw_content': item.content,
             'status': _note_status_to_code(item.status),
-            'images': [],
+            'images': images,
             'tags': [],
             'user_id': item.user_id,
             'user_nickname': (user.nickname if user else '') or (user.username if user else '未知用户'),
@@ -7127,6 +7386,65 @@ def admin_create_dish():
     return api_success({'id': row.id}, msg='新增成功')
 
 
+@app.route('/api/admin/dishes/<int:dish_id>/image', methods=['POST'])
+@admin_login_required
+def admin_upload_dish_image(dish_id):
+    row = db.session.get(Dish, dish_id)
+    if not row:
+        return api_error('菜品不存在', code=404, http_status=404)
+
+    access_error = _ensure_resource_canteen_access(row.window.canteen_id if row.window else None)
+    if access_error:
+        return access_error
+
+    upload = request.files.get('file')
+    if not upload:
+        return api_error('请上传图片文件')
+
+    ext = _safe_image_extension(upload.filename or '')
+    if ext not in {'jpg', 'png', 'webp'}:
+        return api_error('仅支持 jpg/png/webp 格式图片')
+
+    file_bytes = upload.read()
+    if not file_bytes:
+        return api_error('上传文件为空')
+    if len(file_bytes) > DISH_IMAGE_MAX_SIZE:
+        return api_error('图片大小不能超过 2MB')
+
+    compressed_bytes, compress_error = _compress_dish_image(file_bytes, ext)
+    if compress_error:
+        return api_error(compress_error)
+
+    old_url = row.img_url or ''
+    new_url = _save_dish_image_file(row.id, compressed_bytes, ext)
+    row.img_url = new_url
+    db.session.commit()
+
+    if old_url and old_url != new_url:
+        _delete_dish_image_file(old_url)
+
+    return api_success({'dish_id': row.id, 'img_url': new_url}, msg='上传成功')
+
+
+@app.route('/api/admin/dishes/<int:dish_id>/image', methods=['DELETE'])
+@admin_login_required
+def admin_delete_dish_image(dish_id):
+    row = db.session.get(Dish, dish_id)
+    if not row:
+        return api_error('菜品不存在', code=404, http_status=404)
+
+    access_error = _ensure_resource_canteen_access(row.window.canteen_id if row.window else None)
+    if access_error:
+        return access_error
+
+    old_url = row.img_url or ''
+    row.img_url = None
+    db.session.commit()
+    if old_url:
+        _delete_dish_image_file(old_url)
+    return api_success(msg='图片已删除')
+
+
 @app.route('/api/admin/dishes/<int:dish_id>', methods=['PUT'])
 @admin_login_required
 def admin_update_dish(dish_id):
@@ -7154,12 +7472,15 @@ def admin_update_dish(dish_id):
         row.tags_json = _safe_tag_list(data.get('tags'))
     if 'portion' in data:
         row.portion = (data.get('portion') or '').strip() or '常规'
+    old_img_url = row.img_url or ''
     if 'img_url' in data:
         row.img_url = (data.get('img_url') or '').strip() or None
     if 'is_active' in data:
         row.is_active = _to_bool(data.get('is_active'), row.is_active)
 
     db.session.commit()
+    if old_img_url and old_img_url != (row.img_url or ''):
+        _delete_dish_image_file(old_img_url)
     return api_success(msg='更新成功')
 
 
@@ -7172,8 +7493,11 @@ def admin_delete_dish(dish_id):
     access_error = _ensure_resource_canteen_access(row.window.canteen_id if row.window else None)
     if access_error:
         return access_error
+    old_img_url = row.img_url or ''
     db.session.delete(row)
     db.session.commit()
+    if old_img_url:
+        _delete_dish_image_file(old_img_url)
     return api_success(msg='删除成功')
 
 
@@ -7906,6 +8230,7 @@ def get_dish_evaluations():
     dish_id = _safe_int(request.args.get('dish_id'))
     if not dish_id:
         return api_error('缺少dish_id')
+    dish = db.session.get(Dish, dish_id)
     campus_id = _safe_int(request.args.get('campus_id'))
         
     # 查询关联表
@@ -7949,6 +8274,12 @@ def get_dish_evaluations():
             
     return api_success({
             'list': result,
+            'dish': {
+                'id': int(dish.id or 0) if dish else dish_id,
+                'name': dish.name if dish else '',
+                'price': float(dish.price or 0) if dish else 0,
+                'img_url': dish.img_url or '' if dish else '',
+            },
             'stats': {
                 'avg_scores': avg_scores,
                 'total_count': count
@@ -8256,7 +8587,12 @@ def get_notes():
     result = []
     for n in notes:
         user = db.session.get(User, n.user_id)
-        images = _extract_images_from_text(n.content)
+        raw_content = str(n.content or '')
+        # 避免 data URI 大体积内容触发高成本正则，首页列表仅需要封面图。
+        if 'data:image/' in raw_content:
+            images = []
+        else:
+            images = _extract_images_from_text(raw_content)
         if not images:
             images = [fallback_images[n.id % len(fallback_images)]]
         result.append(
@@ -8268,11 +8604,50 @@ def get_notes():
                 'user_id': n.user_id,
                 'username': user.username if user else '用户',
                 'like_count': int(n.like_count or 0),
-                'remark': n.content,
+                'remark': '',
                 'create_time': n.create_time.strftime('%Y-%m-%d %H:%M:%S'),
             }
         )
     return api_success({'list': result}, msg='查询成功')
+
+
+@app.route('/api/notes/<int:note_id>', methods=['GET'])
+def get_note_detail(note_id):
+    item = (
+        Note.query.filter(
+            Note.id == note_id,
+            Note.status == 'published',
+            Note.campus_id == _current_campus_id(),
+        )
+        .first()
+    )
+    if not item:
+        return api_error('笔记不存在', code=404, http_status=404)
+
+    user = db.session.get(User, item.user_id)
+    raw_content = str(item.content or '')
+    if 'data:image/' in raw_content:
+        images = []
+    else:
+        images = _extract_images_from_text(raw_content)
+
+    return api_success(
+        {
+            'id': item.id,
+            'title': item.title,
+            'content': _strip_images_from_text(raw_content),
+            'raw_content': '' if 'data:image/' in raw_content else raw_content,
+            'images': images,
+            'is_anonymous': False,
+            'user_id': item.user_id,
+            'username': user.username if user else '用户',
+            'like_count': int(item.like_count or 0),
+            'star_count': 0,
+            'comment_count': 0,
+            'create_time': item.create_time.strftime('%Y-%m-%d %H:%M:%S') if item.create_time else '-',
+        },
+        msg='查询成功',
+    )
 
 # --- 初始化命令 ---
 @app.cli.command("init-db")

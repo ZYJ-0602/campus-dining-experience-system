@@ -490,6 +490,22 @@
             min-height: 130px;
         }
 
+        .detail-image-grid {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .detail-image-item {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            object-fit: cover;
+            background: #fff;
+        }
+
         .reject-textarea {
             width: 100%;
             min-height: 90px;
@@ -748,6 +764,53 @@
         }, 2200);
     }
 
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function normalizeNoteImages(note) {
+        const images = [];
+        const raw = note && note.images;
+        if (Array.isArray(raw)) {
+            raw.forEach((item) => {
+                const val = String(item || '').trim();
+                if (val) images.push(val);
+            });
+        } else if (typeof raw === 'string' && raw.trim()) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    parsed.forEach((item) => {
+                        const val = String(item || '').trim();
+                        if (val) images.push(val);
+                    });
+                }
+            } catch (_) {}
+        }
+
+        if (images.length) return images;
+
+        const fromRawText = String((note && note.raw_content) || (note && note.content) || '');
+        const dataImageMatches = fromRawText.match(/data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+/ig) || [];
+        return dataImageMatches.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+
+    function renderNoteContent(containerId, note) {
+        const container = document.getElementById(containerId);
+        const text = String(note && note.content ? note.content : '').trim() || '-';
+        const images = normalizeNoteImages(note);
+        const textHtml = `<div>${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+        const imageHtml = images.length
+            ? `<div class="detail-image-grid">${images.map((src) => `<img class="detail-image-item" src="${escapeHtml(src)}" alt="笔记图片">`).join('')}</div>`
+            : '';
+        container.innerHTML = textHtml + imageHtml;
+    }
+
     async function ensureAdminSession() {
         try {
             const res = await fetchApi(`${API_BASE_URL}/auth/me`, { method: 'GET' });
@@ -938,7 +1001,7 @@
                 <span>发布时间：${note.create_time || '-'}</span>
                 <span>状态：${statusLabel(note.status)}</span>
             `;
-            document.getElementById('auditContent').textContent = note.content || '-';
+            renderNoteContent('auditContent', note);
             document.getElementById('rejectReason').value = '';
             document.getElementById('rejectArea').style.display = 'none';
             document.getElementById('confirmRejectBtn').style.display = 'none';
@@ -965,7 +1028,7 @@
                 <span>发布时间：${note.create_time || '-'}</span>
                 <span>状态：${statusLabel(note.status)}</span>
             `;
-            document.getElementById('previewContent').textContent = note.content || '-';
+            renderNoteContent('previewContent', note);
             document.getElementById('previewModalOverlay').classList.add('show');
             document.body.style.overflow = 'hidden';
         } catch (error) {

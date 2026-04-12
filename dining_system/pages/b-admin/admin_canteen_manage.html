@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食堂管理</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1677ff;
+            --bg: #f5f7fb;
+            --surface: #ffffff;
+            --border: #e5e7eb;
+            --text: #4b5563;
+            --text-dark: #111827;
+            --danger: #dc2626;
+            --success: #16a34a;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Microsoft YaHei", sans-serif;
+            font-size: 14px;
+        }
+
+        .page-wrap {
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .page-title {
+            margin: 0;
+            color: var(--text-dark);
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .page-desc {
+            color: #6b7280;
+            margin-top: 6px;
+            font-size: 13px;
+        }
+
+        .toolbar-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            display: grid;
+            grid-template-columns: minmax(200px, 1.2fr) 170px 170px auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+        }
+
+        .search-input,
+        .filter-select,
+        .form-input,
+        .form-select {
+            width: 100%;
+            height: 38px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 10px;
+            outline: none;
+            background: #fff;
+            color: #111827;
+        }
+
+        .search-input {
+            padding-left: 34px;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .btn-outline,
+        .btn-primary {
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: #374151;
+            padding: 7px 12px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .btn-primary {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .table-card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table-responsive-wrap {
+            overflow-x: auto;
+        }
+
+        .canteen-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        .canteen-table th,
+        .canteen-table td {
+            padding: 11px 12px;
+            border-bottom: 1px solid #edf0f5;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        .canteen-table th {
+            background: #f8fafc;
+            color: #374151;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 64px;
+            height: 26px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .status-on {
+            color: #0f7b2d;
+            background: #eafaf1;
+        }
+
+        .status-off {
+            color: #6b7280;
+            background: #f3f4f6;
+        }
+
+        .action-links {
+            display: inline-flex;
+            gap: 10px;
+        }
+
+        .action-link {
+            border: none;
+            background: transparent;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 0;
+            font-size: 13px;
+        }
+
+        .action-link.toggle {
+            color: var(--success);
+        }
+
+        .metric-text {
+            color: #374151;
+            white-space: nowrap;
+        }
+
+        .empty-row {
+            text-align: center;
+            color: #9ca3af;
+            padding: 24px 0;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.42);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 16px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-panel {
+            width: min(620px, 100%);
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+        }
+
+        .modal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid #edf1f7;
+        }
+
+        .modal-title {
+            margin: 0;
+            color: #111827;
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .modal-close {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 999px;
+            background: #f3f4f6;
+            color: #4b5563;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 14px 16px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .form-item {
+            display: grid;
+            gap: 5px;
+        }
+
+        .form-item.full {
+            grid-column: 1 / -1;
+        }
+
+        .form-label {
+            color: #374151;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .required {
+            color: var(--danger);
+        }
+
+        .modal-foot {
+            border-top: 1px solid #edf1f7;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        @media (max-width: 900px) {
+            .toolbar-card {
+                grid-template-columns: 1fr;
+            }
+
+            .toolbar-actions {
+                justify-content: flex-start;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">食堂管理</h1>
+            <div class="page-desc">独立维护食堂基础信息，支持新建、编辑、迁移校区和启停。</div>
+        </div>
+    </div>
+
+    <div class="toolbar-card">
+        <div class="search-box">
+            <i class="bi bi-search search-icon"></i>
+            <input id="keywordInput" class="search-input" type="text" placeholder="搜索食堂名称、地址或营业时间...">
+        </div>
+        <select id="campusFilter" class="filter-select">
+            <option value="0">全部校区</option>
+        </select>
+        <select id="statusFilter" class="filter-select">
+            <option value="all">全部状态</option>
+            <option value="active">仅启用</option>
+            <option value="inactive">仅停用</option>
+        </select>
+        <div class="toolbar-actions">
+            <button class="btn-outline" type="button" id="resetBtn"><i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+            <button class="btn-outline" type="button" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+            <button class="btn-primary" type="button" id="newBtn"><i class="bi bi-plus-circle"></i> 新建食堂</button>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-responsive-wrap">
+            <table class="canteen-table">
+                <thead>
+                    <tr>
+                        <th style="width:70px;">ID</th>
+                        <th>食堂名称</th>
+                        <th style="width:160px;">所属校区</th>
+                        <th style="width:240px;">地址</th>
+                        <th style="width:150px;">营业时间</th>
+                        <th style="width:220px;">资源概览</th>
+                        <th style="width:100px;">状态</th>
+                        <th style="width:210px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    <tr><td colspan="8" class="empty-row">正在加载食堂数据...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="canteenModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="canteenModalTitle">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-head">
+            <h3 class="modal-title" id="canteenModalTitle">新建食堂</h3>
+            <button class="modal-close" type="button" id="closeModalBtn" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+            <input id="canteenId" type="hidden">
+            <div class="form-grid">
+                <div class="form-item full">
+                    <label class="form-label" for="canteenName">食堂名称 <span class="required">*</span></label>
+                    <input id="canteenName" class="form-input" maxlength="100" placeholder="例如：北区食堂">
+                </div>
+                <div class="form-item full">
+                    <label class="form-label" for="canteenCampus">所属校区 <span class="required">*</span></label>
+                    <select id="canteenCampus" class="form-select"></select>
+                </div>
+                <div class="form-item full">
+                    <label class="form-label" for="canteenAddress">食堂地址 <span class="required">*</span></label>
+                    <input id="canteenAddress" class="form-input" maxlength="200" placeholder="例如：北区生活区一层">
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="canteenHours">营业时间</label>
+                    <input id="canteenHours" class="form-input" maxlength="100" placeholder="07:00-21:00">
+                </div>
+                <div class="form-item">
+                    <label class="form-label" for="canteenActive">状态</label>
+                    <select id="canteenActive" class="form-select">
+                        <option value="1">启用</option>
+                        <option value="0">停用</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="btn-outline" type="button" id="cancelBtn">取消</button>
+            <button class="btn-primary" type="button" id="saveBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="../c-client/js/api.js"></script>
+<script>
+let allCampuses = [];
+let allCanteens = [];
+let editingId = 0;
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+async function ensureAdmin() {
+    const res = await fetchApi(API.AUTH_ME, { method: 'GET' });
+    if (res.code !== 200) {
+        window.top.location.href = 'admin_login.html';
+        return false;
+    }
+    if (String(res.data.role || '').toLowerCase() !== 'admin') {
+        alert('仅系统管理员可管理食堂');
+        window.top.location.href = 'admin_index_sys.html';
+        return false;
+    }
+    return true;
+}
+
+async function loadCampuses() {
+    const res = await fetchApi(`${API_BASE_URL}/admin/campuses`, { method: 'GET' });
+    if (res.code !== 200) {
+        throw new Error(res.msg || '加载校区失败');
+    }
+    allCampuses = Array.isArray(res.data && res.data.list) ? res.data.list : [];
+    const options = ['<option value="0">全部校区</option>'].concat(
+        allCampuses.map((item) => `<option value="${Number(item.id || 0)}">${escapeHtml(item.name || '-')}</option>`)
+    );
+    document.getElementById('campusFilter').innerHTML = options.join('');
+
+    const formOptions = allCampuses.map((item) => `<option value="${Number(item.id || 0)}">${escapeHtml(item.name || '-')}</option>`);
+    document.getElementById('canteenCampus').innerHTML = formOptions.join('');
+}
+
+function renderRows(list) {
+    const tbody = document.getElementById('tbody');
+    if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-row">暂无匹配食堂</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = list.map((item) => {
+        const statusClass = item.is_active ? 'status-on' : 'status-off';
+        const statusText = item.is_active ? '启用' : '停用';
+        const nextStatus = item.is_active ? 0 : 1;
+        const payload = encodeURIComponent(JSON.stringify(item));
+
+        return `
+            <tr>
+                <td>${Number(item.id || 0)}</td>
+                <td>${escapeHtml(item.name || '-')}</td>
+                <td>${escapeHtml(item.campus_name || '-')}</td>
+                <td>${escapeHtml(item.address || '-')}</td>
+                <td>${escapeHtml(item.business_hours || '07:00-21:00')}</td>
+                <td class="metric-text">窗口 ${Number(item.window_count || 0)} · 菜品 ${Number(item.dish_count || 0)} · 评价 ${Number(item.evaluation_count || 0)} · 运营账号 ${Number(item.operator_count || 0)}</td>
+                <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+                <td>
+                    <div class="action-links">
+                        <button class="action-link" type="button" onclick="editCanteenByPayload('${payload}')">编辑</button>
+                        <button class="action-link" type="button" onclick="moveCanteenByPayload('${payload}')">迁移校区</button>
+                        <button class="action-link toggle" type="button" onclick="toggleCanteen(${Number(item.id || 0)}, ${nextStatus})">${item.is_active ? '停用' : '启用'}</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function applyFilters() {
+    const keyword = String(document.getElementById('keywordInput').value || '').trim().toLowerCase();
+    const status = String(document.getElementById('statusFilter').value || 'all');
+    const campusId = Number(document.getElementById('campusFilter').value || 0);
+
+    let rows = allCanteens.slice();
+    if (campusId) {
+        rows = rows.filter((item) => Number(item.campus_id || 0) === campusId);
+    }
+    if (status === 'active') {
+        rows = rows.filter((item) => !!item.is_active);
+    } else if (status === 'inactive') {
+        rows = rows.filter((item) => !item.is_active);
+    }
+    if (keyword) {
+        rows = rows.filter((item) => {
+            const name = String(item.name || '').toLowerCase();
+            const address = String(item.address || '').toLowerCase();
+            const hours = String(item.business_hours || '').toLowerCase();
+            return name.includes(keyword) || address.includes(keyword) || hours.includes(keyword);
+        });
+    }
+    renderRows(rows);
+}
+
+async function loadCanteens() {
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-row">正在加载食堂数据...</td></tr>';
+
+    const query = new URLSearchParams();
+    const keyword = String(document.getElementById('keywordInput').value || '').trim();
+    const status = String(document.getElementById('statusFilter').value || 'all');
+    const campusId = Number(document.getElementById('campusFilter').value || 0);
+    if (keyword) query.set('keyword', keyword);
+    if (status !== 'all') query.set('status', status);
+    if (campusId) query.set('campus_id', String(campusId));
+
+    const url = `${API_BASE_URL}/admin/canteens${query.toString() ? `?${query.toString()}` : ''}`;
+    const res = await fetchApi(url, { method: 'GET' });
+    if (res.code !== 200) {
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-row">${escapeHtml(res.msg || '加载失败')}</td></tr>`;
+        return;
+    }
+
+    allCanteens = Array.isArray(res.data && res.data.list) ? res.data.list : [];
+    renderRows(allCanteens);
+}
+
+function openModal() {
+    document.getElementById('canteenModalOverlay').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('canteenModalOverlay').classList.remove('show');
+}
+
+function openCreateModal() {
+    editingId = 0;
+    document.getElementById('canteenModalTitle').textContent = '新建食堂';
+    document.getElementById('saveBtn').textContent = '保存';
+    document.getElementById('canteenId').value = '';
+    document.getElementById('canteenName').value = '';
+    document.getElementById('canteenAddress').value = '';
+    document.getElementById('canteenHours').value = '07:00-21:00';
+    document.getElementById('canteenActive').value = '1';
+    if (allCampuses.length) {
+        document.getElementById('canteenCampus').value = String(Number(allCampuses[0].id || 0));
+    }
+    openModal();
+}
+
+function editCanteenByPayload(payload) {
+    try {
+        const item = JSON.parse(decodeURIComponent(payload));
+        editingId = Number(item.id || 0);
+        document.getElementById('canteenModalTitle').textContent = `编辑食堂 #${editingId}`;
+        document.getElementById('saveBtn').textContent = '保存修改';
+        document.getElementById('canteenId').value = String(editingId);
+        document.getElementById('canteenName').value = item.name || '';
+        document.getElementById('canteenCampus').value = String(Number(item.campus_id || 0));
+        document.getElementById('canteenAddress').value = item.address || '';
+        document.getElementById('canteenHours').value = item.business_hours || '07:00-21:00';
+        document.getElementById('canteenActive').value = item.is_active ? '1' : '0';
+        openModal();
+    } catch (error) {
+        alert('读取食堂信息失败，请刷新重试');
+    }
+}
+
+function moveCanteenByPayload(payload) {
+    try {
+        const item = JSON.parse(decodeURIComponent(payload));
+        editingId = Number(item.id || 0);
+        document.getElementById('canteenModalTitle').textContent = `迁移食堂 #${editingId}`;
+        document.getElementById('saveBtn').textContent = '确认迁移';
+        document.getElementById('canteenId').value = String(editingId);
+        document.getElementById('canteenName').value = item.name || '';
+        document.getElementById('canteenAddress').value = item.address || '';
+        document.getElementById('canteenHours').value = item.business_hours || '07:00-21:00';
+        document.getElementById('canteenActive').value = item.is_active ? '1' : '0';
+        document.getElementById('canteenCampus').value = String(Number(item.campus_id || 0));
+        openModal();
+    } catch (error) {
+        alert('读取食堂信息失败，请刷新重试');
+    }
+}
+
+async function saveCanteen() {
+    const name = String(document.getElementById('canteenName').value || '').trim();
+    const campusId = Number(document.getElementById('canteenCampus').value || 0);
+    const address = String(document.getElementById('canteenAddress').value || '').trim();
+    const businessHours = String(document.getElementById('canteenHours').value || '').trim() || '07:00-21:00';
+    const isActive = document.getElementById('canteenActive').value === '1';
+
+    if (!name || !campusId || !address) {
+        alert('请填写食堂名称、所属校区和地址');
+        return;
+    }
+
+    const payload = {
+        name,
+        campus_id: campusId,
+        address,
+        business_hours: businessHours,
+        is_active: isActive,
+    };
+
+    const method = editingId ? 'PUT' : 'POST';
+    const url = editingId ? `${API_BASE_URL}/admin/canteens/${editingId}` : `${API_BASE_URL}/admin/canteens`;
+    const res = await fetchApi(url, { method, body: JSON.stringify(payload) });
+    if (res.code !== 200) {
+        alert(res.msg || '保存失败');
+        return;
+    }
+
+    if (editingId && Number(res.data && res.data.updated_user_count || 0) > 0) {
+        alert(`保存成功，已同步 ${Number(res.data.updated_user_count)} 个运营账号到新校区`);
+    }
+    closeModal();
+    await loadCanteens();
+}
+
+async function toggleCanteen(id, nextStatus) {
+    const res = await fetchApi(`${API_BASE_URL}/admin/canteens/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_active: !!nextStatus })
+    });
+    if (res.code !== 200) {
+        alert(res.msg || '操作失败');
+        return;
+    }
+    await loadCanteens();
+}
+
+function bindEvents() {
+    document.getElementById('keywordInput').addEventListener('input', loadCanteens);
+    document.getElementById('campusFilter').addEventListener('change', loadCanteens);
+    document.getElementById('statusFilter').addEventListener('change', loadCanteens);
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        document.getElementById('keywordInput').value = '';
+        document.getElementById('campusFilter').value = '0';
+        document.getElementById('statusFilter').value = 'all';
+        loadCanteens();
+    });
+    document.getElementById('refreshBtn').addEventListener('click', loadCanteens);
+    document.getElementById('newBtn').addEventListener('click', openCreateModal);
+
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('cancelBtn').addEventListener('click', closeModal);
+    document.getElementById('saveBtn').addEventListener('click', saveCanteen);
+    document.getElementById('canteenModalOverlay').addEventListener('click', (event) => {
+        if (event.target && event.target.id === 'canteenModalOverlay') {
+            closeModal();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeModal();
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const ok = await ensureAdmin();
+    if (!ok) return;
+
+    try {
+        await loadCampuses();
+        bindEvents();
+        await loadCanteens();
+    } catch (error) {
+        console.error(error);
+        document.getElementById('tbody').innerHTML = '<tr><td colspan="7" class="empty-row">页面初始化失败，请刷新重试</td></tr>';
+    }
+});
+</script>
+</body>
+</html>

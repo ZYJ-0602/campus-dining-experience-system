@@ -325,6 +325,30 @@
             font-size: 13px;
         }
 
+        .canteen-link {
+            border: none;
+            background: transparent;
+            color: var(--primary);
+            cursor: pointer;
+            font-size: 13px;
+            padding: 0;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        .canteen-link:hover {
+            color: #0958d9;
+        }
+
+        .canteen-preview {
+            margin-top: 4px;
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: normal;
+            max-width: 260px;
+        }
+
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -490,6 +514,7 @@
                         <th style="width: 70px;">ID</th>
                         <th>校区名称</th>
                         <th style="width: 170px;">校区编码</th>
+                        <th style="width: 280px;">食堂数量 / 食堂预览</th>
                         <th style="width: 120px;">状态</th>
                         <th style="width: 100px;">排序</th>
                         <th style="width: 190px;">创建时间</th>
@@ -497,7 +522,7 @@
                     </tr>
                 </thead>
                 <tbody id="tbody">
-                    <tr><td colspan="7" class="empty-row">正在加载校区数据...</td></tr>
+                    <tr><td colspan="8" class="empty-row">正在加载校区数据...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -586,7 +611,7 @@ function updateStats(list) {
 function renderRows(list) {
     const tbody = document.getElementById('tbody');
     if (!list.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">暂无匹配校区</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-row">暂无匹配校区</td></tr>';
         return;
     }
 
@@ -602,6 +627,12 @@ function renderRows(list) {
                 <td>${Number(item.id || 0)}</td>
                 <td>${escapeHtml(item.name || '-')}</td>
                 <td class="code-cell">${escapeHtml(item.code || '-')}</td>
+                <td>
+                    <button class="canteen-link" type="button" onclick="jumpToCanteenManage(${Number(item.id || 0)})">${Number(item.canteen_count || 0)}</button>
+                    <div class="canteen-preview" title="${escapeHtml(formatCanteenTitle(item))}">
+                        ${formatCanteenPreview(item)}
+                    </div>
+                </td>
                 <td><span class="status-pill ${statusClass}">${statusText}</span></td>
                 <td>${Number(item.sort_order || 0)}</td>
                 <td>${escapeHtml(item.create_time || '-')}</td>
@@ -617,6 +648,24 @@ function renderRows(list) {
     }).join('');
 
     tbody.innerHTML = html;
+}
+
+function formatCanteenPreview(item) {
+    const names = Array.isArray(item.canteen_preview) ? item.canteen_preview.filter(Boolean) : [];
+    const overflow = Number(item.canteen_preview_overflow || 0);
+    if (!names.length) {
+        return '暂无食堂';
+    }
+    const text = names.map((name) => escapeHtml(name)).join('、');
+    return overflow > 0 ? `${text} 等 ${Number(item.canteen_count || 0)} 个` : text;
+}
+
+function formatCanteenTitle(item) {
+    const names = Array.isArray(item.canteen_names) ? item.canteen_names.filter(Boolean) : [];
+    if (!names.length) {
+        return '暂无食堂';
+    }
+    return names.join('、');
 }
 
 function applyFilters() {
@@ -644,11 +693,11 @@ function applyFilters() {
 
 async function loadCampuses() {
     const tbody = document.getElementById('tbody');
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-row">正在加载校区数据...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-row">正在加载校区数据...</td></tr>';
 
     const res = await fetchApi(`${API_BASE_URL}/admin/campuses`, { method: 'GET' });
     if (res.code !== 200) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-row">${escapeHtml(res.msg || '加载失败')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-row">${escapeHtml(res.msg || '加载失败')}</td></tr>`;
         return;
     }
 
@@ -744,6 +793,34 @@ async function deleteCampus(id, name) {
         return;
     }
     await loadCampuses();
+}
+
+function jumpToCanteenManage(campusId) {
+    const target = `admin_canteen_manage.html?campus_id=${Number(campusId || 0)}`;
+    const parentWindow = window.parent;
+    if (!parentWindow || parentWindow === window) {
+        window.location.href = target;
+        return;
+    }
+
+    try {
+        const frame = parentWindow.document.getElementById('contentFrame');
+        if (frame) {
+            frame.src = target;
+        }
+
+        const navLink = parentWindow.document.querySelector('.nav-link[href="admin_canteen_manage.html"]');
+        if (navLink) {
+            if (typeof parentWindow.setActive === 'function') {
+                parentWindow.setActive(navLink);
+            } else {
+                parentWindow.document.querySelectorAll('.nav-link').forEach((el) => el.classList.remove('active'));
+                navLink.classList.add('active');
+            }
+        }
+    } catch (error) {
+        window.location.href = target;
+    }
 }
 
 function bindEvents() {

@@ -320,7 +320,6 @@
                             <option value="student">学生</option>
                             <option value="teacher">老师</option>
                             <option value="staff">员工</option>
-                            <option value="visitor">游客</option>
                         </select>
                     </div>
                     <div class="col-md-4 col-sm-6" id="gradeContainer">
@@ -490,10 +489,6 @@
             <button class="btn btn-warning w-100 py-3 fw-bold fs-5 shadow rounded-pill" id="submitBtn" onclick="submitEvaluation()">
                 <i class="bi bi-check2-circle me-2"></i>提交评价
             </button>
-            <button class="btn btn-outline-secondary mt-3" onclick="checkLastGuestSubmissionStatus()">
-                查询最近游客审核状态
-            </button>
-            <a class="btn btn-link mt-2" href="guest_status.html">进入游客状态查询页</a>
         </div>
     </div>
 
@@ -1081,7 +1076,11 @@
                     payload.template_version = templateVersion;
                 }
 
-                const submitUrl = identityType === 'visitor' ? '/api/guest/evaluations' : '/api/evaluate';
+                if (identityType === 'visitor') {
+                    alert('游客评价入口已关闭，请使用校园身份提交评价');
+                    return;
+                }
+                const submitUrl = '/api/evaluate';
                 // 注意：这里假设 API.SUBMIT_EVALUATION 是 /api/submit_evaluation
                 // 如果是 submit_comment (sqlite版)，则字段完全不同。
                 // 根据 app.py 分析，submit_evaluation 是主逻辑 (SQLAlchemy)，submit_comment 是 sqlite 简单版
@@ -1094,15 +1093,7 @@
                 
                 if (res.code === 200) {
                     localStorage.removeItem(STORAGE_KEY);
-                    if (identityType === 'visitor') {
-                        const sid = res.data && res.data.id ? Number(res.data.id) : 0;
-                        if (sid) {
-                            localStorage.setItem('guest_last_submission_id', String(sid));
-                        }
-                        alert(`游客评价提交成功（记录ID: ${sid || '-'}），待管理员审核通过后生效！`);
-                    } else {
-                        alert('评价提交成功！');
-                    }
+                    alert('评价提交成功！');
                     location.href = 'index.html';
                 } else {
                     alert(res.msg || '提交失败');
@@ -1123,25 +1114,6 @@
             });
             return scores;
         }
-
-        window.checkLastGuestSubmissionStatus = async function() {
-            const sid = Number(localStorage.getItem('guest_last_submission_id') || 0);
-            if (!sid) {
-                alert('暂无游客提交记录');
-                return;
-            }
-            const res = await fetchApi(`/api/guest/evaluations/${sid}/status`, { method: 'GET' });
-            if (res.code !== 200) {
-                alert(res.msg || '查询失败');
-                return;
-            }
-            const data = res.data || {};
-            const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
-            const statusText = statusMap[data.status] || data.status || '-';
-            const reasonText = data.reject_reason ? `\n驳回原因：${data.reject_reason}` : '';
-            const reviewedText = data.reviewed_time ? `\n审核时间：${data.reviewed_time}` : '';
-            alert(`记录ID: ${data.id || sid}\n当前状态：${statusText}${reviewedText}${reasonText}`);
-        };
 
         function collectDishData() {
             const dishes = [];

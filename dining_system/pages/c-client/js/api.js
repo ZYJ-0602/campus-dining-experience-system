@@ -88,11 +88,27 @@ async function fetchApi(url, options = {}) {
         'Content-Type': 'application/json'
     };
 
-    options.headers = { ...defaultHeaders, ...options.headers };
-    options.credentials = options.credentials || 'include';
+    const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10000;
+    const controller = new AbortController();
+    const externalSignal = options.signal;
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            controller.abort();
+        } else {
+            externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+        }
+    }
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const requestOptions = {
+        ...options,
+        headers: { ...defaultHeaders, ...options.headers },
+        credentials: options.credentials || 'include',
+        signal: controller.signal
+    };
     
     try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, requestOptions);
         // 先读取响应体，即使状态码是 4xx/5xx，后端可能也返回了错误信息 JSON
         let data;
         try {
@@ -108,7 +124,7 @@ async function fetchApi(url, options = {}) {
 
         // 统一返回格式，优先使用后端返回的 msg
         if (!response.ok) {
-            if (response.status === 401 && !options.skipAuthAutoClear) {
+            if (response.status === 401 && !requestOptions.skipAuthAutoClear) {
                 localStorage.removeItem('user');
                 localStorage.removeItem('isLogin');
             }
@@ -121,10 +137,15 @@ async function fetchApi(url, options = {}) {
         return data;
     } catch (error) {
         console.error('API Error:', error);
+        if (error.name === 'AbortError') {
+            return { code: 408, msg: `请求超时(${Math.ceil(timeoutMs / 1000)}秒)，请稍后重试` };
+        }
         // 如果是 fetch 本身抛出的错误（如网络断开、跨域被拦截），通常 message 是 "Failed to fetch"
         const msg = error.message === 'Failed to fetch' 
             ? '无法连接到服务器，请检查后端服务是否启动' 
             : `网络请求失败: ${error.message}`;
         return { code: 500, msg: msg };
+    } finally {
+        clearTimeout(timeoutId);
     }
 }

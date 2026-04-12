@@ -134,30 +134,62 @@ const Common = {
             ...(options.headers || {})
         };
 
+        const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 10000;
+        const controller = new AbortController();
+        const externalSignal = options.signal;
+        if (externalSignal) {
+            if (externalSignal.aborted) {
+                controller.abort();
+            } else {
+                externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+            }
+        }
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
         const requestOptions = {
             credentials: 'include',
             ...options,
-            headers
+            headers,
+            signal: controller.signal
         };
 
-        const response = await fetch(this.apiUrl(path), requestOptions);
-        let payload = {};
         try {
-            payload = await response.json();
-        } catch (e) {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            const response = await fetch(this.apiUrl(path), requestOptions);
+            let payload = {};
+            try {
+                payload = await response.json();
+            } catch (e) {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
             }
-        }
 
-        if (!response.ok) {
+            if (!response.ok) {
+                return {
+                    code: response.status,
+                    msg: payload.msg || `请求失败(${response.status})`,
+                    data: payload.data || {}
+                };
+            }
+            return payload;
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return {
+                    code: 408,
+                    msg: `请求超时(${Math.ceil(timeoutMs / 1000)}秒)，请稍后重试`,
+                    data: {}
+                };
+            }
             return {
-                code: response.status,
-                msg: payload.msg || `请求失败(${response.status})`,
-                data: payload.data || {}
+                code: 500,
+                msg: error.message === 'Failed to fetch'
+                    ? '无法连接到服务器，请检查后端服务是否启动'
+                    : `网络请求失败: ${error.message}`,
+                data: {}
             };
+        } finally {
+            clearTimeout(timeoutId);
         }
-        return payload;
     },
 
     /**

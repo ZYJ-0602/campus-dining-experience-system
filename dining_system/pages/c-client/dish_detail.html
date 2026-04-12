@@ -25,6 +25,47 @@
         }
         .back-btn { font-size: 1.2rem; color: #333; }
         .page-title { font-weight: bold; font-size: 1.1rem; }
+        .dish-hero {
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+            margin-bottom: 14px;
+        }
+        .dish-hero img {
+            width: 100%;
+            height: 240px;
+            object-fit: cover;
+            display: block;
+            cursor: zoom-in;
+        }
+        .dish-hero-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 10px 12px;
+        }
+        .dish-hero-name { font-size: 1rem; font-weight: 700; color: #333; margin: 0; }
+        .dish-hero-price { color: #ff9800; font-weight: 700; }
+        .image-viewer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            padding: 20px;
+        }
+        .image-viewer-overlay.show { display: flex; }
+        .image-viewer-overlay img {
+            max-width: min(92vw, 1000px);
+            max-height: 88vh;
+            border-radius: 12px;
+            object-fit: contain;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -37,6 +78,14 @@
 </div>
 
 <div class="container" style="margin-top: 60px;">
+    <div class="dish-hero">
+        <img id="dishHeroImage" src="../../static/img/hero-bg.jpg" alt="菜品实拍图">
+        <div class="dish-hero-meta">
+            <p class="dish-hero-name" id="dishHeroName">菜品详情</p>
+            <span class="dish-hero-price" id="dishHeroPrice">￥0.00</span>
+        </div>
+    </div>
+
     <!-- 统计区域 -->
     <div class="card shadow-sm mb-4">
         <div class="card-body">
@@ -63,6 +112,10 @@
     </div>
 </div>
 
+<div class="image-viewer-overlay" id="imageViewerOverlay">
+    <img id="imageViewerTarget" alt="dish-preview">
+</div>
+
 <script src="../../static/js/bootstrap.bundle.min.js"></script>
 <script src="js/api.js"></script>
 <script>
@@ -78,6 +131,7 @@
             const res = await fetchApi(`${API.DISH_EVALUATIONS}?dish_id=${DISH_ID}${campusQuery}`);
             
             if (res.code === 200) {
+                renderDishMeta(res.data && res.data.dish ? res.data.dish : null);
                 renderStats(res.data.stats);
                 renderReviews(res.data.list);
             }
@@ -85,6 +139,41 @@
             console.error('加载失败:', error);
             document.getElementById('stats-area').innerHTML = '<p class="text-danger text-center">数据加载失败，请检查后端服务</p>';
         }
+    }
+
+    function normalizeImageUrl(src) {
+        const raw = String(src || '').trim();
+        if (!raw) {
+            return '../../static/img/hero-bg.jpg';
+        }
+        return raw;
+    }
+
+    function renderDishMeta(dish) {
+        const imageEl = document.getElementById('dishHeroImage');
+        const nameEl = document.getElementById('dishHeroName');
+        const priceEl = document.getElementById('dishHeroPrice');
+
+        const imageUrl = normalizeImageUrl(dish && dish.img_url ? dish.img_url : '');
+        imageEl.src = imageUrl;
+        imageEl.onerror = function () {
+            this.onerror = null;
+            this.src = '../../static/img/hero-bg.jpg';
+        };
+        imageEl.onclick = function () {
+            openImageViewer(imageUrl);
+        };
+
+        nameEl.textContent = (dish && dish.name) ? dish.name : `菜品 #${DISH_ID}`;
+        const price = Number(dish && dish.price ? dish.price : 0);
+        priceEl.textContent = `￥${price.toFixed(2)}`;
+    }
+
+    function openImageViewer(src) {
+        const overlay = document.getElementById('imageViewerOverlay');
+        const target = document.getElementById('imageViewerTarget');
+        target.src = src;
+        overlay.classList.add('show');
     }
 
     function renderStats(stats) {
@@ -156,6 +245,10 @@
     }
 
     loadDishEvaluations();
+
+    document.getElementById('imageViewerOverlay').addEventListener('click', function () {
+        this.classList.remove('show');
+    });
 </script>
 
 </body>
