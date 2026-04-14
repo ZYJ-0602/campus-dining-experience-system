@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>舆情监控中心</title>
+    <link href="../../static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --bg: #f4f7fb;
+            --card: #ffffff;
+            --border: #e7ecf3;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --primary: #1668dc;
+            --danger: #e11d48;
+            --warning: #d97706;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background:
+                radial-gradient(circle at top left, rgba(22, 104, 220, 0.10), transparent 32%),
+                radial-gradient(circle at top right, rgba(225, 29, 72, 0.08), transparent 28%),
+                var(--bg);
+            color: var(--text);
+            font-family: Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .title-wrap h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+        }
+
+        .title-wrap p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .form-select, .btn, .form-control {
+            border-radius: 10px;
+            height: 40px;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .metric-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 6px 24px rgba(15, 23, 42, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 96px;
+        }
+
+        .metric-label { color: var(--muted); font-size: 13px; }
+        .metric-value { font-size: 28px; font-weight: 800; margin-top: 6px; }
+        .metric-desc { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .metric-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 22px;
+        }
+        .icon-primary { background: linear-gradient(135deg, #1677ff, #125fcc); }
+        .icon-danger { background: linear-gradient(135deg, #ef4444, #c026d3); }
+        .icon-warning { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+        .icon-success { background: linear-gradient(135deg, #10b981, #0f766e); }
+
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: 0 6px 24px rgba(15, 23, 42, 0.05);
+            margin-bottom: 14px;
+        }
+
+        .panel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .panel-head h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .panel-head .subtle {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .chart {
+            width: 100%;
+            height: 320px;
+        }
+
+        .sample-list {
+            max-height: 390px;
+            overflow: auto;
+        }
+
+        .sample-item {
+            border-left: 4px solid var(--danger);
+            background: #fff;
+            border: 1px solid #f0f2f7;
+            border-radius: 14px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .sample-item .meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .sample-item .title {
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .sample-item .desc {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .badge-soft {
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .badge-high { background: rgba(225, 29, 72, 0.10); color: var(--danger); }
+        .badge-medium { background: rgba(217, 119, 6, 0.12); color: var(--warning); }
+        .badge-low { background: rgba(16, 185, 129, 0.12); color: #047857; }
+
+        .empty-box {
+            text-align: center;
+            color: var(--muted);
+            padding: 24px 0;
+        }
+
+        .trend-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .trend-table th,
+        .trend-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eef2f7;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .trend-table th {
+            color: #374151;
+            background: #fafbfc;
+            font-weight: 700;
+        }
+
+        .trend-table td {
+            color: #4b5563;
+        }
+
+        @media (max-width: 1100px) {
+            .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 720px) {
+            body { padding: 12px; }
+            .topbar { flex-direction: column; align-items: stretch; }
+            .controls { justify-content: flex-start; }
+            .card-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="title-wrap">
+            <h1>舆情监控中心</h1>
+            <p>围绕评价文本、风险分层和高风险样本构建校园餐饮舆情看板，可直接用于答辩演示。</p>
+        </div>
+        <div class="controls">
+            <select class="form-select form-select-sm" id="campusSelect" style="width: 180px;">
+                <option value="0">全部校区</option>
+            </select>
+            <select class="form-select form-select-sm" id="canteenSelect" style="width: 180px;">
+                <option value="0">全部食堂</option>
+            </select>
+            <select class="form-select form-select-sm" id="daysSelect" style="width: 140px;">
+                <option value="7" selected>近7天</option>
+                <option value="14">近14天</option>
+                <option value="30">近30天</option>
+            </select>
+            <button class="btn btn-outline-primary btn-sm" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+            <button class="btn btn-primary btn-sm" id="exportBtn"><i class="bi bi-download"></i> 导出报告</button>
+        </div>
+    </div>
+
+    <div class="card-grid">
+        <div class="metric-card">
+            <div>
+                <div class="metric-label">评价总量</div>
+                <div class="metric-value" id="totalCount">0</div>
+                <div class="metric-desc" id="summaryHint">-</div>
+            </div>
+            <div class="metric-icon icon-primary"><i class="bi bi-chat-square-text"></i></div>
+        </div>
+        <div class="metric-card">
+            <div>
+                <div class="metric-label">负面评价</div>
+                <div class="metric-value" id="negativeCount">0</div>
+                <div class="metric-desc" id="negativeRatioHint">占比 0.00%</div>
+            </div>
+            <div class="metric-icon icon-danger"><i class="bi bi-exclamation-triangle"></i></div>
+        </div>
+        <div class="metric-card">
+            <div>
+                <div class="metric-label">高风险样本</div>
+                <div class="metric-value" id="highRiskCount">0</div>
+                <div class="metric-desc">支持快速定位舆情焦点</div>
+            </div>
+            <div class="metric-icon icon-warning"><i class="bi bi-bell"></i></div>
+        </div>
+        <div class="metric-card">
+            <div>
+                <div class="metric-label">情感模型状态</div>
+                <div class="metric-value" style="font-size: 22px;" id="modelHint">Rule+Score</div>
+                <div class="metric-desc">规则词典 + 风险词抑制</div>
+            </div>
+            <div class="metric-icon icon-success"><i class="bi bi-shield-check"></i></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>情感分布趋势</h2>
+                <div class="subtle" id="trendHint">按日期聚合的正负面与高风险分布</div>
+            </div>
+            <div class="subtle" id="lastUpdate">-</div>
+        </div>
+        <div id="sentimentChart" class="chart"></div>
+    </div>
+
+    <div class="row gx-3">
+        <div class="col-lg-5">
+            <div class="panel h-100">
+                <div class="panel-head">
+                    <div>
+                        <h2>风险级别分布</h2>
+                        <div class="subtle">用于论文中的统计图表</div>
+                    </div>
+                </div>
+                <div id="riskChart" class="chart" style="height: 290px;"></div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="panel h-100">
+                <div class="panel-head">
+                    <div>
+                        <h2>高风险样本</h2>
+                        <div class="subtle">提取情绪负向或风险分高的评价，便于复核和论文案例分析</div>
+                    </div>
+                    <span class="subtle" id="sampleCountHint">-</span>
+                </div>
+                <div class="sample-list" id="sampleList">
+                    <div class="empty-box">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <div>
+                <h2>日趋势明细</h2>
+                <div class="subtle">可直接用于论文中插入趋势表</div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="trend-table">
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>总量</th>
+                        <th>负面</th>
+                        <th>高风险</th>
+                        <th>负面率</th>
+                        <th>高风险率</th>
+                    </tr>
+                </thead>
+                <tbody id="trendTableBody">
+                    <tr><td colspan="6" class="empty-box">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_SENTIMENT_OVERVIEW = '/api/admin/sentiment_overview';
+        const API_CAMPUSES = '/api/admin/campuses';
+        const API_CANTEENS = '/api/canteens';
+
+        let sentimentChart = null;
+        let riskChart = null;
+        let selectedCampusId = 0;
+        let selectedCanteenId = 0;
+
+        function fmtPct(value) {
+            const num = Number(value || 0);
+            return `${(Number.isFinite(num) ? num * 100 : 0).toFixed(2)}%`;
+        }
+
+        function showEmpty(containerId, text) {
+            document.getElementById(containerId).innerHTML = `<div class="empty-box">${text}</div>`;
+        }
+
+        function renderOverview(payload) {
+            const summary = payload.summary || {};
+            const risk = summary.risk || {};
+            const trend = Array.isArray(payload.trend) ? payload.trend : [];
+            const samples = Array.isArray(payload.high_risk_samples) ? payload.high_risk_samples : [];
+
+            document.getElementById('totalCount').innerText = Number(payload.total || 0);
+            document.getElementById('negativeCount').innerText = Number(summary.negative || 0);
+            document.getElementById('highRiskCount').innerText = Number(risk.high || 0);
+            document.getElementById('summaryHint').innerText = `正面 ${Number(summary.positive || 0)} · 中性 ${Number(summary.neutral || 0)}`;
+            document.getElementById('negativeRatioHint').innerText = `占比 ${fmtPct(summary.negative_ratio || 0)}`;
+            document.getElementById('sampleCountHint').innerText = `Top ${samples.length} 样本`;
+            document.getElementById('lastUpdate').innerText = `更新于 ${new Date().toLocaleString()}`;
+
+            if (!sentimentChart) {
+                sentimentChart = echarts.init(document.getElementById('sentimentChart'));
+            }
+            sentimentChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['总量', '负面', '高风险'] },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: trend.map((item) => item.date || '') },
+                yAxis: { type: 'value' },
+                series: [
+                    { name: '总量', type: 'line', smooth: true, data: trend.map((item) => Number(item.total || 0)), itemStyle: { color: '#1668dc' } },
+                    { name: '负面', type: 'line', smooth: true, data: trend.map((item) => Number(item.negative || 0)), itemStyle: { color: '#e11d48' } },
+                    { name: '高风险', type: 'bar', data: trend.map((item) => Number(item.risk_high || 0)), itemStyle: { color: '#d97706' } },
+                ],
+            });
+
+            if (!riskChart) {
+                riskChart = echarts.init(document.getElementById('riskChart'));
+            }
+            riskChart.setOption({
+                tooltip: { trigger: 'item' },
+                legend: { bottom: 0 },
+                series: [
+                    {
+                        name: '风险级别',
+                        type: 'pie',
+                        radius: ['42%', '68%'],
+                        data: [
+                            { value: Number(risk.low || 0), name: '低风险' },
+                            { value: Number(risk.medium || 0), name: '中风险' },
+                            { value: Number(risk.high || 0), name: '高风险' },
+                        ],
+                        itemStyle: {
+                            borderRadius: 10,
+                            borderColor: '#fff',
+                            borderWidth: 2,
+                        },
+                    },
+                ],
+            });
+
+            const sampleBox = document.getElementById('sampleList');
+            if (!samples.length) {
+                sampleBox.innerHTML = '<div class="empty-box">暂无高风险样本</div>';
+            } else {
+                sampleBox.innerHTML = samples.map((item) => {
+                    const badgeClass = item.risk_level === 'high' ? 'badge-high' : item.risk_level === 'medium' ? 'badge-medium' : 'badge-low';
+                    const hits = item.keyword_hits || {};
+                    const keywordText = [
+                        ...(Array.isArray(hits.negative) ? hits.negative : []),
+                        ...(Array.isArray(hits.safety_risk) ? hits.safety_risk : []),
+                    ].filter(Boolean).slice(0, 5).join('、') || '无';
+                    return `
+                        <div class="sample-item">
+                            <div class="meta">
+                                <div class="title">${item.canteen_name || '-'} / ${item.window_name || '-'}</div>
+                                <span class="badge-soft ${badgeClass}">${item.risk_level || 'low'}</span>
+                            </div>
+                            <div class="desc">
+                                评价ID ${item.evaluation_id} · 时间 ${item.create_time || '-'}<br>
+                                综合分 ${Number(item.comprehensive_score || 0).toFixed(1)} · 情感分 ${Number(item.sentiment_score || 0).toFixed(2)} · 风险分 ${Number(item.risk_score || 0).toFixed(2)}<br>
+                                关键词：${keywordText}<br>
+                                ${item.remark_excerpt || '-'}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const tbody = document.getElementById('trendTableBody');
+            if (!trend.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-box">暂无趋势数据</td></tr>';
+            } else {
+                tbody.innerHTML = trend.map((item) => {
+                    const total = Number(item.total || 0);
+                    const negative = Number(item.negative || 0);
+                    const riskHigh = Number(item.risk_high || 0);
+                    const negRatio = total ? (negative * 100.0 / total).toFixed(2) : '0.00';
+                    const riskRatio = total ? (riskHigh * 100.0 / total).toFixed(2) : '0.00';
+                    return `
+                        <tr>
+                            <td>${item.date || '-'}</td>
+                            <td>${total}</td>
+                            <td>${negative}</td>
+                            <td>${riskHigh}</td>
+                            <td>${negRatio}%</td>
+                            <td>${riskRatio}%</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        async function loadCampuses() {
+            const resp = await fetch(API_CAMPUSES, { credentials: 'include' });
+            const body = await resp.json();
+            const list = Array.isArray(body.data && body.data.list) ? body.data.list : [];
+            let html = '<option value="0">全部校区</option>';
+            list.forEach((item) => {
+                html += `<option value="${item.id}">${item.name}</option>`;
+            });
+            document.getElementById('campusSelect').innerHTML = html;
+        }
+
+        async function loadCanteens() {
+            const params = selectedCampusId ? `?campus_id=${selectedCampusId}` : '';
+            const resp = await fetch(`${API_CANTEENS}${params}`, { credentials: 'include' });
+            const body = await resp.json();
+            const list = Array.isArray(body.data) ? body.data : [];
+            let html = '<option value="0">全部食堂</option>';
+            list.forEach((item) => {
+                html += `<option value="${item.id}">${item.name}</option>`;
+            });
+            document.getElementById('canteenSelect').innerHTML = html;
+        }
+
+        async function fetchOverview() {
+            const params = new URLSearchParams({ days: document.getElementById('daysSelect').value || '7', limit: '10' });
+            if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+            if (selectedCanteenId) params.set('canteen_id', String(selectedCanteenId));
+
+            const resp = await fetch(`${API_SENTIMENT_OVERVIEW}?${params.toString()}`, { credentials: 'include' });
+            const body = await resp.json();
+            if (body.code !== 200) {
+                throw new Error(body.msg || '加载失败');
+            }
+            renderOverview(body.data || {});
+        }
+
+        async function refreshPage() {
+            const btn = document.getElementById('refreshBtn');
+            btn.disabled = true;
+            try {
+                await fetchOverview();
+            } catch (error) {
+                showEmpty('sampleList', error.message || '加载失败');
+                showEmpty('trendTableBody', '加载失败');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function exportReport() {
+            const params = new URLSearchParams({ days: document.getElementById('daysSelect').value || '7', format: 'md' });
+            if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+            if (selectedCanteenId) params.set('canteen_id', String(selectedCanteenId));
+            window.open(`${'/api/admin/sentiment_report'}?${params.toString()}`, '_blank');
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', refreshPage);
+        document.getElementById('exportBtn').addEventListener('click', exportReport);
+        document.getElementById('campusSelect').addEventListener('change', async (event) => {
+            selectedCampusId = Number(event.target.value || 0);
+            await loadCanteens();
+            selectedCanteenId = 0;
+            await refreshPage();
+        });
+        document.getElementById('canteenSelect').addEventListener('change', async (event) => {
+            selectedCanteenId = Number(event.target.value || 0);
+            await refreshPage();
+        });
+        document.getElementById('daysSelect').addEventListener('change', refreshPage);
+
+        window.addEventListener('resize', function () {
+            if (sentimentChart) sentimentChart.resize();
+            if (riskChart) riskChart.resize();
+        });
+
+        (async function init() {
+            try {
+                await loadCampuses();
+                await loadCanteens();
+                await refreshPage();
+            } catch (error) {
+                showEmpty('sampleList', error.message || '初始化失败');
+                showEmpty('trendTableBody', '初始化失败');
+            }
+        })();
+    </script>
+    <script src="../../static/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

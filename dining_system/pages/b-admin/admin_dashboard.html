@@ -20,6 +20,8 @@
         .chart-container { width: 100%; height: 340px; }
         .warning-list { max-height: 410px; overflow-y: auto; }
         .warning-item { border-left: 4px solid #dc3545; background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); }
+        .sentiment-list { max-height: 320px; overflow-y: auto; }
+        .sentiment-item { border-left: 4px solid #1677ff; background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); }
         .empty-box { text-align: center; color: #6c757d; padding: 28px 0; }
     </style>
 </head>
@@ -107,6 +109,29 @@
         <div id="rankChart" class="chart-container"></div>
     </div>
 
+    <div class="row">
+        <div class="col-md-7">
+            <div class="chart-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold m-0">评价情感分布</h6>
+                    <span class="text-muted small" id="sentimentSummaryHint">-</span>
+                </div>
+                <div id="sentimentChart" class="chart-container" style="height: 300px;"></div>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="chart-card" style="height: 374px; display: flex; flex-direction: column;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold m-0 text-danger"><i class="bi bi-exclamation-circle"></i> 高风险样本</h6>
+                    <span class="text-muted small" id="sentimentTotalHint">-</span>
+                </div>
+                <div class="sentiment-list flex-grow-1" id="sentimentList">
+                    <div class="empty-box">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="chart-card">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="fw-bold m-0">推荐 A/B 实验指标（近7天）</h6>
@@ -178,12 +203,14 @@
         const API_RECOMMEND_AB_REPORT = '/api/admin/recommendation_ab_report';
         const API_RECOMMEND_GUARD_CHECK = '/api/admin/recommendation_guard_check';
         const API_RECOMMEND_COUNTERFACTUAL = '/api/admin/recommendation_counterfactual_eval';
+        const API_SENTIMENT_OVERVIEW = '/api/admin/sentiment_overview';
         const API_AUTH_ME = '/api/auth/me';
         const API_CAMPUSES = '/api/admin/campuses';
         const API_CANTEENS = '/api/canteens';
         let trendChart;
         let rankChart;
         let abChart;
+        let sentimentChart;
         let dashboardTimer = null;
         let currentRole = 'admin';
         let selectedCampusId = 0;
@@ -254,6 +281,76 @@
                     { name: '平均分', type: 'line', yAxisIndex: 1, data: avgScores, itemStyle: { color: '#fd7e14' } }
                 ]
             });
+        }
+
+        function renderSentimentOverview(summary, trendRows, samples, total) {
+            const data = summary || {};
+            const trend = Array.isArray(trendRows) ? trendRows : [];
+            const sampleList = Array.isArray(samples) ? samples : [];
+            const summaryText = `正面 ${Number(data.positive || 0)} · 中性 ${Number(data.neutral || 0)} · 负面 ${Number(data.negative || 0)} · 负面占比 ${(Number(data.negative_ratio || 0) * 100).toFixed(1)}%`;
+            document.getElementById('sentimentSummaryHint').innerText = summaryText;
+            document.getElementById('sentimentTotalHint').innerText = `共 ${Number(total || 0)} 条`;
+
+            if (!sentimentChart) {
+                sentimentChart = echarts.init(document.getElementById('sentimentChart'));
+            }
+            sentimentChart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['总量', '负面', '高风险'] },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: { type: 'category', data: trend.map((item) => item.date || '') },
+                yAxis: { type: 'value' },
+                series: [
+                    { name: '总量', type: 'line', smooth: true, data: trend.map((item) => Number(item.total || 0)), itemStyle: { color: '#1677ff' } },
+                    { name: '负面', type: 'line', smooth: true, data: trend.map((item) => Number(item.negative || 0)), itemStyle: { color: '#ff4d4f' } },
+                    { name: '高风险', type: 'bar', data: trend.map((item) => Number(item.risk_high || 0)), itemStyle: { color: '#d97706' } },
+                ]
+            });
+
+            const box = document.getElementById('sentimentList');
+            if (!sampleList.length) {
+                box.innerHTML = '<div class="empty-box">暂无高风险样本</div>';
+                return;
+            }
+            box.innerHTML = sampleList.map((item) => {
+                const hits = item.keyword_hits || {};
+                const keywords = [
+                    ...(Array.isArray(hits.negative) ? hits.negative : []),
+                    ...(Array.isArray(hits.safety_risk) ? hits.safety_risk : []),
+                ].filter(Boolean).slice(0, 4).join('、') || '无';
+                const badgeClass = item.risk_level === 'high' ? 'bg-danger' : 'bg-warning text-dark';
+                return `
+                    <div class="sentiment-item">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="badge ${badgeClass}">${item.risk_level || 'low'}</span>
+                            <small class="text-muted">${item.create_time || '-'}</small>
+                        </div>
+                        <div class="fw-bold mb-1">${item.canteen_name || '-'} / ${item.window_name || '-'}</div>
+                        <div class="small text-muted mb-1">综合分 ${Number(item.comprehensive_score || 0).toFixed(1)} · 情感分 ${Number(item.sentiment_score || 0).toFixed(2)} · 风险 ${Number(item.risk_score || 0).toFixed(2)}</div>
+                        <div class="small text-muted">关键词：${keywords}</div>
+                        <div class="small text-muted text-truncate" title="${String(item.remark_excerpt || '-').replace(/"/g, '&quot;')}">${item.remark_excerpt || '-'}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function fetchSentimentOverview() {
+            try {
+                const params = new URLSearchParams({ days: '7', limit: '8' });
+                if (selectedCampusId) params.set('campus_id', String(selectedCampusId));
+                if (selectedCanteenId) params.set('canteen_id', String(selectedCanteenId));
+                const resp = await fetch(`${API_SENTIMENT_OVERVIEW}?${params.toString()}`, { credentials: 'include' });
+                const body = await resp.json();
+                if (body.code !== 200) {
+                    document.getElementById('sentimentList').innerHTML = '<div class="empty-box">情感数据加载失败</div>';
+                    document.getElementById('sentimentSummaryHint').innerText = '-';
+                    return;
+                }
+                const payload = body.data || {};
+                renderSentimentOverview(payload.summary || {}, payload.trend || [], payload.high_risk_samples || [], payload.total || 0);
+            } catch (error) {
+                document.getElementById('sentimentList').innerHTML = '<div class="empty-box">情感数据加载失败</div>';
+            }
         }
 
         async function handleWarning(id) {
@@ -621,6 +718,7 @@
                 renderTrend(payload['30day_score_trend'] || []);
                 renderRank(payload.hot_dishes_top10 || []);
                 renderWarnings(payload.bad_review_list || []);
+                fetchSentimentOverview();
                 fetchRecommendationAbMetrics();
             } catch (error) {
                 renderLoadFailed();
@@ -717,6 +815,7 @@
         window.addEventListener('resize', function () {
             if (trendChart) trendChart.resize();
             if (rankChart) rankChart.resize();
+            if (sentimentChart) sentimentChart.resize();
             if (abChart) abChart.resize();
         });
 

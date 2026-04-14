@@ -2675,6 +2675,189 @@ def _safe_tag_list(value):
     return []
 
 
+SENTIMENT_POSITIVE_WORDS = {
+    '好吃', '满意', '新鲜', '干净', '推荐', '喜欢', '稳定', '不错', '划算', '热情', '卫生',
+    'friendly', 'clean', 'fresh', 'great', 'good', 'nice',
+}
+
+SENTIMENT_NEGATIVE_WORDS = {
+    '难吃', '咸', '淡', '油', '慢', '冷', '差', '失望', '脏', '异味', '变质', '虫', '头发',
+    '拉肚子', '吐', '不新鲜', '态度差', '贵', '踩雷',
+    'bad', 'dirty', 'stale', 'slow', 'awful', 'disappointing',
+}
+
+SENTIMENT_SAFETY_RISK_WORDS = {
+    '食安', '食品安全', '变质', '发霉', '异物', '虫', '头发', '未熟', '腹泻', '拉肚子', '呕吐', '发臭',
+    '中毒', '过期', '不卫生', '卫生差',
+}
+
+
+def _clip_float(value, lower=0.0, upper=1.0):
+    return max(lower, min(upper, float(value)))
+
+
+def _sentiment_hit_words(text, lexicon):
+    content = str(text or '').strip().lower()
+    if not content:
+        return []
+    hits = []
+    for word in lexicon:
+        if word and str(word).lower() in content:
+            hits.append(word)
+    return hits
+
+
+def _sentiment_label(score):
+    if score <= 0.40:
+        return 'negative'
+    if score >= 0.62:
+        return 'positive'
+    return 'neutral'
+
+
+def _sentiment_risk_level(risk_score):
+    if risk_score >= 0.75:
+        return 'high'
+    if risk_score >= 0.45:
+        return 'medium'
+    return 'low'
+
+
+def _analyze_sentiment_text(text):
+    content = str(text or '').strip()
+    if not content:
+        return {
+            'text_length': 0,
+            'sentiment_score': 0.5,
+            'label': 'neutral',
+            'confidence': 0.0,
+            'risk_score': 0.0,
+            'risk_level': 'low',
+            'keyword_hits': {'positive': [], 'negative': [], 'safety_risk': []},
+        }
+
+    positive_hits = _sentiment_hit_words(content, SENTIMENT_POSITIVE_WORDS)
+    negative_hits = _sentiment_hit_words(content, SENTIMENT_NEGATIVE_WORDS)
+    safety_hits = _sentiment_hit_words(content, SENTIMENT_SAFETY_RISK_WORDS)
+
+    raw_score = 0.5 + len(positive_hits) * 0.09 - len(negative_hits) * 0.12
+    if '!' in content or '！' in content:
+        raw_score -= 0.03 * len(negative_hits)
+        raw_score += 0.02 * len(positive_hits)
+
+    sentiment_score = _clip_float(raw_score)
+    label = _sentiment_label(sentiment_score)
+    confidence = _clip_float(0.35 + 0.1 * (len(positive_hits) + len(negative_hits) + len(safety_hits)), 0.0, 0.95)
+
+    risk_score = _clip_float(0.18 * len(safety_hits) + 0.08 * len(negative_hits))
+    if label == 'negative':
+        risk_score = _clip_float(risk_score + 0.15)
+
+    return {
+        'text_length': len(content),
+        'sentiment_score': round(float(sentiment_score), 4),
+        'label': label,
+        'confidence': round(float(confidence), 4),
+        'risk_score': round(float(risk_score), 4),
+        'risk_level': _sentiment_risk_level(risk_score),
+        'keyword_hits': {
+            'positive': positive_hits[:8],
+            'negative': negative_hits[:8],
+            'safety_risk': safety_hits[:8],
+        },
+    }
+
+
+def _compose_evaluation_sentiment_text(evaluation):
+    if not evaluation:
+        return ''
+
+    text_blocks = [
+        evaluation.remark,
+        evaluation.service_comment,
+        evaluation.env_comment,
+        evaluation.safety_comment,
+    ]
+    for row in evaluation.dish_evaluations or []:
+        text_blocks.append(row.remark)
+
+    return ' '.join((str(item or '').strip() for item in text_blocks if str(item or '').strip())).strip()
+
+
+def _analyze_evaluation_sentiment(evaluation):
+    summary = _analyze_sentiment_text(_compose_evaluation_sentiment_text(evaluation))
+    comp_score = float(getattr(evaluation, 'comprehensive_score', 0.0) or 0.0)
+
+    if comp_score > 0:
+        normalized_comp = _clip_float(comp_score / 10.0)
+        summary['sentiment_score'] = round(float(_clip_float(summary['sentiment_score'] * 0.7 + normalized_comp * 0.3)), 4)
+        summary['label'] = _sentiment_label(summary['sentiment_score'])
+        if comp_score <= 4.0:
+            summary['risk_score'] = round(float(_clip_float(summary['risk_score'] + 0.2)), 4)
+            summary['risk_level'] = _sentiment_risk_level(summary['risk_score'])
+
+    summary['comprehensive_score'] = round(comp_score, 2)
+    return summary
+
+
+def _build_dish_sentiment_penalty_map(campus_id, dish_ids, days=30):
+    safe_dish_ids = [int(item) for item in (dish_ids or []) if _safe_int(item)]
+    if not safe_dish_ids:
+        return {}, {}
+
+    start_time = datetime.now() - timedelta(days=max(3, min(90, int(days or 30))))
+    rows = (
+        db.session.query(EvaluationDish.dish_id, EvaluationDish.remark, EvaluationMain.remark, EvaluationMain.comprehensive_score)
+        .join(EvaluationMain, EvaluationMain.id == EvaluationDish.evaluation_id)
+        .filter(
+            EvaluationMain.campus_id == campus_id,
+            EvaluationMain.create_time >= start_time,
+            EvaluationDish.dish_id.in_(safe_dish_ids),
+        )
+        .all()
+    )
+
+    stat_map = {}
+    for dish_id, dish_remark, eval_remark, comprehensive_score in rows:
+        did = int(dish_id or 0)
+        if not did:
+            continue
+        text_payload = _first_non_empty_text(dish_remark, eval_remark)
+        sentiment = _analyze_sentiment_text(text_payload)
+        slot = stat_map.setdefault(did, {'total': 0, 'neg': 0, 'risk': 0.0, 'score_sum': 0.0, 'score_cnt': 0})
+        slot['total'] += 1
+        if sentiment['label'] == 'negative':
+            slot['neg'] += 1
+        slot['risk'] += float(sentiment['risk_score'] or 0.0)
+        score_num = _safe_number(comprehensive_score)
+        if score_num is not None:
+            slot['score_sum'] += float(score_num)
+            slot['score_cnt'] += 1
+
+    penalty_map = {}
+    neg_ratio_map = {}
+    for dish_id in safe_dish_ids:
+        item = stat_map.get(dish_id)
+        if not item or item['total'] <= 0:
+            continue
+
+        neg_ratio = float(item['neg']) / float(item['total'])
+        avg_risk = float(item['risk']) / float(item['total'])
+        avg_score = (float(item['score_sum']) / float(item['score_cnt'])) if item['score_cnt'] else 0.0
+
+        penalty = 0.0
+        if neg_ratio > 0.35:
+            penalty += (neg_ratio - 0.35) * 6.0
+        penalty += max(0.0, avg_risk - 0.40) * 3.0
+        if item['score_cnt'] >= 3 and avg_score < 6.0:
+            penalty += (6.0 - avg_score) * 0.4
+
+        penalty_map[dish_id] = round(float(max(0.0, penalty)), 4)
+        neg_ratio_map[dish_id] = round(float(neg_ratio), 4)
+
+    return penalty_map, neg_ratio_map
+
+
 def _template_default_items():
     return [
         {'category': 'food', 'item_key': 'taste', 'item_label': '口味', 'sort_order': 10},
@@ -4855,6 +5038,7 @@ def public_recommendations():
     )
     dish_ids = [int(dish.id or 0) for dish, _, _, _ in rows if _safe_int(getattr(dish, 'id', 0))]
     satisfaction_map, safety_map, diversity_map, canteen_share_map = _build_recommendation_objective_maps(campus_id, dish_ids)
+    sentiment_penalty_map, sentiment_negative_ratio_map = _build_dish_sentiment_penalty_map(campus_id, dish_ids)
 
     scored_rows = []
     for dish, window_name, row_canteen_id, row_canteen_name in rows:
@@ -4923,6 +5107,12 @@ def public_recommendations():
             score -= fairness_penalty
             reasons.append('公平曝光校正')
 
+        sentiment_penalty = sentiment_penalty_map.get(dish_id, 0.0)
+        sentiment_negative_ratio = sentiment_negative_ratio_map.get(dish_id, 0.0)
+        if sentiment_penalty > 0:
+            score -= sentiment_penalty
+            reasons.append('负面反馈抑制')
+
         if review_count == 0:
             score += 0.4
             reasons.append('新品尝鲜')
@@ -4970,6 +5160,8 @@ def public_recommendations():
                     },
                     'weights': {k: round(float(v), 4) for k, v in normalized_weights.items()},
                     'fairness_penalty': round(float(fairness_penalty), 4),
+                    'sentiment_penalty': round(float(sentiment_penalty), 4),
+                    'sentiment_negative_ratio': round(float(sentiment_negative_ratio), 4),
                 },
             }
         )
@@ -5107,6 +5299,194 @@ def public_track_recommendations():
         db.session.commit()
 
     return api_success({'accepted': len(rows)}, msg='上报成功')
+
+
+@app.route('/api/public/sentiment/analyze', methods=['POST'])
+def public_sentiment_analyze():
+    data = request.get_json(silent=True) or {}
+    text_value = (data.get('text') or '').strip()
+    if not text_value:
+        return api_error('text 不能为空')
+
+    result = _analyze_sentiment_text(text_value)
+    return api_success(
+        {
+            'text': text_value[:300],
+            **result,
+        },
+        msg='分析成功',
+    )
+
+
+@app.route('/api/admin/sentiment_overview', methods=['GET'])
+@admin_login_required
+def admin_sentiment_overview():
+    days = max(1, min(60, _safe_int(request.args.get('days'), 7) or 7))
+    requested_campus_id = _safe_int(request.args.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+
+    campus_id = scoped_campus_id or _current_campus_id()
+    canteen_id = _safe_int(request.args.get('canteen_id'))
+    limit = max(5, min(50, _safe_int(request.args.get('limit'), 20) or 20))
+    payload = _build_sentiment_overview(campus_id, days=days, canteen_id=canteen_id, limit=limit)
+    return api_success(payload, msg='查询成功')
+
+
+def _build_sentiment_overview(campus_id, days=7, canteen_id=0, limit=20):
+    days = max(1, min(60, int(days or 7)))
+    limit = max(1, min(100, int(limit or 20)))
+    start_time = datetime.now() - timedelta(days=days)
+
+    query = EvaluationMain.query.filter(
+        EvaluationMain.campus_id == campus_id,
+        EvaluationMain.create_time >= start_time,
+    )
+    if canteen_id:
+        query = query.filter(EvaluationMain.canteen_id == canteen_id)
+
+    rows = query.order_by(EvaluationMain.create_time.desc(), EvaluationMain.id.desc()).limit(1000).all()
+
+    bucket = {'positive': 0, 'neutral': 0, 'negative': 0}
+    risk_bucket = {'low': 0, 'medium': 0, 'high': 0}
+    trend_map = {}
+    negatives = []
+
+    for row in rows:
+        sentiment = _analyze_evaluation_sentiment(row)
+        label = sentiment.get('label', 'neutral')
+        risk_level = sentiment.get('risk_level', 'low')
+
+        bucket[label] = int(bucket.get(label, 0)) + 1
+        risk_bucket[risk_level] = int(risk_bucket.get(risk_level, 0)) + 1
+
+        day_key = row.create_time.strftime('%Y-%m-%d') if row.create_time else datetime.now().strftime('%Y-%m-%d')
+        day_slot = trend_map.setdefault(day_key, {'date': day_key, 'total': 0, 'negative': 0, 'risk_high': 0})
+        day_slot['total'] += 1
+        if label == 'negative':
+            day_slot['negative'] += 1
+        if risk_level == 'high':
+            day_slot['risk_high'] += 1
+
+        if label == 'negative' or risk_level == 'high':
+            canteen = db.session.get(Canteen, row.canteen_id) if row.canteen_id else None
+            window = db.session.get(Window, row.window_id) if row.window_id else None
+            negatives.append(
+                {
+                    'evaluation_id': int(row.id or 0),
+                    'create_time': row.create_time.strftime('%Y-%m-%d %H:%M:%S') if row.create_time else '-',
+                    'canteen_id': int(row.canteen_id or 0),
+                    'canteen_name': canteen.name if canteen else '-',
+                    'window_id': int(row.window_id or 0),
+                    'window_name': window.name if window else '-',
+                    'comprehensive_score': round(float(row.comprehensive_score or 0.0), 2),
+                    'sentiment_score': float(sentiment['sentiment_score']),
+                    'risk_score': float(sentiment['risk_score']),
+                    'risk_level': risk_level,
+                    'label': label,
+                    'remark_excerpt': (str(row.remark or '').strip()[:60] or '-'),
+                    'keyword_hits': sentiment.get('keyword_hits', {}),
+                }
+            )
+
+    trend_list = [trend_map[key] for key in sorted(trend_map.keys())]
+    negatives.sort(key=lambda item: (item['risk_score'], 1 - item['sentiment_score'], -item['comprehensive_score']), reverse=True)
+
+    total = len(rows)
+    return {
+        'campus_id': campus_id,
+        'canteen_id': canteen_id or 0,
+        'days': days,
+        'total': total,
+        'summary': {
+            'positive': bucket['positive'],
+            'neutral': bucket['neutral'],
+            'negative': bucket['negative'],
+            'negative_ratio': round(float(bucket['negative'] / total), 4) if total else 0.0,
+            'risk': risk_bucket,
+        },
+        'trend': trend_list,
+        'high_risk_samples': negatives[:limit],
+    }
+
+
+def _render_sentiment_overview_markdown(report):
+    summary = report.get('summary', {})
+    lines = [
+        '# 舆情监控报告',
+        '',
+        f"- 校区ID: {report.get('campus_id', 0)}",
+        f"- 食堂ID: {report.get('canteen_id', 0)}",
+        f"- 统计窗口: 近{report.get('days', 7)}天",
+        f"- 总样本量: {report.get('total', 0)}",
+        '',
+        '## 统计摘要',
+        f"- 正面: {summary.get('positive', 0)}",
+        f"- 中性: {summary.get('neutral', 0)}",
+        f"- 负面: {summary.get('negative', 0)}",
+        f"- 负面占比: {float(summary.get('negative_ratio', 0.0)) * 100:.2f}%",
+        f"- 低/中/高风险: {summary.get('risk', {}).get('low', 0)} / {summary.get('risk', {}).get('medium', 0)} / {summary.get('risk', {}).get('high', 0)}",
+        '',
+        '## 日趋势',
+    ]
+    for row in report.get('trend', []):
+        total = int(row.get('total', 0) or 0)
+        negative = int(row.get('negative', 0) or 0)
+        high = int(row.get('risk_high', 0) or 0)
+        lines.append(
+            f"- {row.get('date', '-')}: 总量 {total} / 负面 {negative} / 高风险 {high}"
+        )
+
+    lines.extend(['', '## 高风险样本'])
+    for row in report.get('high_risk_samples', [])[:10]:
+        lines.append(
+            f"- #{row.get('evaluation_id', 0)} {row.get('canteen_name', '-')} / {row.get('window_name', '-')} 风险{row.get('risk_level', 'low')} 备注: {row.get('remark_excerpt', '-') }"
+        )
+    return '\n'.join(lines)
+
+
+@app.route('/api/admin/sentiment_report', methods=['GET'])
+@admin_login_required
+def admin_sentiment_report():
+    days = max(1, min(60, _safe_int(request.args.get('days'), 7) or 7))
+    requested_campus_id = _safe_int(request.args.get('campus_id'))
+    scoped_campus_id, scope_error = _resolve_campus_scope(requested_campus_id)
+    if scope_error:
+        return scope_error
+
+    campus_id = scoped_campus_id or _current_campus_id()
+    canteen_id = _safe_int(request.args.get('canteen_id'))
+    limit = max(5, min(50, _safe_int(request.args.get('limit'), 20) or 20))
+    export_format = (request.args.get('format') or 'md').strip().lower()
+
+    report = _build_sentiment_overview(campus_id, days=days, canteen_id=canteen_id, limit=limit)
+    filename_base = f"sentiment_report_c{campus_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    if export_format == 'json':
+        return api_success(report, msg='查询成功')
+
+    if export_format == 'csv':
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['date', 'total', 'negative', 'risk_high'])
+        for row in report.get('trend', []):
+            writer.writerow([
+                row.get('date', '-'),
+                row.get('total', 0),
+                row.get('negative', 0),
+                row.get('risk_high', 0),
+            ])
+        response = Response(output.getvalue(), mimetype='text/csv; charset=utf-8')
+        response.headers['Content-Disposition'] = f'attachment; filename={filename_base}.csv'
+        return response
+
+    markdown = _render_sentiment_overview_markdown(report)
+    return Response(
+        markdown,
+        mimetype='text/markdown; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={filename_base}.md'},
+    )
 
 
 @app.route('/api/admin/recommendation_ab_metrics', methods=['GET'])
